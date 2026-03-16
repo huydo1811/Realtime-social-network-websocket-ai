@@ -39,29 +39,33 @@ graph TD
 
 ## Tech Stack
 
-![](https://github-readme-tech-stack.vercel.app/api/cards?lineCount=5&line1=next.js,next.js,000000,ffffff;tailwindcss,tailwindcss,06B6D4,ffffff&line2=springboot,springboot,6DB33F,ffffff;java,java,ED8B00,ffffff&line3=postgresql,postgresql,336791,ffffff;redis,redis,DC382D,ffffff;mongodb,mongodb,47A248,ffffff&line4=docker,docker,2496D,ffffff;githubactions,githubactions,2088FF,ffffff;junit,junit,DC0000,ffffff&line5=ollama,ollama,FF6B6B,ffffff;unsloth,unsloth,FF6B6B,ffffff)
+![](https://github-readme-tech-stack.vercel.app/api/cards?lineCount=5&line1=next.js,next.js,ffffff;tailwindcss,tailwindcss,06B6D4&line2=springboot,springboot,6DB33F;java,java,ED8B00&line3=postgresql,postgresql,336791;redis,redis,DC382D;mongodb,mongodb,47A248&line4=docker,docker,2496ED;githubactions,githubactions,2088FF;junit,junit,DC0000&line5=ollama,ollama,FF6B6B;unsloth,unsloth,FF6B6B)
 
 ## Cấu trúc thư mục
 
 .
 ├── backend/ # Spring Boot multi-module
-├── frontend/ # Next.js 15 project
+├── frontend/ # Next.js 15 project (App Router + TypeScript)
 ├── ai/ # AI scripts, notebooks, fine-tuning, datasets
 ├── docker/ # Dockerfiles & service configs
-│ ├── backend/
-│ ├── frontend/
-│ ├── moderation/
-│ ├── ollama/
-│ └── configs/ # nginx, postgres, redis, ollama
+│ ├── backend/ # Dockerfile cho backend
+│ ├── frontend/ # Dockerfile cho frontend
+│ ├── moderation/ # Dockerfile cho AI moderation service
+│ ├── ollama/ # Dockerfile cho Ollama server (nếu custom)
+│ └── configs/ # Cấu hình cho các service
+│ ├── nginx/
+│ ├── postgres/
+│ ├── redis/
+│ └── ollama/
 ├── .github/
-│ └── workflows/ # CI/CD pipelines
+│ └── workflows/ # CI/CD pipelines (GitHub Actions)
 ├── test-reports/ # Auto-generated test reports (JUnit, Jest, ...)
-├── docker-compose.yml
+├── docker-compose.yml # File compose toàn bộ hệ thống
 └── README.md
 
 ## Người thực hiện
 
-Họ tên: Đỗ Quang Huy
-MSSV: B2205870
-Email: huyb2205870@student.ctu.edu.vn
-Trường: Đại học Cần Thơ (CTU)
+- **Họ tên**: Đỗ Quang Huy
+- **MSSV**: B2205870
+- **Email**: huyb2205870@student.ctu.edu.vn
+- **Trường**: Đại học Cần Thơ (CTU)

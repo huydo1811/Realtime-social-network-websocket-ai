@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Realtime Social Network Frontend
 
-## Getting Started
+## Công nghệ sử dụng
 
-First, run the development server:
+- **Next.js 15** (App Router, Server Actions)
+- **React 19** + **TypeScript**
+- **Tailwind CSS**, **Shadcn/ui**, **Lucide icons**
+- **Zustand** hoặc **React Query** (state management)
+- **WebSocket** (native hoặc @stomp/stompjs)
+- **WebRTC** (native browser API)
+- **Axios** hoặc **Tanstack Query** để gọi backend
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Cấu trúc thư mục
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+src/
+├── app/
+│ ├── (auth)/login/
+│ ├── (auth)/register/
+│ ├── (user)/profile/
+│ ├── (user)/edit/
+│ ├── (post)/feed/
+│ ├── (post)/create/
+│ ├── (post)/[postId]/
+│ ├── (moderation)/dashboard/
+│ ├── (moderation)/reports/
+│ ├── (friend)/suggestions/
+│ ├── (friend)/requests/
+│ ├── (chat)/[chatId]/
+│ ├── (call)/[callId]/
+│ ├── globals.css
+│ ├── layout.tsx
+│ └── page.tsx
+├── components/
+│ ├── ui/
+│ └── icons/
+├── hooks/
+├── lib/
+│ ├── api/
+│ ├── socket/
+│ └── webrtc/
+├── store/
+├── styles/
+├── types/
+├── public/
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Giải thích nhanh
 
-## Learn More
+- **app/**: Routing chính, chia theo domain (auth, user, post, moderation, friend, chat, call).
+- **components/**: Component dùng lại, chia nhỏ theo UI, icons.
+- **hooks/**: Custom hooks cho logic dùng lại.
+- **lib/**: Cấu hình API, WebSocket, WebRTC, các hàm tiện ích.
+- **store/**: Quản lý state toàn cục (Zustand/React Query).
+- **types/**: Định nghĩa type/interface dùng chung.
+- **styles/**: Style bổ sung ngoài Tailwind (nếu cần).
+- **public/**: Ảnh tĩnh, favicon, ...
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Hướng dẫn phát triển
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Tổ chức code theo domain, dễ mở rộng và bảo trì.
+- Ưu tiên chia nhỏ component, hook, store theo chức năng.
+- Sử dụng state management phù hợp (Zustand hoặc React Query).
+- Kết nối backend qua Axios hoặc Tanstack Query.
+- Sử dụng WebSocket và WebRTC cho realtime chat/call.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> Cấu trúc này giúp frontend dễ phát triển teamwork, mở rộng tính năng, và maintain lâu dài.

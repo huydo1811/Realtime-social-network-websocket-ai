@@ -1,134 +1,67 @@
-# Realtime Social Network Backend
+# Realtime Social Network with AI Content Moderation
 
-## Kiến trúc tổng quan
+**Mạng xã hội thời gian thực tích hợp AI kiểm duyệt nội dung vi phạm**  
+Một nền tảng mạng xã hội hiện đại hỗ trợ đăng bài, bình luận, chat nhóm, gọi video/audio thời gian thực, với hệ thống AI tự động phát hiện và xử lý nội dung vi phạm (text + hình ảnh) dựa trên các mô hình ngôn ngữ lớn chạy local.
 
-Backend được xây dựng theo mô hình Clean Architecture, chia thành nhiều module (auth, api, call, chat, ...), mỗi module gồm 4 layer chính:
+## Mục tiêu & Tính năng chính
 
-- **presentation**: Xử lý request/response, controller, DTO, mapper.
-- **application**: Chứa service, use case nghiệp vụ.
-- **domain**: Định nghĩa entity, event, exception, repository (interface), logic cốt lõi.
-- **infrastructure**: Kết nối hệ thống ngoài (database, message broker, AI, ...), implement repository.
+- **Realtime Social Features**
+  - Đăng bài, bình luận, like/reaction
+  - Chat cá nhân/nhóm thời gian thực
+  - Gọi video/audio (peer-to-peer qua WebRTC)
 
----
+- **AI Moderation**
+  - Tự động phân loại & chặn nội dung vi phạm quy tắc cộng đồng
+  - Hỗ trợ cả text (Llama-Guard) và hình ảnh (Qwen2.5-VL, Llava)
+  - Chạy local với Ollama → bảo mật cao, không phụ thuộc API bên thứ ba
 
-## Ví dụ cấu trúc module
+- **Kiến trúc**
+  - Hệ thống microservices-friendly, dễ mở rộng
+  - CI/CD tự động qua GitHub Actions
+  - Triển khai trên cloud (AWS EC2) hoặc local (Docker)
 
-### auth-module
+## Kiến trúc tổng thể
 
-backend/auth-module/src/main/java/com/social/auth/
-├── application/
-│ ├── services/
-│ └── usecases/
-├── domain/
-│ ├── entities/
-│ ├── events/
-│ ├── exceptions/
-│ └── repositories/
-├── infrastructure/
-│ ├── adapters/
-│ ├── external/
-│ └── repositories/
-└── presentation/
-├── controllers/
-├── dto/
-└── mapper/
+```mermaid
+graph TD
+    A[User] --> B[Nginx Reverse Proxy]
+    B --> C[Frontend: Next.js 15 / React 19]
+    B --> D[Backend: Spring Boot 3.3+]
+    D --> E[(PostgreSQL 16)]
+    D --> F[(Redis 7 - Pub/Sub + Cache)]
+    D --> G[AI Moderation Service]
+    G --> H[Ollama Server<br>Llama-Guard-3 / Qwen2.5-VL / Llava]
+    D <--> I[WebSocket + STOMP]
+    D <--> J[WebRTC Signaling]
+    C <--> I
+    C <--> J
+```
 
-### api module - infrastructure layer
+## Tech Stack
 
-backend/api/src/main/java/com/social/infrastructure/
-├── ollama/
-│ ├── client/
-│ └── models/
-├── redis/
-│ ├── cache/
-│ └── pubsub/
-├── webrtc/
-│ ├── handlers/
-│ └── signaling/
-└── websocket/
-├── handlers/
-└── message/
-
----
-
-## Hướng dẫn phát triển
-
-- Mỗi module nên tuân thủ đúng 4 layer, không để logic nghiệp vụ lẫn lộn giữa các layer.
-- Layer **domain** không phụ thuộc bất kỳ layer nào khác.
-- Layer **application** chỉ phụ thuộc **domain**.
-- Layer **infrastructure** implement các interface từ **domain**.
-- Layer **presentation** chỉ gọi vào **application**.
-
-> Cấu trúc này giúp dự án dễ mở rộng, bảo trì, test và tích hợp nhiều công nghệ mới.
-
-# Realtime Social Network Frontend
-
-## Công nghệ sử dụng
-
-- **Next.js 15** (App Router, Server Actions)
-- **React 19** + **TypeScript**
-- **Tailwind CSS**, **Shadcn/ui**, **Lucide icons**
-- **Zustand** hoặc **React Query** (state management)
-- **WebSocket** (native hoặc @stomp/stompjs)
-- **WebRTC** (native browser API)
-- **Axios** hoặc **Tanstack Query** để gọi backend
-
----
+![](https://github-readme-tech-stack.vercel.app/api/cards?lineCount=5&line1=next.js,next.js,000000,ffffff;tailwindcss,tailwindcss,06B6D4,ffffff&line2=springboot,springboot,6DB33F,ffffff;java,java,ED8B00,ffffff&line3=postgresql,postgresql,336791,ffffff;redis,redis,DC382D,ffffff;mongodb,mongodb,47A248,ffffff&line4=docker,docker,2496D,ffffff;githubactions,githubactions,2088FF,ffffff;junit,junit,DC0000,ffffff&line5=ollama,ollama,FF6B6B,ffffff;unsloth,unsloth,FF6B6B,ffffff)
 
 ## Cấu trúc thư mục
 
-src/
-├── app/
-│ ├── (auth)/login/
-│ ├── (auth)/register/
-│ ├── (user)/profile/
-│ ├── (user)/edit/
-│ ├── (post)/feed/
-│ ├── (post)/create/
-│ ├── (post)/[postId]/
-│ ├── (moderation)/dashboard/
-│ ├── (moderation)/reports/
-│ ├── (friend)/suggestions/
-│ ├── (friend)/requests/
-│ ├── (chat)/[chatId]/
-│ ├── (call)/[callId]/
-│ ├── globals.css
-│ ├── layout.tsx
-│ └── page.tsx
-├── components/
-│ ├── ui/
-│ └── icons/
-├── hooks/
-├── lib/
-│ ├── api/
-│ ├── socket/
-│ └── webrtc/
-├── store/
-├── styles/
-├── types/
-├── public/
+.
+├── backend/ # Spring Boot multi-module
+├── frontend/ # Next.js 15 project
+├── ai/ # AI scripts, notebooks, fine-tuning, datasets
+├── docker/ # Dockerfiles & service configs
+│ ├── backend/
+│ ├── frontend/
+│ ├── moderation/
+│ ├── ollama/
+│ └── configs/ # nginx, postgres, redis, ollama
+├── .github/
+│ └── workflows/ # CI/CD pipelines
+├── test-reports/ # Auto-generated test reports (JUnit, Jest, ...)
+├── docker-compose.yml
+└── README.md
 
-### Giải thích nhanh
+## Người thực hiện
 
-- **app/**: Routing chính, chia theo domain (auth, user, post, moderation, friend, chat, call).
-- **components/**: Component dùng lại, chia nhỏ theo UI, icons.
-- **hooks/**: Custom hooks cho logic dùng lại.
-- **lib/**: Cấu hình API, WebSocket, WebRTC, các hàm tiện ích.
-- **store/**: Quản lý state toàn cục (Zustand/React Query).
-- **types/**: Định nghĩa type/interface dùng chung.
-- **styles/**: Style bổ sung ngoài Tailwind (nếu cần).
-- **public/**: Ảnh tĩnh, favicon, ...
-
----
-
-## Hướng dẫn phát triển
-
-- Tổ chức code theo domain, dễ mở rộng và bảo trì.
-- Ưu tiên chia nhỏ component, hook, store theo chức năng.
-- Sử dụng state management phù hợp (Zustand hoặc React Query).
-- Kết nối backend qua Axios hoặc Tanstack Query.
-- Sử dụng WebSocket và WebRTC cho realtime chat/call.
-
----
-
-> Cấu trúc này giúp frontend dễ phát triển teamwork, mở rộng tính năng, và maintain lâu dài.
+Họ tên: Đỗ Quang Huy
+MSSV: B2205870
+Email: huyb2205870@student.ctu.edu.vn
+Trường: Đại học Cần Thơ (CTU)

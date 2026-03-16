@@ -43,6 +43,7 @@ graph TD
 
 ## Cấu trúc thư mục
 
+```
 .
 ├── backend/ # Spring Boot multi-module
 ├── frontend/ # Next.js 15 project (App Router + TypeScript)
@@ -62,6 +63,7 @@ graph TD
 ├── test-reports/ # Auto-generated test reports (JUnit, Jest, ...)
 ├── docker-compose.yml # File compose toàn bộ hệ thống
 └── README.md
+```
 
 ## Người thực hiện
 

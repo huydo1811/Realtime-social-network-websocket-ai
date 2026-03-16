@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.11</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>com.social</groupId>
+    <artifactId>social-network</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>Social Network</name>
+    <description>Realtime Social Network with WebSocket and AI Moderation</description>
+
+    <!-- Quan trọng: parent là pom, không có source code -->
+    <packaging>pom</packaging>
+
+    <!-- Liệt kê tất cả module con -->
+    <modules>
+        <module>common</module>
+        <module>auth-module</module>
+        <module>user-module</module>
+        <module>post-module</module>
+        <module>friendship-module</module>
+        <module>chat-module</module>
+        <module>call-module</module>
+        <module>moderation-module</module>
+        <module>api</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- Nếu dùng Spring Modulith (tùy chọn, để enforce module) -->
+        <spring-modulith.version>2.1.0-M2</spring-modulith.version> <!-- latest milestone 2026, hoặc 2.0.3 nếu muốn stable -->
+    </properties>
+
+    <!-- Dependency management: các module con inherit version từ đây -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>3.5.11</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.modulith</groupId>
+                <artifactId>spring-modulith-starter-core</artifactId>
+                <version>${spring-modulith.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- Build plugins chung cho tất cả module -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <!-- Spring Boot plugin chỉ dùng ở module api sau -->
+        </plugins>
+    </build>
+
+</project>

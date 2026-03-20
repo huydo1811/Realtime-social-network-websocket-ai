@@ -16,7 +16,7 @@ Một nền tảng mạng xã hội hiện đại hỗ trợ đăng bài, bình 
   - Chạy local với Ollama → bảo mật cao, không phụ thuộc API bên thứ ba
 
 - **Kiến trúc**
-  - Hệ thống microservices-friendly, dễ mở rộng
+  - Hệ thống modular monolith: Một ứng dụng duy nhất, chia thành nhiều module logic (auth, user, post, chat, v.v.), mỗi module tách biệt về code, nhưng vẫn chạy chung một process, một database, dễ mở rộng
   - CI/CD tự động qua GitHub Actions
   - Triển khai trên cloud (AWS EC2) hoặc local (Docker)
 

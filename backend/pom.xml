@@ -71,8 +71,6 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
-            <!-- Spring Boot plugin chỉ dùng ở module api sau -->
         </plugins>
     </build>
-
 </project>

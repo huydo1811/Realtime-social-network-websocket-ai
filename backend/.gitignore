@@ -31,3 +31,5 @@ build/
 
 ### VS Code ###
 .vscode/
+user-module/src/main/resources/application.properties
+api/src/main/resources/application.properties

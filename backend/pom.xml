@@ -16,7 +16,7 @@
     <name>Social Network</name>
     <description>Realtime Social Network with WebSocket and AI Moderation</description>
 
-    <!-- Quan trọng: parent là pom, không có source code -->
+
     <packaging>pom</packaging>
 
     <!-- Liệt kê tất cả module con -->

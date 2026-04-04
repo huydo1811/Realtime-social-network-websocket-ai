@@ -24,11 +24,11 @@ import com.social.user.domain.repositories.UserRepository;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-    "spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",
-    "spring.datasource.driverClassName=org.h2.Driver",
-    "spring.datasource.username=sa",
-    "spring.datasource.password=",
-    "spring.jpa.hibernate.ddl-auto=create-drop"
+  "jakarta.persistence.jdbc.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",
+  "jakarta.persistence.jdbc.driver=org.h2.Driver",
+  "spring.jpa.hibernate.ddl-auto=create-drop",
+  "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+  "security.jwt.secret=REPLACE_WITH_STRONG_BASE64_SECRET"
 })
 class RegisterIntegrationTest {
 

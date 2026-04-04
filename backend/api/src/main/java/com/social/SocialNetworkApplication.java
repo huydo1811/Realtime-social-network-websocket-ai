@@ -12,8 +12,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
 @ComponentScan("com.social")
-@EnableJpaRepositories(basePackages = "com.social.user.infrastructure.repositories")
-@EntityScan(basePackages = "com.social.user.domain.entities")
+@EnableJpaRepositories(basePackages = "com.social")
+@EntityScan(basePackages = "com.social")
 public class SocialNetworkApplication {
 
     public static void main(String[] args) {

@@ -10,4 +10,8 @@ public class PasswordService {
     public String hashPassword(String password) {
         return encoder.encode(password);
     }
+
+    public boolean verifyPassword(String raw, String hash) {
+        return encoder.matches(raw, hash);
+    }
 }

@@ -1,9 +1,11 @@
+-- V1__init.sql - Combined schema (V1..V3)
+
 -- 1. users
 CREATE TABLE users (
     id              BIGSERIAL PRIMARY KEY,
     username        VARCHAR(50) UNIQUE NOT NULL,
     email           VARCHAR(100) UNIQUE NOT NULL,
-    password_hash   VARCHAR(255),                    
+    password_hash   VARCHAR(255),
     full_name       VARCHAR(100),
     bio             TEXT,
     avatar_url      TEXT,
@@ -11,7 +13,8 @@ CREATE TABLE users (
     role            VARCHAR(20) DEFAULT 'USER' CHECK (role IN ('USER', 'ADMIN', 'MODERATOR')),
     is_active       BOOLEAN DEFAULT TRUE,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    phone           VARCHAR(20) UNIQUE
 );
 
 -- 2. posts
@@ -32,7 +35,7 @@ CREATE TABLE posts (
 CREATE TABLE comments (
     id                  BIGSERIAL PRIMARY KEY,
     post_id             BIGINT REFERENCES posts(id) ON DELETE CASCADE,
-    parent_id           BIGINT REFERENCES comments(id) ON DELETE CASCADE,  -- cho reply
+    parent_id           BIGINT REFERENCES comments(id) ON DELETE CASCADE,
     user_id             BIGINT REFERENCES users(id) ON DELETE CASCADE,
     content             TEXT NOT NULL,
     moderation_status   VARCHAR(20) DEFAULT 'PENDING',
@@ -40,7 +43,7 @@ CREATE TABLE comments (
     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. reactions 
+-- 4. reactions
 CREATE TABLE reactions (
     id          BIGSERIAL PRIMARY KEY,
     post_id     BIGINT REFERENCES posts(id) ON DELETE CASCADE,
@@ -48,10 +51,10 @@ CREATE TABLE reactions (
     user_id     BIGINT REFERENCES users(id) ON DELETE CASCADE,
     type        VARCHAR(20) NOT NULL CHECK (type IN ('LIKE', 'LOVE', 'HAHA', 'SAD', 'ANGRY', 'WOW')),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(post_id, comment_id, user_id)  -- 1 user chỉ reaction 1 lần/post hoặc comment
+    UNIQUE(post_id, comment_id, user_id)
 );
 
--- 5. friendships (follow + friend request)
+-- 5. friendships
 CREATE TABLE friendships (
     id          BIGSERIAL PRIMARY KEY,
     user_id1    BIGINT REFERENCES users(id) ON DELETE CASCADE,
@@ -61,15 +64,15 @@ CREATE TABLE friendships (
     UNIQUE(user_id1, user_id2)
 );
 
--- 6. chat_rooms (1-1 hoặc group)
+-- 6. chat_rooms
 CREATE TABLE chat_rooms (
     id          BIGSERIAL PRIMARY KEY,
     type        VARCHAR(10) DEFAULT 'PRIVATE' CHECK (type IN ('PRIVATE', 'GROUP')),
-    name        VARCHAR(100),  -- tên group nếu có
+    name        VARCHAR(100),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. chat_room_members (many-to-many)
+-- 7. chat_room_members
 CREATE TABLE chat_room_members (
     room_id     BIGINT REFERENCES chat_rooms(id) ON DELETE CASCADE,
     user_id     BIGINT REFERENCES users(id) ON DELETE CASCADE,
@@ -77,7 +80,7 @@ CREATE TABLE chat_room_members (
     PRIMARY KEY (room_id, user_id)
 );
 
--- 8. chat_messages (lịch sử, realtime dùng Redis + WebSocket)
+-- 8. chat_messages
 CREATE TABLE chat_messages (
     id          BIGSERIAL PRIMARY KEY,
     room_id     BIGINT REFERENCES chat_rooms(id) ON DELETE CASCADE,
@@ -87,19 +90,28 @@ CREATE TABLE chat_messages (
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. moderation_logs (log AI check)
+-- 9. moderation_logs
 CREATE TABLE moderation_logs (
     id              BIGSERIAL PRIMARY KEY,
     post_id         BIGINT REFERENCES posts(id) ON DELETE SET NULL,
     comment_id      BIGINT REFERENCES comments(id) ON DELETE SET NULL,
-    model_used      VARCHAR(50), 
-    result          VARCHAR(20),  -- 'SAFE', 'UNSAFE', 'HATE', ...
+    model_used      VARCHAR(50),
+    result          VARCHAR(20),
     confidence      DECIMAL(5,4),
     reason          TEXT,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Index quan trọng để tăng tốc query
+-- 10. auth_refresh_tokens (from V3)
+CREATE TABLE auth_refresh_tokens (
+  id BIGSERIAL PRIMARY KEY,
+  token VARCHAR(255) NOT NULL,
+  expiry_date TIMESTAMP,
+  revoked BOOLEAN NOT NULL DEFAULT false,
+  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Indexes
 CREATE INDEX idx_posts_user_id ON posts(user_id);
 CREATE INDEX idx_comments_post_id ON comments(post_id);
 CREATE INDEX idx_comments_parent_id ON comments(parent_id);
@@ -108,3 +120,5 @@ CREATE INDEX idx_friendships_user_id1 ON friendships(user_id1);
 CREATE INDEX idx_friendships_user_id2 ON friendships(user_id2);
 CREATE INDEX idx_chat_messages_room_id ON chat_messages(room_id);
 CREATE INDEX idx_chat_room_members_user_id ON chat_room_members(user_id);
+CREATE INDEX idx_auth_refresh_tokens_token ON auth_refresh_tokens(token);
+CREATE INDEX idx_auth_refresh_tokens_user_id ON auth_refresh_tokens(user_id);

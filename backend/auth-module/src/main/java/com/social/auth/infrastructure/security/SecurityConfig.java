@@ -22,7 +22,14 @@ public class SecurityConfig {
         http
             .csrf().disable()
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
+                .requestMatchers(
+                    "/auth/register",
+                    "/auth/login",
+                    "/auth/refresh",
+                    "/auth/logout",
+                    "/auth/request-otp",
+                    "/auth/verify-otp"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .httpBasic().disable()

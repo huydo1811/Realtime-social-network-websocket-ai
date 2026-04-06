@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +26,7 @@ import com.social.user.presentation.dto.CreateUserDto;
 import com.social.user.presentation.dto.UpdateUserDto;
 import com.social.user.presentation.dto.UserViewDto;
 import com.social.user.presentation.mapper.UserMapper;
+
 import jakarta.validation.Valid;
 
 @RestController
@@ -105,10 +107,46 @@ public class UserController {
         }
     }
 
+    @GetMapping("/me")
+    public ResponseEntity<?> getMyProfile() {
+        try {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                return ResponseEntity.status(401).body("Unauthorized");
+            }
+            String principal = (String) auth.getPrincipal();
+            Long userId = Long.valueOf(principal);
+            User user = getUserByIdUseCase.execute(userId);
+            return ResponseEntity.ok(userMapper.toDto(user));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(404).body(ex.getMessage());
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body("Đã xảy ra lỗi hệ thống");
+        }
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@PathVariable Long id, @Valid @RequestBody UpdateUserDto dto) {
         try {
             User updated = updateUserUseCase.execute(id, dto);
+            return ResponseEntity.ok(userMapper.toDto(updated));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body("Đã xảy ra lỗi hệ thống");
+        }
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMyProfile(@Valid @RequestBody UpdateUserDto dto) {
+        try {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                return ResponseEntity.status(401).body("Unauthorized");
+            }
+            String principal = (String) auth.getPrincipal();
+            Long userId = Long.valueOf(principal);
+            User updated = updateUserUseCase.execute(userId, dto);
             return ResponseEntity.ok(userMapper.toDto(updated));
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());

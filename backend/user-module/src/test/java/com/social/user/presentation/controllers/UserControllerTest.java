@@ -40,6 +40,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = UserController.class)
@@ -256,5 +258,80 @@ class UserControllerTest {
 
         mvc.perform(delete("/users/123"))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getMyProfile_found_returns200() throws Exception {
+        SecurityContextHolder.clearContext();
+        SecurityContextHolder.getContext()
+            .setAuthentication(new UsernamePasswordAuthenticationToken("7", null, List.of()));
+
+        var user = sampleUser(7L, "p@mail");
+        var dto = sampleDto(7L, "p@mail");
+        when(getUserByIdUseCase.execute(7L)).thenReturn(user);
+        when(userMapper.toDto(user)).thenReturn(dto);
+
+        mvc.perform(get("/users/me"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(7))
+            .andExpect(jsonPath("$.email").value("p@mail"));
+    }
+
+    @Test
+    void getMyProfile_noAuth_returns401() throws Exception {
+        SecurityContextHolder.clearContext();
+        mvc.perform(get("/users/me"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void updateMyProfile_success_returns200() throws Exception {
+        SecurityContextHolder.clearContext();
+        SecurityContextHolder.getContext()
+            .setAuthentication(new UsernamePasswordAuthenticationToken("2", null, List.of()));
+
+        UpdateUserDto req = new UpdateUserDto();
+        req.setFullName("Updated Name");
+        req.setBio("updated bio");
+
+        var updatedUser = sampleUser(2L, "u@mail");
+        var returnedDto = sampleDto(2L, "u@mail");
+        returnedDto.setFullName("Updated Name");
+
+        when(updateUserUseCase.execute(eq(2L), any(UpdateUserDto.class))).thenReturn(updatedUser);
+        when(userMapper.toDto(updatedUser)).thenReturn(returnedDto);
+
+        mvc.perform(put("/users/me")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(2))
+            .andExpect(jsonPath("$.fullName").value("Updated Name"));
+    }
+
+    @Test
+    void updateMyProfile_validationFail_returns400() throws Exception {
+        SecurityContextHolder.clearContext();
+        SecurityContextHolder.getContext()
+            .setAuthentication(new UsernamePasswordAuthenticationToken("2", null, List.of()));
+
+        UpdateUserDto req = new UpdateUserDto();
+        req.setPhone("01"); 
+        mvc.perform(put("/users/me")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateMyProfile_noAuth_returns401() throws Exception {
+        SecurityContextHolder.clearContext();
+        UpdateUserDto req = new UpdateUserDto();
+        req.setFullName("Should Not Matter");
+
+        mvc.perform(put("/users/me")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isUnauthorized());
     }
 }

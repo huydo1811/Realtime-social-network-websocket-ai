@@ -89,6 +89,16 @@
             <artifactId>dotenv-java</artifactId>
             <version>3.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 
     <build>
@@ -111,9 +121,6 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <mainClass>com.social.SocialNetworkApplication</mainClass>
-                    <systemPropertyVariables>
-                        <spring.devtools.restart.enabled>false</spring.devtools.restart.enabled>
-                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

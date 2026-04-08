@@ -1,4 +1,3 @@
--- V1__init.sql - Combined schema (V1..V3)
 
 -- 1. users
 CREATE TABLE users (
@@ -102,7 +101,7 @@ CREATE TABLE moderation_logs (
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. auth_refresh_tokens (from V3)
+-- 10. auth_refresh_tokens 
 CREATE TABLE auth_refresh_tokens (
   id BIGSERIAL PRIMARY KEY,
   token VARCHAR(255) NOT NULL,
@@ -110,6 +109,19 @@ CREATE TABLE auth_refresh_tokens (
   revoked BOOLEAN NOT NULL DEFAULT false,
   user_id BIGINT REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- 11. otps
+CREATE TABLE otps (
+  id BIGSERIAL PRIMARY KEY,
+  contact VARCHAR(255) NOT NULL,
+  contact_type VARCHAR(10) NOT NULL,
+  code_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT false,
+  attempts INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- Indexes
 CREATE INDEX idx_posts_user_id ON posts(user_id);
@@ -122,3 +134,4 @@ CREATE INDEX idx_chat_messages_room_id ON chat_messages(room_id);
 CREATE INDEX idx_chat_room_members_user_id ON chat_room_members(user_id);
 CREATE INDEX idx_auth_refresh_tokens_token ON auth_refresh_tokens(token);
 CREATE INDEX idx_auth_refresh_tokens_user_id ON auth_refresh_tokens(user_id);
+CREATE INDEX idx_otps_contact ON otps(contact);

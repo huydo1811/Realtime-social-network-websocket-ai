@@ -16,7 +16,9 @@ import com.social.auth.infrastructure.security.JwtService;
 import com.social.auth.presentation.dto.AuthResponseDto;
 import com.social.user.domain.entities.User;
 import com.social.user.domain.repositories.UserRepository;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
 @SpringBootTest(properties = {
     "security.jwt.secret=REPLACE_WITH_STRONG_BASE64_SECRET",
     "spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",

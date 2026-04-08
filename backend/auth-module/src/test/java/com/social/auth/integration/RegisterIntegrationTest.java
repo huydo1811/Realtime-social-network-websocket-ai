@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -20,7 +21,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.social.auth.presentation.dto.RegisterDto;
 import com.social.user.domain.entities.User;
 import com.social.user.domain.repositories.UserRepository;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import static org.mockito.Mockito.doNothing;
+import com.social.auth.infrastructure.service.OtpService;
 
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
@@ -40,6 +45,9 @@ class RegisterIntegrationTest {
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
+    @MockBean
+    private OtpService otpService;
+
     @BeforeEach
     void clean() {
         userRepository.findByEmail("e2e@x.com").ifPresent(u -> userRepository.deleteById(u.getId()));
@@ -54,6 +62,7 @@ class RegisterIntegrationTest {
         dto.setPhone("0999999");
         dto.setPassword("secret123");
         dto.setFullName("E2E User");
+        dto.setOtpSessionToken("otp-register-1");
 
         mvc.perform(post("/auth/register")
             .contentType(MediaType.APPLICATION_JSON)
@@ -64,5 +73,8 @@ class RegisterIntegrationTest {
         Optional<User> saved = userRepository.findByEmail("e2e@x.com");
         assertTrue(saved.isPresent());
         assertEquals("E2E User", saved.get().getFullName());
+
+        doNothing().when(otpService)
+            .consumeVerifiedSession("otp-register-1", "e2e@x.com", "EMAIL", "REGISTER");
     }
 }

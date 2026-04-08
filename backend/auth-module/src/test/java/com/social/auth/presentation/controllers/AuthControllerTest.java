@@ -27,12 +27,17 @@ import com.social.auth.application.usecases.AuthenticateUseCase;
 import com.social.auth.application.usecases.LogoutUseCase;
 import com.social.auth.application.usecases.RefreshTokenUseCase;
 import com.social.auth.application.usecases.RegisterUseCase;
-import com.social.auth.presentation.dto.AuthResponseDto;
-import com.social.auth.presentation.dto.ProfileDto;
-import com.social.auth.presentation.dto.RegisterDto;
-import com.social.auth.presentation.dto.RefreshRequestDto;
-import com.social.auth.presentation.mapper.AuthMapper;
+import com.social.auth.application.usecases.RequestOtpUseCase;
+import com.social.auth.application.usecases.VerifyOtpUseCase;
 import com.social.auth.infrastructure.security.JwtService;
+import com.social.auth.presentation.dto.AuthResponseDto;
+import com.social.auth.presentation.dto.LoginDto;
+import com.social.auth.presentation.dto.ProfileDto;
+import com.social.auth.presentation.dto.RefreshRequestDto;
+import com.social.auth.presentation.dto.RegisterDto;
+import com.social.auth.presentation.dto.RequestOtpDto;
+import com.social.auth.presentation.dto.VerifyOtpDto;
+import com.social.auth.presentation.mapper.AuthMapper;
 import com.social.user.application.usecases.ChangePasswordUseCase;
 import com.social.user.domain.entities.User;
 
@@ -64,6 +69,12 @@ class AuthControllerTest {
     @MockBean
     private ChangePasswordUseCase changePasswordUseCase;
 
+    @MockBean
+    private RequestOtpUseCase requestOtpUseCase;
+
+    @MockBean
+    private VerifyOtpUseCase verifyOtpUseCase;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -73,6 +84,7 @@ class AuthControllerTest {
         dto.setPhone("0123456");
         dto.setPassword("123456");
         dto.setFullName("Full Name");
+        dto.setOtpSessionToken("otp-register-1");
 
         Timestamp now = new Timestamp(System.currentTimeMillis());
         User u = new User(1L, "a@x.com", "0123456", "pwhash", "Full Name", null, null, null, "USER", true, now, now);
@@ -85,11 +97,11 @@ class AuthControllerTest {
         when(authMapper.toProfileDto(u)).thenReturn(profile);
 
         mvc.perform(post("/auth/register")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.email").value("a@x.com"))
-            .andExpect(jsonPath("$.fullName").value("Full Name"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("a@x.com"))
+                .andExpect(jsonPath("$.fullName").value("Full Name"));
     }
 
     @Test
@@ -99,11 +111,12 @@ class AuthControllerTest {
         dto.setPhone("123");
         dto.setPassword("123456");
         dto.setFullName("Full");
+        dto.setOtpSessionToken("otp-register-1");
 
         mvc.perform(post("/auth/register")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isBadRequest());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -113,14 +126,15 @@ class AuthControllerTest {
         dto.setPhone("0123456");
         dto.setPassword("123456");
         dto.setFullName("Full Name");
+        dto.setOtpSessionToken("otp-register-1");
 
         when(registerUseCase.execute(any(RegisterDto.class))).thenThrow(new RuntimeException("duplicate"));
 
         mvc.perform(post("/auth/register")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isBadRequest())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("duplicate"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("duplicate"));
     }
 
     @Test
@@ -130,60 +144,66 @@ class AuthControllerTest {
         dto.setPhone("0123456");
         dto.setPassword("123456");
         dto.setFullName("Full Name");
+        dto.setOtpSessionToken("otp-register-1");
 
-        when(registerUseCase.execute(any(RegisterDto.class))).thenAnswer(invocation -> { throw new Exception("boom"); });
+        when(registerUseCase.execute(any(RegisterDto.class))).thenAnswer(invocation -> {
+            throw new Exception("boom");
+        });
+
         mvc.perform(post("/auth/register")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isInternalServerError())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Đã xảy ra lỗi hệ thống"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Đã xảy ra lỗi hệ thống"));
     }
 
     @Test
     void post_login_returns_tokens() throws Exception {
-        com.social.auth.presentation.dto.LoginDto dto = new com.social.auth.presentation.dto.LoginDto();
+        LoginDto dto = new LoginDto();
         dto.setEmail("a@x.com");
         dto.setPassword("pw");
+        dto.setOtpSessionToken("otp-login-1");
 
         AuthResponseDto resp = new AuthResponseDto();
         resp.setAccessToken("access-1");
         resp.setRefreshToken("refresh-1");
         resp.setExpiresIn(3600);
 
-        when(authenticateUseCase.authenticate(any())).thenReturn(resp);
+        when(authenticateUseCase.authenticate(any(LoginDto.class))).thenReturn(resp);
 
         mvc.perform(post("/auth/login")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.accessToken").value("access-1"))
-            .andExpect(jsonPath("$.refreshToken").value("refresh-1"))
-            .andExpect(jsonPath("$.expiresIn").value(3600));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-1"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-1"))
+                .andExpect(jsonPath("$.expiresIn").value(3600));
     }
 
     @Test
     void post_login_invalid_credentials_returns_401() throws Exception {
-        com.social.auth.presentation.dto.LoginDto dto = new com.social.auth.presentation.dto.LoginDto();
+        LoginDto dto = new LoginDto();
         dto.setEmail("a@x.com");
         dto.setPassword("bad");
+        dto.setOtpSessionToken("otp-login-1");
 
-        when(authenticateUseCase.authenticate(any())).thenThrow(new IllegalArgumentException("Invalid credentials"));
+        when(authenticateUseCase.authenticate(any(LoginDto.class))).thenThrow(new IllegalArgumentException("Invalid credentials"));
 
         mvc.perform(post("/auth/login")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isUnauthorized())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Invalid credentials"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Invalid credentials"));
     }
 
     @Test
     void post_login_validation_fail_missing_password_returns_400() throws Exception {
-        String payload = "{\"email\":\"a@x.com\"}";
+        String payload = "{\"email\":\"a@x.com\",\"otpSessionToken\":\"otp-login-1\"}";
 
         mvc.perform(post("/auth/login")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(payload))
-            .andExpect(status().isBadRequest());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -199,11 +219,11 @@ class AuthControllerTest {
         when(refreshTokenUseCase.refresh(any())).thenReturn(resp);
 
         mvc.perform(post("/auth/refresh")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(req)))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.accessToken").value("new-access"))
-            .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-access"))
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
     }
 
     @Test
@@ -214,19 +234,19 @@ class AuthControllerTest {
         when(refreshTokenUseCase.refresh(any())).thenThrow(new IllegalArgumentException("Invalid refresh"));
 
         mvc.perform(post("/auth/refresh")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(req)))
-            .andExpect(status().isUnauthorized())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Invalid refresh"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Invalid refresh"));
     }
 
     @Test
     void post_refresh_validation_fail_missing_field_returns_400() throws Exception {
         String payload = "{}";
         mvc.perform(post("/auth/refresh")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(payload))
-            .andExpect(status().isBadRequest());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -235,9 +255,9 @@ class AuthControllerTest {
         req.setRefreshToken("to-logout");
 
         mvc.perform(post("/auth/logout")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(req)))
-            .andExpect(status().isOk());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
 
         verify(logoutUseCase).logout("to-logout");
     }
@@ -245,7 +265,7 @@ class AuthControllerTest {
     @Test
     void post_changePassword_success_returns200() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
+                new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
         );
 
         com.social.auth.presentation.dto.ChangePasswordDto dto = new com.social.auth.presentation.dto.ChangePasswordDto();
@@ -257,10 +277,10 @@ class AuthControllerTest {
         when(changePasswordUseCase.execute(eq(1L), anyString(), anyString())).thenReturn(u);
 
         mvc.perform(post("/auth/change-password")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isOk())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Đổi mật khẩu thành công"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Đổi mật khẩu thành công"));
 
         SecurityContextHolder.clearContext();
     }
@@ -268,7 +288,7 @@ class AuthControllerTest {
     @Test
     void post_changePassword_wrong_current_returns400() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
+                new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
         );
 
         com.social.auth.presentation.dto.ChangePasswordDto dto = new com.social.auth.presentation.dto.ChangePasswordDto();
@@ -276,13 +296,13 @@ class AuthControllerTest {
         dto.setNewPassword("newpw123");
 
         when(changePasswordUseCase.execute(eq(1L), anyString(), anyString()))
-            .thenThrow(new IllegalArgumentException("Mật khẩu hiện tại không đúng"));
+                .thenThrow(new IllegalArgumentException("Mật khẩu hiện tại không đúng"));
 
         mvc.perform(post("/auth/change-password")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isBadRequest())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Mật khẩu hiện tại không đúng"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Mật khẩu hiện tại không đúng"));
 
         SecurityContextHolder.clearContext();
     }
@@ -290,7 +310,7 @@ class AuthControllerTest {
     @Test
     void post_changePassword_validation_fail_newPassword_too_short_returns400() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
+                new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
         );
 
         com.social.auth.presentation.dto.ChangePasswordDto dto = new com.social.auth.presentation.dto.ChangePasswordDto();
@@ -298,9 +318,9 @@ class AuthControllerTest {
         dto.setNewPassword("123");
 
         mvc.perform(post("/auth/change-password")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isBadRequest());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
 
         SecurityContextHolder.clearContext();
     }
@@ -308,20 +328,22 @@ class AuthControllerTest {
     @Test
     void post_changePassword_service_error_returns500() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
+                new UsernamePasswordAuthenticationToken("1", null, Collections.emptyList())
         );
 
         com.social.auth.presentation.dto.ChangePasswordDto dto = new com.social.auth.presentation.dto.ChangePasswordDto();
         dto.setCurrentPassword("oldpw");
         dto.setNewPassword("newpw123");
 
-        when(changePasswordUseCase.execute(eq(1L), anyString(), anyString())).thenAnswer(inv -> { throw new Exception("boom"); });
+        when(changePasswordUseCase.execute(eq(1L), anyString(), anyString())).thenAnswer(inv -> {
+            throw new Exception("boom");
+        });
 
         mvc.perform(post("/auth/change-password")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isInternalServerError())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Đã xảy ra lỗi hệ thống"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Đã xảy ra lỗi hệ thống"));
 
         SecurityContextHolder.clearContext();
     }
@@ -329,7 +351,7 @@ class AuthControllerTest {
     @Test
     void post_changePassword_user_not_found_returns404() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("99", null, Collections.emptyList())
+                new UsernamePasswordAuthenticationToken("99", null, Collections.emptyList())
         );
 
         com.social.auth.presentation.dto.ChangePasswordDto dto = new com.social.auth.presentation.dto.ChangePasswordDto();
@@ -337,13 +359,13 @@ class AuthControllerTest {
         dto.setNewPassword("newpw123");
 
         when(changePasswordUseCase.execute(eq(99L), anyString(), anyString()))
-            .thenThrow(new RuntimeException("Người dùng không tồn tại"));
+                .thenThrow(new RuntimeException("Người dùng không tồn tại"));
 
         mvc.perform(post("/auth/change-password")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isNotFound())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Người dùng không tồn tại"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isNotFound())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Người dùng không tồn tại"));
 
         SecurityContextHolder.clearContext();
     }
@@ -357,9 +379,44 @@ class AuthControllerTest {
         dto.setNewPassword("newpw123");
 
         mvc.perform(post("/auth/change-password")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isUnauthorized())
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Unauthorized"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("Unauthorized"));
+    }
+
+    @Test
+    void post_requestOtp_returns_status_ok() throws Exception {
+        RequestOtpDto dto = new RequestOtpDto();
+        dto.setContact("a@x.com");
+        dto.setContactType("EMAIL");
+        dto.setPurpose("LOGIN");
+
+        mvc.perform(post("/auth/request-otp")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OTP_SENT"));
+
+        verify(requestOtpUseCase).execute("a@x.com", "EMAIL", "LOGIN");
+    }
+
+    @Test
+    void post_verifyOtp_returns_session_token() throws Exception {
+        VerifyOtpDto dto = new VerifyOtpDto();
+        dto.setContact("a@x.com");
+        dto.setContactType("EMAIL");
+        dto.setCode("123456");
+        dto.setPurpose("LOGIN");
+
+        when(verifyOtpUseCase.execute("a@x.com", "EMAIL", "123456", "LOGIN"))
+                .thenReturn("otp-session-1");
+
+        mvc.perform(post("/auth/verify-otp")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.otpSessionToken").value("otp-session-1"))
+                .andExpect(jsonPath("$.expiresIn").value(900));
     }
 }

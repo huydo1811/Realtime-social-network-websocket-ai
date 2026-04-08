@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.social.auth.infrastructure.persistence.RefreshToken;
 import com.social.auth.infrastructure.persistence.RefreshTokenRepository;
 import com.social.auth.infrastructure.security.JwtService;
+import com.social.auth.infrastructure.service.OtpService;
 import com.social.auth.presentation.dto.AuthResponseDto;
 import com.social.auth.presentation.dto.LoginDto;
 import com.social.user.domain.entities.User;
@@ -22,6 +23,7 @@ public class AuthenticateUseCase {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OtpService otpService;
 
     @Value("${security.jwt.exp-refresh-seconds:604800}") 
     private long refreshExpSeconds;
@@ -29,15 +31,19 @@ public class AuthenticateUseCase {
     public AuthenticateUseCase(UserRepository userRepository,
                                PasswordEncoder passwordEncoder,
                                JwtService jwtService,
-                               RefreshTokenRepository refreshTokenRepository) {
+                               RefreshTokenRepository refreshTokenRepository,
+                               OtpService otpService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.otpService = otpService;
     }
 
     @Transactional
     public AuthResponseDto authenticate(LoginDto dto) {
+        otpService.consumeVerifiedSession(dto.getOtpSessionToken(), dto.getEmail(), "EMAIL", "LOGIN");
+
         User user = userRepository.findByEmail(dto.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 

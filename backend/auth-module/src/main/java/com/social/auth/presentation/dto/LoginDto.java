@@ -12,6 +12,9 @@ public class LoginDto {
     @NotBlank
     private String password;
 
+    @NotBlank
+    private String otpSessionToken;
+
     public String getEmail() {
         return email;
     }
@@ -27,4 +30,7 @@ public class LoginDto {
     public void setPassword(String password) {
         this.password = password;
     }
+
+    public String getOtpSessionToken() { return otpSessionToken; }
+    public void setOtpSessionToken(String otpSessionToken) { this.otpSessionToken = otpSessionToken; }
 }

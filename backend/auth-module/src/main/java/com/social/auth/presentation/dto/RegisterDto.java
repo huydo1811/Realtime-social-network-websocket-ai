@@ -17,6 +17,9 @@ public class RegisterDto {
     @NotBlank
     private String fullName;
 
+    @NotBlank
+    private String otpSessionToken;
+
     private String bio;
     private String avatarUrl;
     private String coverUrl;
@@ -45,4 +48,7 @@ public class RegisterDto {
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    public String getOtpSessionToken() { return otpSessionToken; }
+    public void setOtpSessionToken(String otpSessionToken) { this.otpSessionToken = otpSessionToken; }
 }

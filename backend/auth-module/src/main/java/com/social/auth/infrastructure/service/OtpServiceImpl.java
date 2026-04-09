@@ -4,6 +4,10 @@ import java.time.LocalDateTime;
 import java.util.Random;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,14 +21,27 @@ import com.social.auth.infrastructure.persistence.OtpRepository;
 @Service
 public class OtpServiceImpl implements OtpService {
 
+    private static final Logger log = LoggerFactory.getLogger(OtpServiceImpl.class);
+
     private final OtpRepository otpRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailSender emailSender;
     private final SmsSender smsSender;
 
-    private final int otpTtlSeconds = 300;
-    private final int sessionTtlSeconds = 900;
-    private final int maxAttempts = 5;
+    @Value("${auth.otp.code-ttl-seconds:300}")
+    private int otpTtlSeconds;
+
+    @Value("${auth.otp.session-ttl-seconds:900}")
+    private int sessionTtlSeconds;
+
+    @Value("${auth.otp.max-attempts:5}")
+    private int maxAttempts;
+
+    @Value("${auth.otp.cleanup-used-days:7}")
+    private int cleanupUsedDays;
+
+    @Value("${auth.otp.cleanup-hard-days:30}")
+    private int cleanupHardDays;
 
     public OtpServiceImpl(OtpRepository otpRepository,
                           PasswordEncoder passwordEncoder,
@@ -39,6 +56,8 @@ public class OtpServiceImpl implements OtpService {
     @Override
     @Transactional
     public void generateAndSend(String contact, String contactType, String purpose) {
+        otpRepository.invalidateActiveOtps(contact, contactType, purpose);
+
         String code = generateNumericOtp(6);
 
         OtpEntity e = new OtpEntity();
@@ -117,5 +136,19 @@ public class OtpServiceImpl implements OtpService {
         int min = (int) Math.pow(10, digits - 1);
         int num = rnd.nextInt(9 * min) + min;
         return String.valueOf(num);
+    }
+
+    @Scheduled(cron = "${auth.otp.cleanup-cron:0 0 * * * *}")
+    @Transactional
+    public void cleanupOtpTable() {
+        LocalDateTime now = LocalDateTime.now();
+        int deleted = otpRepository.cleanupExpiredAndOld(
+                now,
+                now.minusDays(cleanupUsedDays),
+                now.minusDays(cleanupHardDays)
+        );
+        if (deleted > 0) {
+            log.info("OTP cleanup deleted {} rows", deleted);
+        }
     }
 }

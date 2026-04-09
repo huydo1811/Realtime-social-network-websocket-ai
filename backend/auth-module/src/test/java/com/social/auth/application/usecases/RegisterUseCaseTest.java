@@ -37,13 +37,14 @@ class RegisterUseCaseTest {
         dto.setPassword("pw");
         dto.setFullName("Full Name");
         dto.setOtpSessionToken("otp-session-1");
+        dto.setRole("ADMIN");
 
         User u = new User(1L, "a@x.com", "012345", "pwhash", "Full Name", null, null, null, "USER", true,
                 new Timestamp(System.currentTimeMillis()), new Timestamp(System.currentTimeMillis()));
 
         when(createUserUseCase.execute(
                 dto.getEmail(), dto.getPhone(), dto.getPassword(), dto.getFullName(),
-                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), dto.getRole()
+                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), "USER"
         )).thenReturn(u);
 
         User res = sut.execute(dto);
@@ -52,7 +53,7 @@ class RegisterUseCaseTest {
         verify(otpService).consumeVerifiedSession("otp-session-1", "a@x.com", "EMAIL", "REGISTER");
         verify(createUserUseCase).execute(
                 dto.getEmail(), dto.getPhone(), dto.getPassword(), dto.getFullName(),
-                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), dto.getRole()
+                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), "USER"
         );
     }
 
@@ -64,11 +65,12 @@ class RegisterUseCaseTest {
         dto.setPassword("pw");
         dto.setFullName("Full Name");
         dto.setOtpSessionToken("otp-session-1");
+        dto.setRole("ADMIN");
 
         RuntimeException ex = new RuntimeException("duplicate");
         when(createUserUseCase.execute(
                 dto.getEmail(), dto.getPhone(), dto.getPassword(), dto.getFullName(),
-                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), dto.getRole()
+                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), "USER"
         )).thenThrow(ex);
 
         assertThrows(RuntimeException.class, () -> sut.execute(dto));
@@ -76,7 +78,7 @@ class RegisterUseCaseTest {
         verify(otpService).consumeVerifiedSession("otp-session-1", "a@x.com", "EMAIL", "REGISTER");
         verify(createUserUseCase).execute(
                 dto.getEmail(), dto.getPhone(), dto.getPassword(), dto.getFullName(),
-                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), dto.getRole()
+                dto.getBio(), dto.getAvatarUrl(), dto.getCoverUrl(), "USER"
         );
     }
 }

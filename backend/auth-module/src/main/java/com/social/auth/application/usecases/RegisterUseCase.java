@@ -30,7 +30,7 @@ public class RegisterUseCase {
             dto.getBio(),
             dto.getAvatarUrl(),
             dto.getCoverUrl(),
-            dto.getRole()
+            "USER"
         );
     }
 }

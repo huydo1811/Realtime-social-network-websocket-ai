@@ -72,6 +72,7 @@ public class JwtService {
                 .setExpiration(exp)
                 .claim("email", user.getEmail())
                 .claim("fullName", user.getFullName())
+                .claim("role", normalizeRole(user.getRole()))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -96,5 +97,23 @@ public class JwtService {
 
     public long getAccessExpiresInSeconds() {
         return accessExpSeconds;
+    }
+
+    public String getRole(String token) {
+        Claims c = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
+        Object role = c.get("role");
+        if (role == null) return "USER";
+        return normalizeRole(String.valueOf(role));
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null || role.isBlank()) {
+            return "USER";
+        }
+        String normalized = role.trim().toUpperCase();
+        if (normalized.startsWith("ROLE_")) {
+            normalized = normalized.substring(5);
+        }
+        return normalized;
     }
 }

@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,6 +57,7 @@ public class UserController {
         this.searchUsersUseCase = searchUsersUseCase;
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserDto dto) {
         try {
@@ -125,10 +127,11 @@ public class UserController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@PathVariable Long id, @Valid @RequestBody UpdateUserDto dto) {
         try {
-            User updated = updateUserUseCase.execute(id, dto);
+            User updated = updateUserUseCase.executeAdmin(id, dto);
             return ResponseEntity.ok(userMapper.toDto(updated));
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
@@ -146,7 +149,7 @@ public class UserController {
             }
             String principal = (String) auth.getPrincipal();
             Long userId = Long.valueOf(principal);
-            User updated = updateUserUseCase.execute(userId, dto);
+            User updated = updateUserUseCase.executeSelf(userId, dto);
             return ResponseEntity.ok(userMapper.toDto(updated));
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
@@ -155,6 +158,7 @@ public class UserController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
         try {

@@ -16,7 +16,21 @@ public class UpdateUserUseCase {
         this.userRepository = userRepository;
     }
 
-    public User execute(Long id, UpdateUserDto dto) {
+    public User executeAdmin(Long id, UpdateUserDto dto) {
+        User user = loadAndApplyCommonFields(id, dto);
+        if (dto.getRole() != null) user.setRole(normalizeRole(dto.getRole()));
+        if (dto.getIsActive() != null) user.setIsActive(dto.getIsActive());
+        user.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
+        return userRepository.save(user);
+    }
+
+    public User executeSelf(Long id, UpdateUserDto dto) {
+        User user = loadAndApplyCommonFields(id, dto);
+        user.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
+        return userRepository.save(user);
+    }
+
+    private User loadAndApplyCommonFields(Long id, UpdateUserDto dto) {
         User user = userRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
 
@@ -38,10 +52,13 @@ public class UpdateUserUseCase {
         if (dto.getBio() != null) user.setBio(dto.getBio());
         if (dto.getAvatarUrl() != null) user.setAvatarUrl(dto.getAvatarUrl());
         if (dto.getCoverUrl() != null) user.setCoverUrl(dto.getCoverUrl());
-        if (dto.getRole() != null) user.setRole(dto.getRole());
-        if (dto.getIsActive() != null) user.setIsActive(dto.getIsActive());
 
-        user.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
-        return userRepository.save(user);
+        return user;
+    }
+
+    private String normalizeRole(String role) {
+        String r = role == null ? "USER" : role.trim().toUpperCase();
+        if (r.startsWith("ROLE_")) r = r.substring(5);
+        return r.isBlank() ? "USER" : r;
     }
 }

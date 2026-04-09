@@ -45,6 +45,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = UserController.class)
+@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc(addFilters = false)
 class UserControllerTest {
 
     @Autowired
@@ -218,7 +219,7 @@ class UserControllerTest {
         var dtoReq = new UpdateUserDto();
         dtoReq.setFullName("New Name");
         var updated = sampleUser(4L, "d@mail");
-        when(updateUserUseCase.execute(eq(4L), any(UpdateUserDto.class))).thenReturn(updated);
+        when(updateUserUseCase.executeAdmin(eq(4L), any(UpdateUserDto.class))).thenReturn(updated);
         when(userMapper.toDto(updated)).thenReturn(sampleDto(4L, "d@mail"));
 
         mvc.perform(put("/users/4")
@@ -234,7 +235,7 @@ class UserControllerTest {
     void updateUser_runtimeException_returns400() throws Exception {
         var dtoReq = new UpdateUserDto();
         dtoReq.setFullName("New Name");
-        when(updateUserUseCase.execute(eq(4L), any(UpdateUserDto.class))).thenThrow(new RuntimeException("bad"));
+        when(updateUserUseCase.executeAdmin(eq(4L), any(UpdateUserDto.class))).thenThrow(new RuntimeException("bad"));
 
         mvc.perform(put("/users/4")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -298,7 +299,7 @@ class UserControllerTest {
         var returnedDto = sampleDto(2L, "u@mail");
         returnedDto.setFullName("Updated Name");
 
-        when(updateUserUseCase.execute(eq(2L), any(UpdateUserDto.class))).thenReturn(updatedUser);
+        when(updateUserUseCase.executeSelf(eq(2L), any(UpdateUserDto.class))).thenReturn(updatedUser);
         when(userMapper.toDto(updatedUser)).thenReturn(returnedDto);
 
         mvc.perform(put("/users/me")

@@ -74,7 +74,7 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-      <div className="w-full max-w-7xl mx-auto rounded-2xl overflow-hidden shadow-xl">
+      <div className="w-full max-w-7xl mx-auto rounded-2xl overflow-hidden shadow-xl origin-center scale-[0.80] md:scale-[0.80]">        
         <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch">
           {/* Left brand panel */}
           <div className="hidden lg:flex relative overflow-hidden flex-col justify-center px-12 py-20 text-white bg-gradient-to-br from-rose-500 to-rose-300">

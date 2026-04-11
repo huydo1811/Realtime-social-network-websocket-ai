@@ -125,11 +125,9 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-      <div className="w-full max-w-7xl mx-auto rounded-2xl overflow-hidden shadow-xl">
+      <div className="w-full max-w-7xl mx-auto rounded-2xl overflow-hidden shadow-xl origin-center scale-[0.80] md:scale-[0.80]">        
         <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch">
-          {}
           <div className="hidden lg:flex relative overflow-hidden flex-col justify-center px-12 py-20 text-white bg-gradient-to-br from-rose-500 to-rose-300">
-            {}
             <div className="pointer-events-none absolute -top-16 -left-16 h-56 w-56 rounded-full bg-white/18 blur-3xl" />
             <div className="pointer-events-none absolute bottom-[-80px] right-[-60px] h-72 w-72 rounded-full bg-rose-200/25 blur-3xl" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.10),transparent_35%)]" />

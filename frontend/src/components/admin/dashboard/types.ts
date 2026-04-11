@@ -1,0 +1,23 @@
+export type Stat = {
+  label: string;
+  value: string;
+  change: string;
+  up?: boolean;
+};
+
+export type ReportItem = {
+  id: string;
+  type: "Post" | "Comment" | "User";
+  target: string;
+  reason: string;
+  status: "New" | "Reviewing" | "Resolved";
+  createdAt: string;
+};
+
+export type QueueItem = {
+  id: string;
+  title: string;
+  author: string;
+  risk: "High" | "Medium" | "Low";
+  createdAt: string;
+};

@@ -30,7 +30,7 @@ export default function DashboardHeader({ query, setQuery }: Props) {
             placeholder="Tìm báo cáo..."
             className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-rose-100 md:w-64"
           />
-          <button className="h-10 rounded-xl bg-rose-500 px-4 text-sm font-medium text-white hover:bg-rose-600">
+          <button className="cursor-pointer h-10 rounded-xl bg-rose-500 px-4 text-sm font-medium text-white hover:bg-rose-600">
             Làm mới
           </button>
 
@@ -38,7 +38,7 @@ export default function DashboardHeader({ query, setQuery }: Props) {
             <button
               type="button"
               onClick={() => setOpenAccountMenu((v) => !v)}
-              className="ml-1 flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-sm font-semibold text-rose-700 ring-1 ring-rose-200"
+              className="cursor-pointer ml-1 flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-sm font-semibold text-rose-700 ring-1 ring-rose-200"
               aria-label="Tài khoản admin"
             >
               AD
@@ -52,7 +52,7 @@ export default function DashboardHeader({ query, setQuery }: Props) {
                     setOpenAccountMenu(false);
                     router.push("/admin/profile");
                   }}
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  className="cursor-pointer block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                 >
                   Hồ sơ admin
                 </button>
@@ -60,7 +60,7 @@ export default function DashboardHeader({ query, setQuery }: Props) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                  className="cursor-pointer block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
                 >
                   Đăng xuất
                 </button>

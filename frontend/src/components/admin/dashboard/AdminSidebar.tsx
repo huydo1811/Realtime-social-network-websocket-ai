@@ -13,7 +13,7 @@ export default function AdminSidebar() {
         </div>
       </div>
 
-      <nav className="space-y-1 text-sm">
+      <nav className=" space-y-1 text-sm">
         <Link href="/admin" className="block rounded-xl bg-rose-50 px-3 py-2 font-medium text-rose-700">
           Tổng quan
         </Link>

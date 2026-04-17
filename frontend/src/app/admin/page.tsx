@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import AdminSidebar from "../../components/admin/dashboard/AdminSidebar";
 import DashboardHeader from "../../components/admin/dashboard/DashboardHeader";
 import GrowthCard from "../../components/admin/dashboard/GrowthCard";
 import ModerationQueueCard from "../../components/admin/dashboard/ModerationQueueCard";
@@ -33,7 +32,6 @@ const reports: ReportItem[] = [
 
 export default function AdminDashboardPage() {
   const [query, setQuery] = useState("");
-
   const filteredReports = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return reports;
@@ -47,7 +45,6 @@ export default function AdminDashboardPage() {
   }, [query]);
 
   const router = useRouter();
-  const [openAccountMenu, setOpenAccountMenu] = useState(false);
 
   function handleLogout() {
     localStorage.removeItem("admin_token");
@@ -55,24 +52,16 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800">
-      <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_1fr]">
-          <AdminSidebar />
+    <section className="space-y-5">
+      <DashboardHeader query={query} setQuery={setQuery} />
+      <StatsGrid stats={stats} />
 
-          <section className="space-y-5">
-            <DashboardHeader query={query} setQuery={setQuery} />
-            <StatsGrid stats={stats} />
-
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.3fr_1fr]">
-              <GrowthCard />
-              <ModerationQueueCard items={moderationQueue} />
-            </div>
-
-            <ReportsTable reports={filteredReports} />
-          </section>
-        </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.3fr_1fr]">
+        <GrowthCard />
+        <ModerationQueueCard items={moderationQueue} />
       </div>
-    </main>
+
+      <ReportsTable reports={filteredReports} />
+    </section>
   );
 }

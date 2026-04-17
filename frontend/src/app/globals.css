@@ -20,7 +20,6 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-mono: var(--font-geist-mono);
 }
 
 * { box-sizing: border-box; }
@@ -29,7 +28,6 @@ html, body {
   height: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
 }
 
 body {
@@ -37,7 +35,7 @@ body {
   background: radial-gradient(1200px 500px at 80% -10%, #fff0f6 0%, transparent 60%),
     radial-gradient(900px 450px at -10% 30%, #fff5f8 0%, transparent 55%), var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), sans-serif;
+
 }
 
 /* Layout helpers */

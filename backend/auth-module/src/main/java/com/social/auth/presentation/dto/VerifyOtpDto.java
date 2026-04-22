@@ -8,7 +8,7 @@ public class VerifyOtpDto {
     @NotBlank @Pattern(regexp = "EMAIL|PHONE")
     private String contactType;
     @NotBlank private String code;
-    @NotBlank @Pattern(regexp = "REGISTER|LOGIN")
+    @NotBlank @Pattern(regexp = "REGISTER|LOGIN|RESET_PASSWORD")
     private String purpose;
 
     public String getContact() { return contact; }

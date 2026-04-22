@@ -12,7 +12,7 @@ public class RequestOtpDto {
     private String contactType;
 
     @NotBlank
-    @Pattern(regexp = "REGISTER|LOGIN")
+    @Pattern(regexp = "REGISTER|LOGIN|RESET_PASSWORD")
     private String purpose;
 
     public String getContact() { return contact; }

@@ -42,7 +42,7 @@ export default function LoginForm({ contact, setContact, loading, sendOtp, onFor
         disabled={!contact || loading}
         className="w-full h-12 md:h-16 rounded-xl btn-primary text-base md:text-xl disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
       >
-        {loading ? "Đang gửi mã..." : "Gửi mã OTP"}
+        {loading ? "Đang gửi mã..." : "Gửi mã xác thực"}
       </button>
 
       <div className="text-center text-base md:text-xl text-slate-600">

@@ -42,10 +42,8 @@ public class AuthenticateUseCase {
 
     @Transactional
     public AuthResponseDto authenticate(LoginDto dto) {
-        otpService.consumeVerifiedSession(dto.getOtpSessionToken(), dto.getEmail(), "EMAIL", "LOGIN");
-
         User user = userRepository.findByEmail(dto.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+            .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 
         if (user.getIsActive() == null || !user.getIsActive()) {
             throw new IllegalArgumentException("Invalid credentials");
@@ -54,6 +52,9 @@ public class AuthenticateUseCase {
         if (!passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid credentials");
         }
+
+        // Consume only after credentials are valid
+        otpService.consumeVerifiedSession(dto.getOtpSessionToken(), dto.getEmail(), "EMAIL", "LOGIN");
 
         String access = jwtService.generateAccessToken(user);
         String refreshVal = jwtService.generateRefreshTokenValue();

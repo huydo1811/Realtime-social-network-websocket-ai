@@ -13,6 +13,7 @@ type Props = {
 };
 
 export default function ResetPasswordForm({ password, setPassword, confirmPassword, setConfirmPassword, loading, onSubmit, onCancel }: Props) {
+  const isPasswordShort = password && password.length < 6;
   const mismatch = password && confirmPassword && password !== confirmPassword;
 
   return (
@@ -27,9 +28,10 @@ export default function ResetPasswordForm({ password, setPassword, confirmPasswo
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           type="password"
-          placeholder="Tối thiểu 8 ký tự"
+          placeholder="Tối thiểu 6 ký tự"
           className="mt-3 h-12 md:h-16 w-full rounded-xl border border-slate-200 px-3 md:px-4 text-base md:text-lg focus:ring-4 focus:ring-slate-50 outline-none"
         />
+        {isPasswordShort ? <p className="mt-2 text-sm text-rose-600">Mật khẩu phải có ít nhất 6 ký tự</p> : null}
       </div>
 
       <div>
@@ -41,13 +43,13 @@ export default function ResetPasswordForm({ password, setPassword, confirmPasswo
           placeholder="Nhập lại mật khẩu"
           className="mt-3 h-12 md:h-16 w-full rounded-xl border border-slate-200 px-3 md:px-4 text-base md:text-lg focus:ring-4 focus:ring-slate-50 outline-none"
         />
-        {mismatch && <p className="mt-2 text-sm text-rose-600">Mật khẩu không khớp</p>}
+        {mismatch && !isPasswordShort ? <p className="mt-2 text-sm text-rose-600">Mật khẩu không khớp</p> : null}
       </div>
 
       <div className="flex gap-3 md:gap-4">
         <button
           type="submit"
-          disabled={loading || !password || password !== confirmPassword}
+          disabled={loading || !password || password.length < 6 || password !== confirmPassword}
           className="flex-1 h-12 md:h-16 rounded-xl btn-primary text-base md:text-xl disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
         >
           {loading ? "Đang lưu..." : "Đặt lại mật khẩu"}

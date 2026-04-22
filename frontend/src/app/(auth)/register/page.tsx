@@ -1,25 +1,33 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
 import RegisterContactForm from "../../../components/auth/RegisterContactForm";
 import RegisterVerifyForm from "../../../components/auth/RegisterVerifyForm";
 import RegisterProfileForm from "../../../components/auth/RegisterProfileForm";
+import { registerWithOtpSession, requestOtp, verifyOtp } from "../../../lib/api/authApi";
 
-type Step = "enter-contact" | "verify" | "profile" | "done";
+type Step = "enter-contact" | "verify" | "profile";
 
 export default function RegisterPage() {
   const [step, setStep] = useState<Step>("enter-contact");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const [contact, setContact] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const otpCode = useMemo(() => otp.join(""), [otp]);
+  const [otpSessionToken, setOtpSessionToken] = useState("");
 
   const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const router = useRouter();
 
   useEffect(() => {
     if (step === "verify") otpRefs.current[0]?.focus();
@@ -40,131 +48,178 @@ export default function RegisterPage() {
   async function sendOtp(e?: React.FormEvent) {
     e?.preventDefault();
     if (!contact) return;
+    setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
-    setStep("verify");
-    setOtp(["", "", "", "", "", ""]);
+    try {
+      await requestOtp(contact.trim(), "EMAIL", "REGISTER");
+      setStep("verify");
+      setOtp(["", "", "", "", "", ""]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không gửi được OTP");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function confirmOtp(e?: React.FormEvent) {
     e?.preventDefault();
     if (otpCode.length < 6) return;
+    setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
-    setStep("profile");
+    try {
+      const verify = await verifyOtp(contact.trim(), "EMAIL", otpCode, "REGISTER");
+      setOtpSessionToken(verify.otpSessionToken);
+      setStep("profile");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "OTP không hợp lệ");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function submitProfile(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!fullName || !username || !password || password !== confirmPassword) return;
+    if (!fullName || !phone || !password || password !== confirmPassword) return;
+    if (!otpSessionToken) return;
+
+    setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
-    setStep("done");
-    // reset
-    setContact("");
-    setOtp(["", "", "", "", "", ""]);
-    setFullName("");
-    setUsername("");
-    setPassword("");
-    setConfirmPassword("");
+    try {
+      await registerWithOtpSession({
+        email: contact.trim(),
+        phone: phone.trim(),
+        password,
+        fullName,
+        otpSessionToken,
+      });
+
+      router.replace("/login?registered=1");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Đăng ký thất bại");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-      <div className="w-full max-w-7xl mx-auto rounded-2xl overflow-hidden shadow-xl origin-center scale-[0.80] md:scale-[0.80]">        
-        <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch">
-          {/* Left brand panel */}
-          <div className="hidden lg:flex relative overflow-hidden flex-col justify-center px-12 py-20 text-white bg-gradient-to-br from-rose-500 to-rose-300">
-            {/* decorative blobs - toned to old rose palette */}
-            <div className="pointer-events-none absolute -top-16 -left-16 h-56 w-56 rounded-full bg-white/18 blur-3xl" />
-            <div className="pointer-events-none absolute bottom-[-80px] right-[-60px] h-72 w-72 rounded-full bg-rose-200/25 blur-3xl" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.10),transparent_35%)]" />
+    <main className="relative min-h-screen overflow-hidden bg-slate-50 font-sans flex items-center justify-center p-4 md:p-8 scale-[0.80] md:scale-[0.80]">
+      {/* Background Styling */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-15px); }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(30px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-blob { animation: blob 8s infinite ease-in-out; }
+        .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-4000 { animation-delay: 4s; }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-fade-in-up { animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+        .bg-grid-slate-200 {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23e2e8f0'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E");
+        }
+      `}} />
 
-            <div className="relative z-10 w-full max-w-xl">
-              <div className="mb-8 flex items-center gap-5">
-                <div className="relative h-20 w-20 rounded-2xl bg-white/90 p-2 shadow-2xl ring-1 ring-white/60">
-                  <img
-                    src="/hype.png"
-                    alt="Hype logo"
-                    className="h-full w-full rounded-xl object-cover"
-                  />
+      <div className="absolute inset-0 z-0 bg-grid-slate-200 [mask-image:linear-gradient(to_bottom,white,transparent)]"></div>
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-rose-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob"></div>
+        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-orange-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-1/4 left-1/2 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob animation-delay-4000"></div>
+      </div>
+
+      {/* Main Card */}
+      <div className="relative z-10 w-full max-w-[1100px] min-h-[600px] flex flex-col lg:flex-row bg-white/80 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] ring-1 ring-white overflow-hidden animate-fade-in-up">
+        
+        {/* Left Side: Brand/Marketing */}
+        <div className="hidden lg:flex w-[45%] relative overflow-hidden flex-col justify-between px-12 py-14 text-white bg-gradient-to-br from-rose-500 to-rose-300">
+           <div className="absolute -top-24 -left-24 w-64 h-64 rounded-full bg-white/20 blur-3xl mix-blend-overlay"></div>
+           <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-orange-200/30 blur-3xl mix-blend-overlay"></div>
+
+           <div className="relative z-10 mb-8">
+             <Link href="/" className="inline-flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
+               <div className="h-12 w-12 overflow-hidden rounded-xl bg-white p-[2px] shadow-lg shadow-white/20">
+                 <Image src="/hype.png" alt="Hype logo" width={48} height={48} className="h-full w-full rounded-[10px] object-cover" unoptimized/>
+               </div>
+               <span className="text-3xl font-extrabold tracking-tight text-white drop-shadow-md">
+                 Hype
+               </span>
+             </Link>
+           </div>
+
+           <div className="relative z-10 space-y-6">
+             <h2 className="text-[2.5rem] leading-[1.15] font-extrabold tracking-tight drop-shadow-sm">
+               Tham gia <br/>cộng đồng mới!
+             </h2>
+             <p className="text-[1.05rem] text-white/90 leading-relaxed max-w-sm">
+               Tạo tài khoản ngay hôm nay để không bỏ lỡ những câu chuyện thú vị và tận hưởng trải nghiệm mượt mà.
+             </p>
+           </div>
+
+           <div className="relative z-10 mt-12 animate-float">
+             <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 shadow-xl">
+                <div className="flex -space-x-3">
+                  {[4, 5, 6].map(i => (
+                    <Image key={i} src={`https://i.pravatar.cc/100?img=${i + 20}`} width={36} height={36} className="w-9 h-9 rounded-full border-2 border-rose-400 object-cover" alt={`user-${i}`} unoptimized/>
+                  ))}
+                  <div className="w-9 h-9 rounded-full border-2 border-rose-400 bg-white/20 flex items-center justify-center text-[11px] font-bold">+2k</div>
                 </div>
-
-                <div>
-                  <div className="text-[60px] leading-[0.92] font-extrabold tracking-tight drop-shadow-sm">
-                    Hype
-                  </div>
-                </div>
-              </div>
-
-              <p className="max-w-[34rem] text-[23px] leading-tight text-white/92">
-                Kết nối và chia sẻ theo sở thích. Nhắn tin, gọi điện và truyền tải nội dung yêu thích.
-              </p>
-            </div>
-          </div>
-
-          {/* Right auth card */}
-          <div className="flex items-center justify-center px-4 py-12 md:px-8 md:py-16">
-            <div className="w-full max-w-2xl">
-              <div className="bg-white rounded-2xl shadow-md ring-1 ring-slate-100 p-8 md:p-12 min-h-[480px] md:h-[560px] text-base">
-                <div className="h-full flex flex-col justify-center">
-                  {step === "enter-contact" && (
-                    <RegisterContactForm
-                      contact={contact}
-                      setContact={setContact}
-                      loading={loading}
-                      sendOtp={sendOtp}
-                    />
-                  )}
-
-                  {step === "verify" && (
-                    <RegisterVerifyForm
-                      otp={otp}
-                      otpRefs={otpRefs}
-                      changeOtp={changeOtp}
-                      handleOtpKey={handleOtpKey}
-                      contact={contact}
-                      loading={loading}
-                      confirmOtp={confirmOtp}
-                      setStep={setStep}
-                      sendOtp={sendOtp}
-                    />
-                  )}
-
-                  {step === "profile" && (
-                    <RegisterProfileForm
-                      fullName={fullName}
-                      setFullName={setFullName}
-                      username={username}
-                      setUsername={setUsername}
-                      password={password}
-                      setPassword={setPassword}
-                      confirmPassword={confirmPassword}
-                      setConfirmPassword={setConfirmPassword}
-                      loading={loading}
-                      submitProfile={submitProfile}
-                    />
-                  )}
-
-                  {step === "done" && (
-                    <div className="text-center py-6">
-                      <p className="font-semibold text-emerald-700">Đăng ký thành công</p>
-                      <p className="mt-2 text-sm text-slate-600">Bạn có thể đăng nhập ngay bây giờ.</p>
-                      <Link href="/login" className="mt-4 inline-block rounded-xl bg-rose-500 px-6 py-3 text-white">
-                        Đăng nhập
-                      </Link>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            </div>
-          </div>
-
+                <div className="text-sm font-semibold ml-2">Thành viên mới tuần này</div>
+             </div>
+           </div>
         </div>
+
+        {/* Right Side: Forms */}
+        <div className="flex-1 flex items-center justify-center p-8 md:p-12 lg:p-16">
+          <div className="w-full max-w-md">
+            <div className="animate-fade-in-up" style={{animationDuration: '0.4s'}}>
+              
+              <div className="mb-4 min-h-8">
+                {error && (
+                  <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 border border-rose-100 break-words">
+                    {error}
+                  </p>
+                )}
+              </div>
+
+              {step === "enter-contact" && (
+                <RegisterContactForm contact={contact} setContact={setContact} loading={loading} sendOtp={sendOtp} />
+              )}
+
+              {step === "verify" && (
+                <RegisterVerifyForm
+                  otp={otp} otpRefs={otpRefs} changeOtp={changeOtp} handleOtpKey={handleOtpKey}
+                  contact={contact} loading={loading} confirmOtp={confirmOtp} sendOtp={sendOtp}
+                  setStep={(s) => {
+                    if (s === "enter-contact") { setStep("enter-contact"); return; }
+                    if (s === "verify") { setStep("verify"); return; }
+                    setStep("profile");
+                  }}
+                />
+              )}
+
+              {step === "profile" && (
+                <RegisterProfileForm
+                  fullName={fullName} setFullName={setFullName}
+                  phone={phone} setPhone={setPhone}
+                  password={password} setPassword={setPassword}
+                  confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
+                  loading={loading} submitProfile={submitProfile}
+                />
+              )}
+
+            </div>
+          </div>
+        </div>
+
       </div>
     </main>
   );

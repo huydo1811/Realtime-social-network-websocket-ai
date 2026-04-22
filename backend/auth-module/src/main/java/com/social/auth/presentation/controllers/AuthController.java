@@ -2,19 +2,24 @@ package com.social.auth.presentation.controllers;
 
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.social.auth.application.usecases.AuthenticateUseCase;
+import com.social.auth.application.usecases.CheckAdminUseCase;
 import com.social.auth.application.usecases.LogoutUseCase;
 import com.social.auth.application.usecases.RefreshTokenUseCase;
 import com.social.auth.application.usecases.RegisterUseCase;
 import com.social.auth.application.usecases.RequestOtpUseCase;
+import com.social.auth.application.usecases.ResetPasswordByOtpUseCase;
 import com.social.auth.application.usecases.VerifyOtpUseCase;
 import com.social.auth.presentation.dto.AuthResponseDto;
 import com.social.auth.presentation.dto.ChangePasswordDto;
@@ -23,10 +28,12 @@ import com.social.auth.presentation.dto.ProfileDto;
 import com.social.auth.presentation.dto.RefreshRequestDto;
 import com.social.auth.presentation.dto.RegisterDto;
 import com.social.auth.presentation.dto.RequestOtpDto;
+import com.social.auth.presentation.dto.ResetPasswordByOtpDto;
 import com.social.auth.presentation.dto.VerifyOtpDto;
 import com.social.auth.presentation.mapper.AuthMapper;
 import com.social.user.application.usecases.ChangePasswordUseCase;
 import com.social.user.domain.entities.User;
+import com.social.user.domain.repositories.UserRepository;
 
 import jakarta.validation.Valid;
 
@@ -41,7 +48,11 @@ public class AuthController {
     private final ChangePasswordUseCase changePasswordUseCase;
     private final RequestOtpUseCase requestOtpUseCase;
     private final VerifyOtpUseCase verifyOtpUseCase;
-    
+    private final ResetPasswordByOtpUseCase resetPasswordByOtpUseCase;
+    private final CheckAdminUseCase checkAdminUseCase;
+    @Autowired
+    private UserRepository userRepository;
+
     public AuthController(RegisterUseCase registerUseCase,
                           AuthenticateUseCase authenticateUseCase,
                           RefreshTokenUseCase refreshTokenUseCase,
@@ -49,7 +60,9 @@ public class AuthController {
                           AuthMapper authMapper,
                           ChangePasswordUseCase changePasswordUseCase,
                           RequestOtpUseCase requestOtpUseCase,
-                          VerifyOtpUseCase verifyOtpUseCase) {
+                          VerifyOtpUseCase verifyOtpUseCase,
+                          ResetPasswordByOtpUseCase resetPasswordByOtpUseCase,
+                          CheckAdminUseCase checkAdminUseCase) {
         this.registerUseCase = registerUseCase;
         this.authenticateUseCase = authenticateUseCase;
         this.refreshTokenUseCase = refreshTokenUseCase;
@@ -58,6 +71,8 @@ public class AuthController {
         this.changePasswordUseCase = changePasswordUseCase;
         this.requestOtpUseCase = requestOtpUseCase;
         this.verifyOtpUseCase = verifyOtpUseCase;
+        this.resetPasswordByOtpUseCase = resetPasswordByOtpUseCase;
+        this.checkAdminUseCase = checkAdminUseCase;
     }
 
     @PostMapping("/register")
@@ -129,6 +144,8 @@ public class AuthController {
         try {
             requestOtpUseCase.execute(dto.getContact(), dto.getContactType(), dto.getPurpose());
             return ResponseEntity.ok(Map.of("status", "OTP_SENT"));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         } catch (Exception ex) {
             return ResponseEntity.status(500).body(Map.of("error", "UNABLE_TO_SEND"));
         }
@@ -147,5 +164,22 @@ public class AuthController {
         } catch (Exception ex) {
             return ResponseEntity.status(400).body(Map.of("error", "INVALID_OR_EXPIRED"));
         }
+    }
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordByOtpDto dto) {
+    try {
+        resetPasswordByOtpUseCase.execute(dto);
+        return ResponseEntity.ok(Map.of("status", "PASSWORD_RESET_SUCCESS"));
+    } catch (RuntimeException ex) {
+        return ResponseEntity.badRequest().body(ex.getMessage());
+    } catch (Exception ex) {
+        return ResponseEntity.status(500).body("Đã xảy ra lỗi hệ thống");
+    }
+    }
+
+    @GetMapping("/check-admin")
+    public ResponseEntity<?> checkAdminRole(@RequestParam String email) {
+        boolean isAdmin = checkAdminUseCase.execute(email);
+        return ResponseEntity.ok(isAdmin);
     }
 }

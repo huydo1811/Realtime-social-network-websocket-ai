@@ -90,11 +90,11 @@ export default function ProfileHero({
           <span><b className="text-slate-900">{postCount}</b> bài viết</span>
 
           <button onClick={onOpenFollowers} className="text-left hover:text-rose-600 cursor-pointer">
-            <b className="text-slate-900 cursor-pointer">{stats.followers}</b> followers
+            <b className="text-slate-900 cursor-pointer">{stats.followers}</b> Người theo dõi
           </button>
 
           <button onClick={onOpenFollowing} className="text-left hover:text-rose-600 cursor-pointer">
-            <b className="text-slate-900 cursor-pointer">{stats.following}</b> following
+            <b className="text-slate-900 cursor-pointer">{stats.following}</b> Đang theo dõi
           </button>
 
         </div>

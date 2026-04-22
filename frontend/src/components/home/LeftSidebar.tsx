@@ -49,7 +49,8 @@ export default function LeftSidebar() {
 
   const isActive = (p: string) => {
     if (p === "/") return pathname === "/";
-    return pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p);
+    if (p === "/profile") return pathname === "/profile"; 
+    return pathname === p || pathname.startsWith(p + "/"); 
   };
 
   return (
@@ -82,6 +83,13 @@ export default function LeftSidebar() {
         <Link href="/profile" className={`${base} ${isActive("/profile") ? active : inactive}`}>
           <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
           Hồ sơ
+        </Link>
+
+        <Link href="/discover" className={`${base} ${isActive("/discover") ? active : inactive}`}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          Khám phá
         </Link>
       </nav>
 

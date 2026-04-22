@@ -10,4 +10,5 @@ import com.social.user.domain.entities.User;
 public interface JpaUserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
     Optional<User> findByEmail(String email);
     Optional<User> findByPhone(String phone);
+    Optional<User> findByUsername(String username);
 }

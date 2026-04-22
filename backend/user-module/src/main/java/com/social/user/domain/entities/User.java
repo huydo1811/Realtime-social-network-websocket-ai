@@ -106,7 +106,6 @@ public class User {
 
     public void setEmail(String email) {
         this.email = email;
-        this.username = email;
     }
 
     public void setPhone(String phone) {
@@ -149,5 +148,8 @@ public class User {
         this.updatedAt = updatedAt;
     }
 
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
 }

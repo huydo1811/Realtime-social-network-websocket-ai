@@ -1,14 +1,16 @@
 package com.social.user.infrastructure.repositories;
 
-import com.social.user.domain.entities.User;
-import com.social.user.domain.repositories.UserRepository;
-import org.springframework.stereotype.Repository;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import java.util.Optional;
-import java.util.List;
+import org.springframework.stereotype.Repository;
+
+import com.social.user.domain.entities.User;
+import com.social.user.domain.repositories.UserRepository;
 
 @Repository
 public class UserRepositoryImpl implements UserRepository {
@@ -51,5 +53,10 @@ public class UserRepositoryImpl implements UserRepository {
         if (fullName != null && !fullName.isBlank()) spec = spec.and(UserSpecifications.hasFullNameLike(fullName));
         if (isActive != null) spec = spec.and(UserSpecifications.hasIsActive(isActive));
         return jpaRepo.findAll(spec, pageable);
+    }
+
+    @Override
+    public Optional<User> findByUsername(String username) {
+        return jpaRepo.findByUsername(username);
     }
 }

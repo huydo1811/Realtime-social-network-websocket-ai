@@ -52,7 +52,12 @@ public class UpdateUserUseCase {
         if (dto.getBio() != null) user.setBio(dto.getBio());
         if (dto.getAvatarUrl() != null) user.setAvatarUrl(dto.getAvatarUrl());
         if (dto.getCoverUrl() != null) user.setCoverUrl(dto.getCoverUrl());
-
+        if (dto.getUsername() != null && !dto.getUsername().isBlank() && !dto.getUsername().equals(user.getUsername())) {
+        userRepository.findByUsername(dto.getUsername()).ifPresent(u -> {
+        if (!u.getId().equals(id)) throw new RuntimeException("Username đã tồn tại");
+        });
+        user.setUsername(dto.getUsername());
+        }
         return user;
     }
 

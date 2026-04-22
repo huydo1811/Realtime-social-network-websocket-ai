@@ -13,6 +13,7 @@ public interface UserRepository {
     Optional<User> findByEmail(String email);
     Optional<User> findByPhone(String phone);
     Optional<User> findById(Long id);
+    Optional<User> findByUsername(String username);
     List<User> findAll();
     void deleteById(Long id);
     Page<User> search(String email, String fullName, Boolean isActive, Pageable pageable);

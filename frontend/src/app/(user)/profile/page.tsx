@@ -1,30 +1,71 @@
 "use client";
 
-import ProfileInfoCard from "../../../components/user/profile/ProfileInfoCard";
-
-const mockProfile = {
-  fullName: "Do Quang Huy",
-  username: "quanghuy",
-  email: "huy@example.com",
-  phone: "0901234567",
-  bio: "Xây dựng trải nghiệm mạng xã hội realtime, nơi mọi tương tác đều nhanh và sống động. Mình thích sản phẩm gọn, đẹp và có chiều sâu cộng đồng.",
-  avatarUrl: "/hype.png",
-  coverUrl: "",
-  role: "USER",
-  active: true,
-  createdAt: "2026-03-01",
-  updatedAt: "2026-04-13",
-  location: "Ho Chi Minh City",
-  website: "https://hype.vn/@quanghuy",
-  stats: { posts: 124, followers: 3890, following: 412 },
-};
+import ProfileInfoCard from "@/components/user/profile/ProfileInfoCard";
+import UserLayout from "@/components/layout/UserLayout";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
+import { getMyProfile } from "@/lib/api/authApi";
+import { ProfileInfo } from "@/components/user/profile/types";
 
 export default function ProfilePage() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<ProfileInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProfile() {
+      const tokens = getAuthTokens();
+      if (!tokens?.accessToken) {
+        router.replace("/login");
+        if (mounted) setLoading(false);
+        return;
+      }
+
+      try {
+        const data = await getMyProfile(tokens.accessToken);
+        if (!mounted) return;
+        setProfile(data as ProfileInfo);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err || "");
+        if (msg.includes("401") || msg.includes("403") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("forbidden")) {
+          clearAuthTokens();
+          router.replace("/login");
+          return;
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    void loadProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  if (loading) {
+    return (
+      <UserLayout>
+        <div className="flex h-64 items-center justify-center">Đang tải hồ sơ...</div>
+      </UserLayout>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <UserLayout>
+        <div className="flex h-64 items-center justify-center">Không thể lấy thông tin người dùng.</div>
+      </UserLayout>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800">
-      <div className="mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-6">
-        <ProfileInfoCard profile={mockProfile} />
-      </div>
-    </main>
+    <UserLayout>
+      <ProfileInfoCard profile={profile} />
+    </UserLayout>
   );
 }

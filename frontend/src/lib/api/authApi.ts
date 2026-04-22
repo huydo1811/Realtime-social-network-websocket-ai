@@ -1,3 +1,5 @@
+import { getAuthTokens, saveAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
+
 export type OtpPurpose = "REGISTER" | "LOGIN" | "RESET_PASSWORD";
 export type ContactType = "EMAIL" | "PHONE";
 
@@ -15,6 +17,54 @@ type VerifyOtpResponse = {
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
+async function requestWithAuthRetry(
+  path: string,
+  method: "GET" | "PUT" | "POST",
+  accessToken: string,
+  body?: unknown
+): Promise<Response> {
+  const doFetch = (token: string) =>
+    fetch(API_BASE + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  let res = await doFetch(accessToken);
+
+  if (res.status === 401 || res.status === 403) {
+    const tokens = getAuthTokens();
+    if (!tokens?.refreshToken) {
+      clearAuthTokens();
+      return res;
+    }
+
+    try {
+      const refreshed = await refreshToken(tokens.refreshToken);
+      saveAuthTokens(refreshed);
+      res = await doFetch(refreshed.accessToken);
+    } catch {
+      clearAuthTokens();
+    }
+  }
+
+  return res;
+}
+
+async function extractError(res: Response, fallback: string): Promise<Error> {
+  let text = "";
+  try {
+    text = await res.text();
+  } catch {
+    text = "";
+  }
+  const message = text || fallback;
+  return new Error("HTTP_" + res.status + ": " + message);
+}
 
 async function postJson<T>(
   path: string,
@@ -63,21 +113,10 @@ async function postJson<T>(
 }
 
 async function getJson<T>(path: string, accessToken: string): Promise<T> {
-  const res = await fetch(API_BASE + path, {
-    method: "GET",
-    headers: {
-      Authorization: "Bearer " + accessToken,
-    },
-  });
+  const res = await requestWithAuthRetry(path, "GET", accessToken);
 
   if (!res.ok) {
-    let msg = "Request failed";
-    try {
-      msg = (await res.text()) || msg;
-    } catch {
-      msg = "Request failed";
-    }
-    throw new Error(msg);
+    throw await extractError(res, "Request failed");
   }
 
   return (await res.json()) as T;
@@ -98,7 +137,6 @@ function mapServerError(raw: ApiErrorPayload | string | undefined): string {
       : raw.error || raw.message || raw.status || "";
 
   const normalized = String(code).toUpperCase();
-
 
   if (normalized.includes("EMAIL_ALREADY_EXISTS")) return "Email này đã được đăng ký. Vui lòng đăng nhập.";
   if (normalized.includes("EMAIL_NOT_FOUND")) return "Email chưa được đăng ký. Vui lòng kiểm tra lại.";
@@ -189,8 +227,39 @@ export async function getMyProfile(accessToken: string) {
 }
 
 export async function checkIsAdmin(email: string): Promise<boolean> {
-  // Đổi API_URL thành API_BASE
   const res = await fetch(`${API_BASE}/auth/check-admin?email=${encodeURIComponent(email)}`);
   if (!res.ok) return false;
-  return res.json(); 
+  return (await res.json()) as boolean;
+}
+
+export async function updateMyProfile(accessToken: string, payload: {
+  username?: string;
+  email?: string;
+  fullName?: string;
+  phone?: string;
+  bio?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+}) {
+  const res = await requestWithAuthRetry("/users/me", "PUT", accessToken, payload);
+
+  if (!res.ok) {
+    throw await extractError(res, "Không thể cập nhật hồ sơ");
+  }
+
+  return res.json();
+}
+
+export async function changePassword(accessToken: string, payload: {
+  currentPassword?: string;
+  newPassword?: string;
+  otpSessionToken?: string;
+}) {
+  const res = await requestWithAuthRetry("/auth/change-password", "POST", accessToken, payload);
+
+  if (!res.ok) {
+    throw await extractError(res, "Không thể đổi mật khẩu");
+  }
+
+  return true;
 }

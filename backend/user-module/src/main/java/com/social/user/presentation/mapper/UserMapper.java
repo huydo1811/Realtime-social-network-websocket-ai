@@ -14,6 +14,7 @@ public class UserMapper {
         d.setEmail(u.getEmail());
         d.setPhone(u.getPhone());
         d.setFullName(u.getFullName());
+        d.setUsername(u.getUsername());
         d.setBio(u.getBio());
         d.setAvatarUrl(u.getAvatarUrl());
         d.setCoverUrl(u.getCoverUrl());

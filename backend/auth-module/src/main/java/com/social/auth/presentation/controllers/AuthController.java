@@ -21,6 +21,7 @@ import com.social.auth.application.usecases.RegisterUseCase;
 import com.social.auth.application.usecases.RequestOtpUseCase;
 import com.social.auth.application.usecases.ResetPasswordByOtpUseCase;
 import com.social.auth.application.usecases.VerifyOtpUseCase;
+import com.social.auth.infrastructure.service.OtpService;
 import com.social.auth.presentation.dto.AuthResponseDto;
 import com.social.auth.presentation.dto.ChangePasswordDto;
 import com.social.auth.presentation.dto.LoginDto;
@@ -50,6 +51,8 @@ public class AuthController {
     private final VerifyOtpUseCase verifyOtpUseCase;
     private final ResetPasswordByOtpUseCase resetPasswordByOtpUseCase;
     private final CheckAdminUseCase checkAdminUseCase;
+    private final OtpService otpService;
+
     @Autowired
     private UserRepository userRepository;
 
@@ -62,7 +65,8 @@ public class AuthController {
                           RequestOtpUseCase requestOtpUseCase,
                           VerifyOtpUseCase verifyOtpUseCase,
                           ResetPasswordByOtpUseCase resetPasswordByOtpUseCase,
-                          CheckAdminUseCase checkAdminUseCase) {
+                          CheckAdminUseCase checkAdminUseCase,
+                          OtpService otpService) {
         this.registerUseCase = registerUseCase;
         this.authenticateUseCase = authenticateUseCase;
         this.refreshTokenUseCase = refreshTokenUseCase;
@@ -73,6 +77,7 @@ public class AuthController {
         this.verifyOtpUseCase = verifyOtpUseCase;
         this.resetPasswordByOtpUseCase = resetPasswordByOtpUseCase;
         this.checkAdminUseCase = checkAdminUseCase;
+        this.otpService = otpService;
     }
 
     @PostMapping("/register")
@@ -111,7 +116,6 @@ public class AuthController {
             return ResponseEntity.status(500).body("Đã xảy ra lỗi hệ thống");
         }
     }
-    
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequestDto dto) {
@@ -126,8 +130,20 @@ public class AuthController {
             if (auth == null || auth.getPrincipal() == null) {
                 return ResponseEntity.status(401).body("Unauthorized");
             }
+
             String principal = (String) auth.getPrincipal();
             Long userId = Long.valueOf(principal);
+
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
+
+            otpService.consumeVerifiedSession(
+                dto.getOtpSessionToken(),
+                user.getEmail(),
+                "EMAIL",
+                "RESET_PASSWORD"
+            );
+
             changePasswordUseCase.execute(userId, dto.getCurrentPassword(), dto.getNewPassword());
             return ResponseEntity.ok("Đổi mật khẩu thành công");
         } catch (IllegalArgumentException ex) {
@@ -165,16 +181,17 @@ public class AuthController {
             return ResponseEntity.status(400).body(Map.of("error", "INVALID_OR_EXPIRED"));
         }
     }
+
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordByOtpDto dto) {
-    try {
-        resetPasswordByOtpUseCase.execute(dto);
-        return ResponseEntity.ok(Map.of("status", "PASSWORD_RESET_SUCCESS"));
-    } catch (RuntimeException ex) {
-        return ResponseEntity.badRequest().body(ex.getMessage());
-    } catch (Exception ex) {
-        return ResponseEntity.status(500).body("Đã xảy ra lỗi hệ thống");
-    }
+        try {
+            resetPasswordByOtpUseCase.execute(dto);
+            return ResponseEntity.ok(Map.of("status", "PASSWORD_RESET_SUCCESS"));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body("Đã xảy ra lỗi hệ thống");
+        }
     }
 
     @GetMapping("/check-admin")

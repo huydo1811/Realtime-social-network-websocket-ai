@@ -4,6 +4,8 @@ import { useState } from "react";
 import ChangePasswordForm from "./ChangePasswordForm";
 import OTPForm from "./OTPForm";
 import { ProfileInfo } from "./types";
+import { getAuthTokens } from "@/lib/api/authToken";
+import { requestOtp, verifyOtp, updateMyProfile } from "@/lib/api/authApi";
 
 type Props = {
   initialEmail?: string;
@@ -13,23 +15,16 @@ type Props = {
   onSaved?: (payload: Partial<ProfileInfo>) => void;
 };
 
+type ContactType = "email" | "phone";
+
 export default function SecuritySettings({ initialEmail, initialPhone, onClose, onOpenEdit, onSaved }: Props) {
   const [mode, setMode] = useState<"main" | "change-email" | "change-phone">("main");
-
-  // Demo helpers (simulate backend)
-  async function sendOtpDemo(contact: string) {
-    await new Promise((r) => setTimeout(r, 600));
-  }
-  async function verifyOtpDemo(code: string) {
-    await new Promise((r) => setTimeout(r, 600));
-    return true;
-  }
 
   return (
     <div>
       {mode === "main" && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Bảo mật & Tài khoản</h2>
             <div className="flex items-center gap-3">
               {onOpenEdit && (
@@ -38,7 +33,7 @@ export default function SecuritySettings({ initialEmail, initialPhone, onClose, 
                     onOpenEdit?.();
                     onClose?.();
                   }}
-                  className="cursor-pointer text-sm text-rose-600 font-medium hover:underline"
+                  className="cursor-pointer text-sm font-medium text-rose-600 hover:underline"
                 >
                   Chỉnh sửa
                 </button>
@@ -58,13 +53,13 @@ export default function SecuritySettings({ initialEmail, initialPhone, onClose, 
                 <input
                   value={initialEmail ?? ""}
                   readOnly
-                  className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50"
+                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
                 />
                 <button onClick={() => setMode("change-email")} className="cursor-pointer rounded-xl bg-rose-500 px-4 py-2 text-white">
                   Đổi
                 </button>
               </div>
-              <p className="mt-2 text-sm text-slate-500">Đổi email sẽ yêu cầu xác nhận bằng OTP gửi tới email hiện tại và email mới.</p>
+              <p className="mt-2 text-sm text-slate-500">Xác thực OTP email hiện tại và email mới trước khi đổi.</p>
             </section>
 
             <section>
@@ -73,18 +68,18 @@ export default function SecuritySettings({ initialEmail, initialPhone, onClose, 
                 <input
                   value={initialPhone ?? ""}
                   readOnly
-                  className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50"
+                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
                 />
                 <button onClick={() => setMode("change-phone")} className="cursor-pointer rounded-xl bg-rose-500 px-4 py-2 text-white">
                   Đổi
                 </button>
               </div>
-              <p className="mt-2 text-sm text-slate-500">Đổi số điện thoại sẽ yêu cầu xác nhận bằng OTP gửi tới số hiện tại và số mới.</p>
+              <p className="mt-2 text-sm text-slate-500">Xác thực OTP số cũ và số mới trước khi đổi.</p>
             </section>
 
             <div>
               <h3 className="mb-2 text-sm font-semibold">Đổi mật khẩu</h3>
-              <ChangePasswordForm />
+              <ChangePasswordForm email={initialEmail} />
             </div>
           </div>
         </div>
@@ -99,8 +94,6 @@ export default function SecuritySettings({ initialEmail, initialPhone, onClose, 
             onSaved?.({ email: newEmail });
             setMode("main");
           }}
-          sendOtp={sendOtpDemo}
-          verifyOtp={verifyOtpDemo}
         />
       )}
 
@@ -113,92 +106,114 @@ export default function SecuritySettings({ initialEmail, initialPhone, onClose, 
             onSaved?.({ phone: newPhone });
             setMode("main");
           }}
-          sendOtp={sendOtpDemo}
-          verifyOtp={verifyOtpDemo}
         />
       )}
     </div>
   );
 }
 
-/* ----- Internal component: change flow (old-contact verify -> new contact -> verify new) ----- */
-
 function ChangeContactFlow({
   type,
   currentContact,
   onCancel,
   onComplete,
-  sendOtp,
-  verifyOtp,
 }: {
-  type: "email" | "phone";
+  type: ContactType;
   currentContact: string;
   onCancel: () => void;
   onComplete: (newContact: string) => void;
-  sendOtp: (contact: string) => Promise<void>;
-  verifyOtp: (code: string) => Promise<boolean>;
 }) {
   const [step, setStep] = useState<"enter-new" | "verify-old" | "verify-new">("enter-new");
   const [newContact, setNewContact] = useState("");
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const contactTypeApi = type === "email" ? "EMAIL" : "PHONE";
+  const oldPurpose = "LOGIN";
+  const newPurpose = type === "email" ? "REGISTER" : "LOGIN";
 
   function validateNew(v: string) {
-    if (type === "email") {
-      return /\S+@\S+\.\S+/.test(v);
-    } else {
-      return /^\+?\d{7,15}$/.test(v) || /^\d{7,15}$/.test(v);
+    if (type === "email") return /\S+@\S+\.\S+/.test(v);
+    return /^\+?\d{7,15}$/.test(v) || /^\d{7,15}$/.test(v);
+  }
+
+  async function sendOldOtp(contact: string) {
+    await requestOtp(contact, contactTypeApi, oldPurpose);
+  }
+
+  async function verifyOldOtp(code: string) {
+    try {
+      await verifyOtp(currentContact, contactTypeApi, code, oldPurpose);
+      await requestOtp(newContact, contactTypeApi, newPurpose);
+      setStep("verify-new");
+      setMessage("");
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err || "");
+      setMessage(msg || "Xác thực OTP contact hiện tại thất bại.");
+      return false;
+    }
+  }
+
+  async function sendNewOtp(contact: string) {
+    await requestOtp(contact, contactTypeApi, newPurpose);
+  }
+
+  async function verifyNewOtpAndSave(code: string) {
+    setSaving(true);
+    try {
+      await verifyOtp(newContact, contactTypeApi, code, newPurpose);
+
+      const tokens = getAuthTokens();
+      if (!tokens?.accessToken) throw new Error("Chưa đăng nhập");
+
+      if (type === "email") {
+        await updateMyProfile(tokens.accessToken, { email: newContact.trim() });
+        onComplete(newContact.trim());
+      } else {
+        await updateMyProfile(tokens.accessToken, { phone: newContact.trim() });
+        onComplete(newContact.trim());
+      }
+
+      setMessage("Cập nhật thành công.");
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err || "");
+      setMessage(msg || "Không thể cập nhật liên hệ.");
+      return false;
+    } finally {
+      setSaving(false);
     }
   }
 
   async function startOldVerification() {
     setMessage("");
     if (!validateNew(newContact)) {
-      setMessage(type === "email" ? "Email không hợp lệ." : "Số điện thoại không hợp lệ (chỉ chữ số, 7-15 ký tự).");
+      setMessage(type === "email" ? "Email mới không hợp lệ." : "Số điện thoại mới không hợp lệ.");
       return;
     }
     try {
-      await sendOtp(currentContact);
+      await sendOldOtp(currentContact);
       setStep("verify-old");
-    } catch {
-      setMessage("Không thể gửi OTP tới contact hiện tại (demo).");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err || "");
+      setMessage(msg || "Không gửi được OTP contact hiện tại.");
     }
-  }
-
-  async function handleOldVerified(code: string) {
-    const ok = await verifyOtp(code);
-    if (ok) {
-      // send OTP to new contact then go to verify-new
-      await sendOtp(newContact);
-      setStep("verify-new");
-    } else {
-      setMessage("OTP xác thực contact hiện tại không đúng.");
-    }
-    return ok;
-  }
-
-  async function handleNewVerified(code: string) {
-    const ok = await verifyOtp(code);
-    if (ok) {
-      onComplete(newContact);
-    } else {
-      setMessage("OTP xác thực contact mới không đúng.");
-    }
-    return ok;
   }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">{type === "email" ? "Đổi email" : "Đổi số điện thoại"}</h2>
-        <div className="flex items-center gap-3">
-          <button onClick={onCancel} className="cursor-pointer text-sm text-slate-500 hover:underline">Hủy</button>
-        </div>
+        <button onClick={onCancel} className="cursor-pointer text-sm text-slate-500 hover:underline">
+          Hủy
+        </button>
       </div>
 
       {step === "enter-new" && (
         <div className="grid gap-3">
           <label className="text-sm text-slate-600">Liên hệ hiện tại</label>
-          <input value={currentContact} readOnly className="rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50" />
+          <input value={currentContact} readOnly className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5" />
 
           <label className="text-sm text-slate-600">Liên hệ mới</label>
           <input
@@ -209,28 +224,26 @@ function ChangeContactFlow({
           />
 
           <div className="flex gap-3">
-            <button onClick={startOldVerification} className="cursor-pointer rounded-xl bg-rose-500 px-4 py-2 text-white hover:bg-rose-600">Tiếp tục</button>
-            <button onClick={onCancel} className="cursor-pointer rounded-xl border px-4 py-2 hover:bg-slate-100">Hủy</button>
+            <button onClick={startOldVerification} className="cursor-pointer rounded-xl bg-rose-500 px-4 py-2 text-white hover:bg-rose-600">
+              Tiếp tục
+            </button>
+            <button onClick={onCancel} className="cursor-pointer rounded-xl border px-4 py-2 hover:bg-slate-100">
+              Hủy
+            </button>
           </div>
-
           {message && <p className="text-sm text-slate-600">{message}</p>}
         </div>
       )}
 
       {step === "verify-old" && (
         <div>
-          <p className="mb-3 text-sm text-slate-600">Một mã (OTP) đã được gửi tới contact hiện tại <b>{currentContact}</b>. Nhập mã để xác nhận trước khi gửi tới contact mới.</p>
+          <p className="mb-3 text-sm text-slate-600">Nhập OTP gửi tới contact hiện tại: <b>{currentContact}</b></p>
           <OTPForm
-            contactLabel={type === "email" ? "Email (hiện tại)" : "Số điện thoại (hiện tại)"}
+            contactLabel={type === "email" ? "Email hiện tại" : "SĐT hiện tại"}
             contactValue={currentContact}
-            onSendOtp={sendOtp}
-            onVerify={async (code) => {
-              const ok = await handleOldVerified(code);
-              return ok;
-            }}
-            onCancel={() => {
-              setStep("enter-new");
-            }}
+            onSendOtp={sendOldOtp}
+            onVerify={verifyOldOtp}
+            onCancel={() => setStep("enter-new")}
           />
           {message && <p className="mt-2 text-sm text-slate-600">{message}</p>}
         </div>
@@ -238,19 +251,15 @@ function ChangeContactFlow({
 
       {step === "verify-new" && (
         <div>
-          <p className="mb-3 text-sm text-slate-600">Đã gửi mã tới contact mới <b>{newContact}</b>. Nhập mã để hoàn tất thay đổi.</p>
+          <p className="mb-3 text-sm text-slate-600">Nhập OTP gửi tới contact mới: <b>{newContact}</b></p>
           <OTPForm
-            contactLabel={type === "email" ? "Email (mới)" : "Số điện thoại (mới)"}
+            contactLabel={type === "email" ? "Email mới" : "SĐT mới"}
             contactValue={newContact}
-            onSendOtp={sendOtp}
-            onVerify={async (code) => {
-              const ok = await handleNewVerified(code);
-              return ok;
-            }}
-            onCancel={() => {
-              setStep("enter-new");
-            }}
+            onSendOtp={sendNewOtp}
+            onVerify={verifyNewOtpAndSave}
+            onCancel={() => setStep("enter-new")}
           />
+          {saving && <p className="mt-2 text-sm text-slate-600">Đang cập nhật...</p>}
           {message && <p className="mt-2 text-sm text-slate-600">{message}</p>}
         </div>
       )}

@@ -97,8 +97,6 @@ export default function ProfileHero({
             <b className="text-slate-900 cursor-pointer">{stats.following}</b> following
           </button>
 
-          <span className="text-slate-500">{profile.location || "Ho Chi Minh City"}</span>
-          <span className="text-rose-600">{profile.website || "https://hype.vn/@user"}</span>
         </div>
       </div>
     </section>

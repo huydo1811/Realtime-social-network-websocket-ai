@@ -11,6 +11,8 @@ public class UpdateUserDto {
     private String phone;
 
     private String fullName;
+    @Size(min = 3, max = 50)
+    private String username;
     private String bio;
     private String avatarUrl;
     private String coverUrl;
@@ -40,4 +42,7 @@ public class UpdateUserDto {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 }

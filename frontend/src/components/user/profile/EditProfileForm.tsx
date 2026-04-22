@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { getAuthTokens } from "@/lib/api/authToken";
+import { updateMyProfile } from "@/lib/api/authApi";
 
-type EditProfileFormValue = {
+export type EditProfileFormValue = {
   email: string;
   phone: string;
   username?: string;
@@ -26,24 +28,62 @@ export default function EditProfileForm({ initialValue, onClose, onSaved, onOpen
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMessage("");
-    setSaving(true);
-    await new Promise((r) => setTimeout(r, 650));
+async function onSubmit(e: React.FormEvent) {
+  e.preventDefault();
+  setMessage("");
+  setSaving(true);
+
+  try {
+    const tokens = getAuthTokens();
+    if (!tokens?.accessToken) throw new Error("Chưa đăng nhập");
+
+    const username = (form.username || "").trim();
+    const updated = (await updateMyProfile(tokens.accessToken, {
+      username: username || undefined,
+      fullName: form.fullName.trim() || undefined,
+      phone: form.phone.trim() || undefined,
+      bio: form.bio.trim() || undefined,
+      avatarUrl: (form.avatarUrl || "").trim() || undefined,
+      coverUrl: (form.coverUrl || "").trim() || undefined,
+    })) as {
+      username?: string;
+      email?: string;
+      phone?: string;
+      fullName?: string;
+      bio?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+    };
+
+    const merged: EditProfileFormValue = {
+      ...form,
+      username: updated.username ?? form.username,
+      email: updated.email ?? form.email,
+      phone: updated.phone ?? form.phone,
+      fullName: updated.fullName ?? form.fullName,
+      bio: updated.bio ?? form.bio,
+      avatarUrl: updated.avatarUrl ?? form.avatarUrl,
+      coverUrl: updated.coverUrl ?? form.coverUrl,
+    };
+
+    setForm(merged);
+    setMessage("Cập nhật hồ sơ thành công!");
+    onSaved?.(merged);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err || "");
+    setMessage(msg || "Cập nhật thất bại.");
+  } finally {
     setSaving(false);
-    setMessage("Lưu thay đổi thành công (UI demo).");
-    onSaved?.(form);
   }
+}
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+    <div className="">
       <form onSubmit={onSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Chỉnh sửa hồ sơ</h2>
           <div className="flex items-center gap-3">
-            
-            <button type="button" onClick={() => onOpenSecurity?.()} className="cursor-pointer text-sm text-rose-600 font-medium hover:underline">
+            <button type="button" onClick={() => onOpenSecurity?.()} className="cursor-pointer text-sm font-medium text-rose-600 hover:underline">
               Bảo mật
             </button>
             {onClose && (
@@ -57,17 +97,17 @@ export default function EditProfileForm({ initialValue, onClose, onSaved, onOpen
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm text-slate-600">Email</label>
-            <div className="w-full rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 text-sm text-slate-700 flex items-center justify-between">
+            <div className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
               <span>{form.email}</span>
-              <button type="button" onClick={() => onOpenSecurity?.()} className="cursor-pointer text-primary font-medium hover:underline">Đổi</button>
+              <button type="button" onClick={() => onOpenSecurity?.()} className="cursor-pointer font-medium text-primary hover:underline">Đổi</button>
             </div>
           </div>
 
           <div>
             <label className="mb-1 block text-sm text-slate-600">Số điện thoại</label>
-            <div className="w-full rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 text-sm text-slate-700 flex items-center justify-between">
+            <div className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
               <span>{form.phone}</span>
-              <button type="button" onClick={() => onOpenSecurity?.()} className="cursor-pointer text-primary font-medium hover:underline">Đổi</button>
+              <button type="button" onClick={() => onOpenSecurity?.()} className="cursor-pointer font-medium text-primary hover:underline">Đổi</button>
             </div>
           </div>
         </div>
@@ -102,27 +142,6 @@ export default function EditProfileForm({ initialValue, onClose, onSaved, onOpen
           />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm text-slate-600">Vị trí</label>
-            <input
-              value={form.location || ""}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              placeholder="Ho Chi Minh City"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-rose-100"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-slate-600">Website</label>
-            <input
-              value={form.website || ""}
-              onChange={(e) => setForm({ ...form, website: e.target.value })}
-              placeholder="https://..."
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-rose-100"
-            />
-          </div>
-        </div>
-
         <div className="mt-5 flex items-center gap-3">
           <button
             type="submit"
@@ -134,21 +153,6 @@ export default function EditProfileForm({ initialValue, onClose, onSaved, onOpen
           {message && <p className="text-sm text-emerald-600">{message}</p>}
         </div>
       </form>
-
-      <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-        <p className="text-sm font-medium text-slate-700">Preview</p>
-        <div className="mt-3 rounded-xl bg-slate-50 p-3 flex items-start gap-3">
-          <img src={form.avatarUrl || "/hype.png"} alt="avatar preview" className="h-16 w-16 rounded-xl object-cover" />
-          <div>
-            <p className="font-semibold text-slate-800">{form.fullName || "Họ tên"}</p>
-            <p className="text-sm text-slate-600">@{form.username || "username"}</p>
-            <p className="text-sm text-slate-600">{form.email || "email@example.com"}</p>
-            <p className="mt-2 text-sm text-slate-600">{form.bio || "Bio..."}</p>
-            <p className="text-sm text-slate-600 mt-2">{form.location || ""}</p>
-            <a className="text-rose-600 text-sm" href={form.website || "#"}>{form.website || ""}</a>
-          </div>
-        </div>
-      </aside>
     </div>
   );
 }

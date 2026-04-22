@@ -5,11 +5,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export const searchUsers = async (query: string = '', page: number = 0, size: number = 10) => {
   const token = getAuthTokens()?.accessToken;
-  
   const res = await fetch(`${API_URL}/users?fullName=${encodeURIComponent(query)}&page=${page}&size=${size}`, {
-    headers: {
-      "Authorization": `Bearer ${token}`
-    }
+    headers: { "Authorization": `Bearer ${token}` }
   });
 
   if (!res.ok) {
@@ -17,17 +14,126 @@ export const searchUsers = async (query: string = '', page: number = 0, size: nu
     console.error(`[searchUsers] HTTP ${res.status} - ${res.statusText}`, errText);
     return { content: [] };
   }
-
   return res.json();
 };
 
 export const getUserById = async (userId: string): Promise<ProfileInfo> => {
   const token = getAuthTokens()?.accessToken;
   const res = await fetch(`${API_URL}/users/${userId}`, {
-    headers: {
-      "Authorization": `Bearer ${token}`
-    }
+    headers: { "Authorization": `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("User not found");
+  if (!res.ok) throw new Error("Không tìm thấy người dùng");
   return (await res.json()) as ProfileInfo;
+};
+
+export const getMyProfile = async (): Promise<ProfileInfo> => {
+  const token = getAuthTokens()?.accessToken;
+  const res = await fetch(`${API_URL}/users/me`, {
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Không thể lấy thông tin cá nhân");
+  return await res.json() as ProfileInfo;
+};
+
+export interface AdminUserDto {
+  email: string;
+  fullName: string;
+  phone?: string;
+  password?: string;
+  role: string;
+  isActive?: boolean;
+}
+
+export const adminGetUsers = async (page: number = 0, size: number = 10, fullName: string = "", isActive?: boolean) => {
+  const token = getAuthTokens()?.accessToken;
+  let url = `${API_URL}/users?page=${page}&size=${size}`;
+  if (fullName) url += `&fullName=${encodeURIComponent(fullName)}`;
+  if (isActive !== undefined) url += `&isActive=${isActive}`; 
+  
+  const res = await fetch(url, {
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Gặp lỗi khi lấy danh sách user");
+  return await res.json();
+};
+
+const cleanEmptyFields = (data: AdminUserDto) => {
+  const payload = { ...data };
+  if (!payload.password) delete payload.password;
+  return payload;
+};
+
+const parseApiError = async (res: Response, defaultMessage: string) => {
+  try {
+    const err = await res.json();
+    
+    if (err.errors && Array.isArray(err.errors)) {
+
+      const firstError = err.errors[0];
+      const fieldName = firstError.field === 'email' ? 'Email' :
+                        firstError.field === 'phone' ? 'Số điện thoại' :
+                        firstError.field === 'password' ? 'Mật khẩu' :
+                        firstError.field === 'fullName' ? 'Họ tên' : firstError.field;
+                        
+      return new Error(`Lỗi nhập liệu: ${fieldName} ${firstError.defaultMessage}`);
+    }
+
+    if (err.message) {
+      const msg = err.message.toLowerCase();
+      if (msg.includes("already exists") || msg.includes("duplicate")) {
+        if (msg.includes("email")) return new Error("Email này đã có người sử dụng!");
+        if (msg.includes("phone")) return new Error("Số điện thoại này đã có người sử dụng!");
+        return new Error("Dữ liệu này đã tồn tại trong hệ thống!");
+      }
+      return new Error(err.message); 
+    }
+    
+    return new Error(defaultMessage);
+  } catch (e) {
+    return new Error(defaultMessage); 
+  }
+};
+
+export const adminCreateUser = async (data: AdminUserDto) => {
+  const token = getAuthTokens()?.accessToken;
+  const res = await fetch(`${API_URL}/users`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(cleanEmptyFields(data))
+  });
+  
+  if (!res.ok) {
+    throw await parseApiError(res, "Gặp sự cố khi tạo người dùng (Kiểm tra lại Email/SĐT)");
+  }
+  return await res.json();
+};
+
+export const adminUpdateUser = async (id: number, data: AdminUserDto) => {
+  const token = getAuthTokens()?.accessToken;
+  const res = await fetch(`${API_URL}/users/${id}`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(cleanEmptyFields(data)) 
+  });
+  
+  if (!res.ok) {
+    throw await parseApiError(res, "Gặp sự cố khi cập nhật thông tin");
+  }
+  return await res.json();
+};
+
+export const adminDeleteUser = async (id: number) => {
+  const token = getAuthTokens()?.accessToken;
+  const res = await fetch(`${API_URL}/users/${id}`, {
+    method: "DELETE",
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Xoá người dùng thất bại!");
+  return true;
 };

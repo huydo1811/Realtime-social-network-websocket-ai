@@ -60,7 +60,7 @@ export default function AdminProfileCard({
                 </Link>
                 <button
                   onClick={() => setShowSecurity((s) => !s)}
-                  className="rounded-xl bg-rose-500 px-3 py-2 text-sm font-medium text-white hover:bg-rose-600"
+                  className="cursor-pointer rounded-xl bg-rose-500 px-3 py-2 text-sm font-medium text-white hover:bg-rose-600"
                 >
                   Đổi mật khẩu
                 </button>
@@ -85,7 +85,7 @@ export default function AdminProfileCard({
 
           {showSecurity && (
             <div className="mt-5">
-              <SecuritySettings />
+              <SecuritySettings email={email} />
             </div>
           )}
 

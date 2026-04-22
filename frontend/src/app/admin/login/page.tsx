@@ -1,32 +1,142 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  checkIsAdmin,
+  loginWithOtpSession,
+  requestOtp,
+  verifyOtp,
+} from "../../../lib/api/authApi";
+import { clearAuthTokens, saveAuthTokens } from "../../../lib/api/authToken";
+
+type Step = "enter-contact" | "verify";
+
+function parseJwtRole(accessToken: string): string {
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length < 2) return "";
+    const payload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
+    const json = JSON.parse(atob(payload)) as { role?: string };
+    return String(json.role ?? "").toUpperCase();
+  } catch {
+    return "";
+  }
+}
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+
+  const [step, setStep] = useState<Step>("enter-contact");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const otpCode = useMemo(() => otp.join(""), [otp]);
+
+  const [otpSessionToken, setOtpSessionToken] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+
+  function changeOtp(i: number, v: string) {
+    const d = v.replace(/\D/g, "").slice(-1);
+    const next = [...otp];
+    next[i] = d;
+    setOtp(next);
+    if (d && i < 5) otpRefs.current[i + 1]?.focus();
+  }
+
+  function handleOtpKey(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
+  }
+
+  function resetOtpSession() {
+    setOtpVerified(false);
+    setOtpSessionToken("");
+  }
+
+  async function sendOtp(e?: React.FormEvent) {
+    e?.preventDefault();
     setError(null);
 
-    if (!email || !password) {
-      setError("Vui lòng nhập email và mật khẩu");
+    if (!email) {
+      setError("Vui lòng nhập email.");
       return;
     }
 
-    // UI-only mode: fake request
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
+    try {
+      const isAdmin = await checkIsAdmin(email.trim());
+      if (!isAdmin) {
+        setError("Tài khoản này không tồn tại hoặc không có quyền Admin.");
+        setLoading(false);
+        return;
+      }
 
-    // Tạm điều hướng vào dashboard, API thật nối sau
-    router.push("/admin");
+      await requestOtp(email.trim(), "EMAIL", "LOGIN");
+      setStep("verify");
+      setOtp(["", "", "", "", "", ""]);
+      resetOtpSession();
+      setTimeout(() => otpRefs.current[0]?.focus(), 50);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không gửi được OTP.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function isOtpSessionError(message: string) {
+    const m = message.toUpperCase();
+    return m.includes("INVALID_OR_EXPIRED") || m.includes("OTP") || m.includes("EXPIRED");
+  }
+
+  async function submitLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (otpCode.length < 6 || !password) {
+      setError("Vui lòng nhập OTP và mật khẩu.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let session = otpSessionToken;
+
+      if (!otpVerified) {
+        const verify = await verifyOtp(email.trim(), "EMAIL", otpCode, "LOGIN");
+        session = verify.otpSessionToken;
+        setOtpSessionToken(session);
+        setOtpVerified(true);
+      }
+
+      const auth = await loginWithOtpSession(email.trim(), password, session);
+
+      const role = parseJwtRole(auth.accessToken);
+      if (role !== "ADMIN" && role !== "ROLE_ADMIN") {
+        clearAuthTokens();
+        setError("Tài khoản không có quyền ADMIN.");
+        return;
+      }
+
+      saveAuthTokens(auth);
+      router.replace("/admin");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Đăng nhập thất bại.";
+      if (isOtpSessionError(msg)) {
+        resetOtpSession();
+      }
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -65,43 +175,91 @@ export default function AdminLoginPage() {
             <div className="w-full max-w-2xl">
               <div className="bg-white rounded-2xl shadow-md ring-1 ring-slate-100 p-8 md:p-12 min-h-[420px] text-base">
                 <div className="h-full flex flex-col justify-center">
-                  <form onSubmit={submit} className="space-y-8 md:space-y-10">
+                  <form onSubmit={step === "enter-contact" ? sendOtp : submitLogin} className="space-y-8 md:space-y-10">
                     <h2 className="text-3xl md:text-5xl font-bold text-center text-rose-500 -mt-2">
-                      Đăng nhập
+                      Đăng nhập admin
                     </h2>
 
                     <div>
                       <label className="block text-base md:text-lg font-medium text-slate-700">Email</label>
                       <input
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          resetOtpSession();
+                        }}
                         placeholder="admin@example.com"
                         className="mt-3 h-12 md:h-14 w-full rounded-xl border border-slate-200 px-3 md:px-4 text-base md:text-lg focus:ring-4 focus:ring-slate-50 outline-none"
                         required
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-base md:text-lg font-medium text-slate-700">Mật khẩu</label>
-                      <input
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        type="password"
-                        placeholder="••••••••"
-                        className="mt-3 h-12 md:h-14 w-full rounded-xl border border-slate-200 px-3 md:px-4 text-base md:text-lg focus:ring-4 focus:ring-slate-50 outline-none"
-                        required
-                      />
-                    </div>
+                    {step === "verify" && (
+                      <>
+                        <div>
+                          <label className="block text-base md:text-lg font-medium text-slate-700">OTP</label>
+                          <div className="mt-3 flex items-center gap-2">
+                            {otp.map((v, i) => (
+                              <input
+                                key={i}
+                                ref={(el) => {
+                                  otpRefs.current[i] = el;
+                                }}
+                                value={v}
+                                onChange={(e) => changeOtp(i, e.target.value)}
+                                onKeyDown={(e) => handleOtpKey(i, e)}
+                                inputMode="numeric"
+                                className="h-12 w-12 rounded-xl border border-slate-200 text-center text-lg font-semibold outline-none focus:ring-4 focus:ring-slate-50"
+                                aria-label={`OTP ${i + 1}`}
+                              />
+                            ))}
+                          </div>
+                        </div>
 
-                    {error && <div className="text-sm text-rose-400">{error}</div>}
+                        <div>
+                          <label className="block text-base md:text-lg font-medium text-slate-700">Mật khẩu</label>
+                          <input
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            type="password"
+                            placeholder="••••••••"
+                            className="mt-3 h-12 md:h-14 w-full rounded-xl border border-slate-200 px-3 md:px-4 text-base md:text-lg focus:ring-4 focus:ring-slate-50 outline-none"
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
 
-                    <div className="flex items-center justify-between">
+                    {error ? <div className="text-sm text-rose-500">{error}</div> : null}
+
+                    <div className="flex items-center gap-3">
+                      {step === "verify" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStep("enter-contact");
+                            setPassword("");
+                            setOtp(["", "", "", "", "", ""]);
+                            resetOtpSession();
+                          }}
+                          className="cursor-pointer hover:bg-slate-200 h-12 md:h-14 rounded-xl border px-4 text-base border-slate-300 text-slate-700"
+                        >
+                          Quay lại
+                        </button>
+                      ) : null}
+
                       <button
                         type="submit"
-                        disabled={!email || !password || loading}
+                        disabled={loading || (step === "enter-contact" ? !email : otpCode.length < 6 || !password)}
                         className="w-full h-12 md:h-14 rounded-xl btn-primary text-lg bg-rose-500 text-white disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
                       >
-                        {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+                        {loading
+                          ? step === "enter-contact"
+                            ? "Đang gửi OTP..."
+                            : "Đang đăng nhập..."
+                          : step === "enter-contact"
+                            ? "Gửi OTP"
+                            : "Đăng nhập"}
                       </button>
                     </div>
 

@@ -34,3 +34,13 @@ build/
 user-module/src/main/resources/application.properties
 auth-module/src/main/resources/application.properties
 api/src/main/resources/application.properties
+BACKEND_GUIDELINES.md
+user-module/MODULE_GUIDELINES.md
+auth-module/MODULE_GUIDELINES.md
+api/MODULE_GUIDELINES.md
+call-module/MODULE_GUIDELINES.md
+chat-module/MODULE_GUIDELINES.md
+common/MODULE_GUIDELINES.md
+friendship-module/MODULE_GUIDELINES.md
+moderation-module/MODULE_GUIDELINES.md
+post-module/MODULE_GUIDELINES.md

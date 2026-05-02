@@ -28,12 +28,12 @@ public class GetConversationMessagesUseCase {
     }
 
     @Transactional(readOnly = true)
-    public Page<ChatMessage> execute(Long actorId, Long conversationId, Pageable pageable) {
+    public Page<ChatMessage> execute(Long actorId, Long conversationId, Long cursorId, Pageable pageable) {
         ChatConversation conversation = conversationRepository.findById(conversationId)
             .orElseThrow(() -> new ConversationNotFoundException(conversationId));
 
         permissionService.ensureConversationMember(conversation, actorId);
 
-        return messageRepository.findByConversationId(conversationId, pageable);
+        return messageRepository.findByConversationIdWithCursor(conversationId, cursorId, pageable);
     }
 }

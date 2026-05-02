@@ -15,4 +15,8 @@ public interface ChatMessageRepository {
     Optional<ChatMessage> findByIdempotencyKey(Long conversationId, Long senderId, String idempotencyKey);
 
     Page<ChatMessage> findByConversationId(Long conversationId, Pageable pageable);
+    
+    Page<ChatMessage> findByConversationIdWithCursor(Long conversationId, Long cursorId, Pageable pageable);
+
+    java.util.Map<Long, Integer> countUnreadMessagesByConversationIds(java.util.Collection<Long> conversationIds, Long actorId);
 }

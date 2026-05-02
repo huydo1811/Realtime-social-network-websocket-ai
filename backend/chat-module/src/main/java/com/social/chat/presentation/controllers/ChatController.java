@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.social.chat.domain.exceptions.UnauthorizedException;
 import com.social.chat.application.usecases.CreateConversationUseCase;
+import com.social.chat.application.usecases.CountUnreadMessagesUseCase;
 import com.social.chat.application.usecases.DeleteMessageUseCase;
 import com.social.chat.application.usecases.EditMessageUseCase;
 import com.social.chat.application.usecases.GetConversationDetailUseCase;
@@ -49,6 +50,7 @@ public class ChatController {
     private final EditMessageUseCase editMessageUseCase;
     private final DeleteMessageUseCase deleteMessageUseCase;
     private final AddConversationMemberUseCase addConversationMemberUseCase;
+    private final CountUnreadMessagesUseCase countUnreadMessagesUseCase;
     private final ChatPresentationMapper mapper;
 
     public ChatController(CreateConversationUseCase createConversationUseCase,
@@ -59,6 +61,7 @@ public class ChatController {
             EditMessageUseCase editMessageUseCase,
             DeleteMessageUseCase deleteMessageUseCase,
             AddConversationMemberUseCase addConversationMemberUseCase,
+            CountUnreadMessagesUseCase countUnreadMessagesUseCase,
             ChatPresentationMapper mapper) {
         this.createConversationUseCase = createConversationUseCase;
         this.listMyConversationsUseCase = listMyConversationsUseCase;
@@ -68,6 +71,7 @@ public class ChatController {
         this.editMessageUseCase = editMessageUseCase;
         this.deleteMessageUseCase = deleteMessageUseCase;
         this.addConversationMemberUseCase = addConversationMemberUseCase;
+        this.countUnreadMessagesUseCase = countUnreadMessagesUseCase;
         this.mapper = mapper;
     }
 
@@ -84,7 +88,16 @@ public class ChatController {
     public ResponseEntity<List<ConversationResponse>> listConversations() {
         Long actorId = currentUserId();
         var conversations = listMyConversationsUseCase.execute(actorId);
-        var response = conversations.stream().map(mapper::toConversationResponse).toList();
+        
+        List<Long> conversationIds = conversations.stream().map(c -> c.getId()).toList();
+        var unreadCounts = countUnreadMessagesUseCase.execute(conversationIds, actorId);
+
+        var response = conversations.stream().map(c -> {
+            var res = mapper.toConversationResponse(c);
+            res.setUnreadCount(unreadCounts.getOrDefault(c.getId(), 0));
+            return res;
+        }).toList();
+
         return ResponseEntity.ok(response);
     }
 
@@ -104,13 +117,14 @@ public class ChatController {
     }
 
     @GetMapping("/conversations/{conversationId}/messages")
-    public ResponseEntity<Page<MessageResponse>> getMessages(@PathVariable Long conversationId,
-            @RequestParam(defaultValue = "0") int page,
+    public ResponseEntity<List<MessageResponse>> getMessages(@PathVariable Long conversationId,
+            @RequestParam(required = false) Long cursorId,
             @RequestParam(defaultValue = "20") int size) {
         Long actorId = currentUserId();
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
-        var messages = getConversationMessagesUseCase.execute(actorId, conversationId, pageable)
-                .map(mapper::toMessageResponse);
+        Pageable pageable = PageRequest.of(0, Math.max(size, 1));
+        var messages = getConversationMessagesUseCase.execute(actorId, conversationId, cursorId, pageable)
+                .map(mapper::toMessageResponse)
+                .getContent(); 
         return ResponseEntity.ok(messages);
     }
 

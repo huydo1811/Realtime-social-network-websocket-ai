@@ -11,6 +11,15 @@ public class ConversationResponse {
     private String name;
     private Set<Long> memberIds;
     private LocalDateTime createdAt;
+    private int unreadCount;
+
+    public int getUnreadCount() {
+        return unreadCount;
+    }
+
+    public void setUnreadCount(int unreadCount) {
+        this.unreadCount = unreadCount;
+    }
 
     public Long getId() {
         return id;

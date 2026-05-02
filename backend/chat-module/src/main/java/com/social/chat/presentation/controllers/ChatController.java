@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.social.chat.domain.exceptions.UnauthorizedException;
 import com.social.chat.application.usecases.CreateConversationUseCase;
 import com.social.chat.application.usecases.DeleteMessageUseCase;
 import com.social.chat.application.usecases.EditMessageUseCase;
@@ -75,7 +76,7 @@ public class ChatController {
             @Valid @RequestBody CreateConversationRequest request) {
         Long actorId = currentUserId();
         var conversation = createConversationUseCase.execute(actorId, request.getType(), request.getName(),
-                request.getParticipantIds());
+                request.getParticipantIds(), request.getIdempotencyKey());
         return ResponseEntity.ok(mapper.toConversationResponse(conversation));
     }
 
@@ -139,9 +140,13 @@ public class ChatController {
 
     private Long currentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            throw new IllegalStateException("Unauthorized");
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
         }
-        return Long.parseLong(String.valueOf(auth.getPrincipal()));
+        try {
+            return Long.parseLong(String.valueOf(auth.getPrincipal()));
+        } catch (NumberFormatException e) {
+            throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn");
+        }
     }
 }

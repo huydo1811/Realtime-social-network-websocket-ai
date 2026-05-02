@@ -46,7 +46,8 @@ public class SecurityConfig {
           mvc.pattern("/auth/request-otp"),
           mvc.pattern("/auth/verify-otp"),
           mvc.pattern("/auth/reset-password"),
-          mvc.pattern(HttpMethod.GET, "/auth/check-admin") // Bao lại bằng mvc.pattern cho chuẩn xác
+          mvc.pattern(HttpMethod.GET, "/auth/check-admin"), // Bao lại bằng mvc.pattern cho chuẩn xác
+          mvc.pattern("/ws/**") // Cho phép kết nối WebSocket
         ).permitAll()
         .requestMatchers("/auth/logout", "/auth/change-password").authenticated()
         .requestMatchers(mvc.pattern(HttpMethod.GET, "/users/me")).authenticated()
@@ -69,7 +70,7 @@ public class SecurityConfig {
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
-    config.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+    config.setAllowedOriginPatterns(List.of("*"));
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
     config.setAllowCredentials(true);

@@ -41,4 +41,9 @@ public class ChatConversationRepositoryImpl implements ChatConversationRepositor
     public List<ChatConversation> findByMemberId(Long memberId) {
         return jpaRepository.findByMemberId(memberId);
     }
+
+    @Override
+    public Optional<ChatConversation> findByIdempotencyKey(Long creatorId, String idempotencyKey) {
+        return jpaRepository.findByIdempotencyKey(creatorId, idempotencyKey);
+    }
 }

@@ -16,6 +16,8 @@ public class CreateConversationRequest {
 
     private Set<Long> participantIds = new HashSet<>();
 
+    private String idempotencyKey;
+
     public ConversationType getType() {
         return type;
     }
@@ -38,5 +40,13 @@ public class CreateConversationRequest {
 
     public void setParticipantIds(Set<Long> participantIds) {
         this.participantIds = participantIds;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 }

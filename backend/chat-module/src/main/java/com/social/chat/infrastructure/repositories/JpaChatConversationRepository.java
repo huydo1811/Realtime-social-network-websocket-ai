@@ -30,4 +30,8 @@ public interface JpaChatConversationRepository extends JpaRepository<ChatConvers
             """, nativeQuery = true)
     Optional<ChatConversation> findPrivateConversation(@Param("userA") Long userA,
                                                        @Param("userB") Long userB);
+
+    @Query("select c from ChatConversation c join c.memberIds m where m = :creatorId and c.idempotencyKey = :idempotencyKey")
+    Optional<ChatConversation> findByIdempotencyKey(@Param("creatorId") Long creatorId, 
+                                                    @Param("idempotencyKey") String idempotencyKey);
 }

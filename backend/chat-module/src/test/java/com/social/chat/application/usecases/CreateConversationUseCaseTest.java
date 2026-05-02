@@ -24,7 +24,7 @@ class CreateConversationUseCaseTest {
         CreateConversationUseCase useCase = new CreateConversationUseCase(conversationRepository, userRepository);
 
         assertThrows(InvalidConversationException.class,
-            () -> useCase.execute(1L, ConversationType.PRIVATE, null, Set.of(2L, 3L)));
+            () -> useCase.execute(1L, ConversationType.PRIVATE, null, Set.of(2L, 3L), null));
     }
 
     @Test
@@ -36,6 +36,6 @@ class CreateConversationUseCaseTest {
         CreateConversationUseCase useCase = new CreateConversationUseCase(conversationRepository, userRepository);
 
         assertThrows(InvalidConversationException.class,
-            () -> useCase.execute(1L, ConversationType.PRIVATE, null, Set.of(2L)));
+            () -> useCase.execute(1L, ConversationType.PRIVATE, null, Set.of(2L), null));
     }
 }

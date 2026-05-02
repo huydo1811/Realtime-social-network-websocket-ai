@@ -20,6 +20,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "chat_rooms")
@@ -43,6 +44,13 @@ public class ChatConversation {
     @CollectionTable(name = "chat_room_members", joinColumns = @JoinColumn(name = "room_id"))
     @Column(name = "user_id", nullable = false)
     private Set<Long> memberIds = new HashSet<>();
+
+    @Column(name = "idempotency_key")
+    private String idempotencyKey;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     public ChatConversation() {
     }
@@ -77,6 +85,12 @@ public class ChatConversation {
         if (participantIds != null) {
             c.memberIds.addAll(participantIds);
         }
+        return c;
+    }
+
+    public static ChatConversation groupConversationWithIdempotency(Long creatorId, String name, Set<Long> participantIds, String idempotencyKey) {
+        ChatConversation c = groupConversation(creatorId, name, participantIds);
+        c.idempotencyKey = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
         return c;
     }
 

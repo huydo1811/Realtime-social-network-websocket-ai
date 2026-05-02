@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Chat Module WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .log-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 400px;
+            overflow-y: scroll;
+            background: #f9f9f9;
+        }
+
+        .log-entry {
+            border-bottom: 1px solid #eee;
+            padding: 5px 0;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            background: #eef;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        input,
+        button {
+            padding: 8px;
+            margin: 2px;
+        }
+
+        button {
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>🛠 WebSocket STOMP Tester</h2>
+    <p>Công cụ đơn giản gọn nhẹ để test Realtime cho Chat Module.</p>
+
+    <div class="controls">
+        <label><b>1. Server URL:</b></label>
+        <input type="text" id="serverUrl" value="http://localhost:8080/ws" size="40">
+        <button onclick="connect()">Kết nối (Connect)</button>
+        <button onclick="disconnect()" style="background: #dc3545;">Ngắt kết nối (Disconnect)</button>
+    </div>
+
+    <div class="controls">
+        <label><b>2. ID Conversation muốn nghe:</b></label>
+        <input type="text" id="conversationId" value="1" size="5">
+        <button onclick="subscribe()" style="background: #28a745;">Lắng nghe (Subscribe)</button>
+    </div>
+
+    <h3>Luồng sự kiện (Event Log)</h3>
+    <div id="logBox" class="log-box"></div>
+
+    <script>
+        var stompClient = null;
+
+        function logMessage(msg) {
+            const logBox = document.getElementById('logBox');
+            logBox.innerHTML += `<div class="log-entry">${new Date().toLocaleTimeString()} - ${msg}</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function connect() {
+            var url = document.getElementById('serverUrl').value;
+            // Dự án có cấu hình .withSockJS() nên ta dùng giao thức http
+            var socket = new SockJS(url);
+            stompClient = Stomp.over(socket);
+
+            logMessage('Đang kết nối tới ' + url + '...');
+
+            stompClient.connect({}, function (frame) {
+                logMessage('<b style="color:green">Kết nối thành công!</b> ' + frame);
+            }, function (error) {
+                logMessage('<b style="color:red">Lỗi kết nối:</b> ' + error);
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            logMessage("Đã ngắt kết nối.");
+        }
+
+        function subscribe() {
+            if (!stompClient || !stompClient.connected) {
+                alert("Bạn cần bấm 'Kết nối' trước!");
+                return;
+            }
+            var convId = document.getElementById('conversationId').value;
+            var topic = '/topic/chat/conversations/' + convId;
+
+            logMessage('Đang subscribe topic: <b>' + topic + '</b>');
+
+            stompClient.subscribe(topic, function (message) {
+                // Parse thử JSON để hiển thị đẹp hơn
+                try {
+                    let parsed = JSON.parse(message.body);
+                    logMessage('<b style="color:blue">📥 Có tin nhắn mới:</b> <pre>' + JSON.stringify(parsed, null, 2) + '</pre>');
+                } catch (e) {
+                    logMessage('<b style="color:blue">📥 Có tin nhắn mới:</b> ' + message.body);
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

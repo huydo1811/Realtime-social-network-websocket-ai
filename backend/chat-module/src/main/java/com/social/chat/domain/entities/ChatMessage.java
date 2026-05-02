@@ -14,6 +14,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "chat_messages")
@@ -47,6 +48,10 @@ public class ChatMessage {
 
     @Column(name = "idempotency_key")
     private String idempotencyKey;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     public ChatMessage() {
     }

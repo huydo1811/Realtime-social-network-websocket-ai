@@ -3,6 +3,8 @@ package com.social.chat.application.usecases;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +17,8 @@ import com.social.user.domain.repositories.UserRepository;
 @Service
 public class CreateConversationUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(CreateConversationUseCase.class);
+
     private final ChatConversationRepository conversationRepository;
     private final UserRepository userRepository;
 
@@ -25,7 +29,7 @@ public class CreateConversationUseCase {
     }
 
     @Transactional
-    public ChatConversation execute(Long actorId, ConversationType type, String name, Set<Long> participantIds) {
+    public ChatConversation execute(Long actorId, ConversationType type, String name, Set<Long> participantIds, String idempotencyKey) {
         if (actorId == null) {
             throw new InvalidConversationException("Actor không hợp lệ");
         }
@@ -61,7 +65,17 @@ public class CreateConversationUseCase {
             ensureUserExists(participantId);
         }
 
-        return conversationRepository.save(ChatConversation.groupConversation(actorId, name, normalized));
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var existing = conversationRepository.findByIdempotencyKey(actorId, idempotencyKey.trim());
+            if (existing.isPresent()) {
+                log.info("Conversation group already exists with idempotencyKey: {}", idempotencyKey);
+                return existing.get();
+            }
+        }
+
+        ChatConversation conversation = conversationRepository.save(ChatConversation.groupConversationWithIdempotency(actorId, name, normalized, idempotencyKey));
+        log.info("Created new group conversation with id: {}", conversation.getId());
+        return conversation;
     }
 
     private void ensureUserExists(Long userId) {

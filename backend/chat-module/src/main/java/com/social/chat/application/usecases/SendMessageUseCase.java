@@ -3,6 +3,9 @@ package com.social.chat.application.usecases;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,19 +21,21 @@ import com.social.chat.domain.repositories.ChatMessageRepository;
 @Service
 public class SendMessageUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(SendMessageUseCase.class);
+
     private final ChatConversationRepository conversationRepository;
     private final ChatMessageRepository messageRepository;
     private final ChatPermissionService permissionService;
-    private final ChatEventPublisher eventPublisher;
+    private final ApplicationEventPublisher springEventPublisher;
 
     public SendMessageUseCase(ChatConversationRepository conversationRepository,
                               ChatMessageRepository messageRepository,
                               ChatPermissionService permissionService,
-                              ChatEventPublisher eventPublisher) {
+                              ApplicationEventPublisher springEventPublisher) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.permissionService = permissionService;
-        this.eventPublisher = eventPublisher;
+        this.springEventPublisher = springEventPublisher;
     }
 
     @Transactional
@@ -58,7 +63,10 @@ public class SendMessageUseCase {
         event.setContent(saved.getContent());
         event.setCreatedAt(saved.getCreatedAt());
         event.setOccurredAt(LocalDateTime.now());
-        eventPublisher.publish(event);
+        
+        // Push event internally, then an AFTER_COMMIT listener will handle it.
+        springEventPublisher.publishEvent(event);
+        log.info("Message sent successfully, id: {} in conversation: {}", saved.getId(), conversationId);
 
         return saved;
     }

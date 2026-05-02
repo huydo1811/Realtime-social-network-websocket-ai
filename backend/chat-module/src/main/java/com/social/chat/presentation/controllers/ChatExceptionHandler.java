@@ -1,14 +1,17 @@
 package com.social.chat.presentation.controllers;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -19,6 +22,7 @@ import com.social.chat.domain.exceptions.ConversationNotFoundException;
 import com.social.chat.domain.exceptions.InvalidConversationException;
 import com.social.chat.domain.exceptions.InvalidMessageException;
 import com.social.chat.domain.exceptions.MessageNotFoundException;
+import com.social.chat.domain.exceptions.UnauthorizedException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -55,15 +59,26 @@ public class ChatExceptionHandler {
         return response(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage(), req.getRequestURI());
     }
 
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<?> handleUnauthorized(UnauthorizedException ex, HttpServletRequest req) {
+        return response(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage(), req.getRequestURI());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest req) {
+        return response(HttpStatus.BAD_REQUEST, "Bad Request", "Dữ liệu đầu vào không hợp lệ hoặc thiếu body", req.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleOther(Exception ex, HttpServletRequest req) {
-        log.error("Unexpected chat error at {}", req.getRequestURI(), ex);
-        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Đã xảy ra lỗi hệ thống",
-                req.getRequestURI());
+        String errorId = UUID.randomUUID().toString();
+        log.error("Unexpected chat error at {} - ErrorID: {}", req.getRequestURI(), errorId, ex);
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Đã xảy ra lỗi hệ thống. Error ID: " + errorId, req.getRequestURI());
     }
 
     private ResponseEntity<?> response(HttpStatus status, String error, String message, String path) {
         Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", status.value());
         body.put("error", error);
         body.put("message", message);

@@ -47,7 +47,15 @@ public class ChatRedisConfig {
 
     @Bean
     public MessageListenerAdapter chatMessageListenerAdapter(@NonNull ChatRedisSubscriber subscriber) {
-        return new MessageListenerAdapter(Objects.requireNonNull(subscriber), "onMessage");
+        MessageListenerAdapter adapter = new MessageListenerAdapter(Objects.requireNonNull(subscriber), "onMessage");
+        
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        Jackson2JsonRedisSerializer<ChatRealtimeEvent> serializer = new Jackson2JsonRedisSerializer<>(mapper, ChatRealtimeEvent.class);
+        
+        adapter.setSerializer(serializer);
+        return adapter;
     }
 
     @Bean

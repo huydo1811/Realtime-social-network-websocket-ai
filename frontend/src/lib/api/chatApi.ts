@@ -114,4 +114,12 @@ export const chatApi = {
     if (!res.ok) throw new Error("Không thể ghim sao tin nhắn");
     return res.json();
   },
+
+  sendTyping: async (conversationId: number, typing: boolean): Promise<void> => {
+    const res = await chatFetch(`/chat/conversations/${conversationId}/typing`, {
+      method: "POST",
+      body: JSON.stringify({ typing }),
+    });
+    if (!res.ok) throw new Error("Không thể cập nhật trạng thái đang nhập");
+  },
 };

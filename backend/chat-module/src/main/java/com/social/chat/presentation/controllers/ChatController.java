@@ -28,6 +28,7 @@ import com.social.chat.application.usecases.GetConversationMessagesUseCase;
 import com.social.chat.application.usecases.ListMyConversationsUseCase;
 import com.social.chat.application.usecases.SendMessageUseCase;
 import com.social.chat.application.usecases.ToggleMessageStarUseCase;
+import com.social.chat.application.usecases.PublishTypingStatusUseCase;
 import com.social.chat.application.usecases.AddConversationMemberUseCase;
 import com.social.chat.presentation.dto.AddConversationMemberRequest;
 import com.social.chat.presentation.dto.ConversationResponse;
@@ -35,6 +36,7 @@ import com.social.chat.presentation.dto.CreateConversationRequest;
 import com.social.chat.presentation.dto.EditMessageRequest;
 import com.social.chat.presentation.dto.MessageResponse;
 import com.social.chat.presentation.dto.SendMessageRequest;
+import com.social.chat.presentation.dto.TypingStatusRequest;
 import com.social.chat.presentation.mapper.ChatPresentationMapper;
 import com.social.chat.application.usecases.MarkConversationReadUseCase;
 import jakarta.validation.Valid;
@@ -53,6 +55,7 @@ public class ChatController {
     private final AddConversationMemberUseCase addConversationMemberUseCase;
     private final CountUnreadMessagesUseCase countUnreadMessagesUseCase;
     private final ToggleMessageStarUseCase toggleMessageStarUseCase;
+    private final PublishTypingStatusUseCase publishTypingStatusUseCase;
     private final ChatPresentationMapper mapper;
     private final MarkConversationReadUseCase markConversationReadUseCase;
     public ChatController(CreateConversationUseCase createConversationUseCase,
@@ -65,6 +68,7 @@ public class ChatController {
         AddConversationMemberUseCase addConversationMemberUseCase,
         CountUnreadMessagesUseCase countUnreadMessagesUseCase,
         ToggleMessageStarUseCase toggleMessageStarUseCase,
+        PublishTypingStatusUseCase publishTypingStatusUseCase,
         MarkConversationReadUseCase markConversationReadUseCase,
         ChatPresentationMapper mapper) {
     this.createConversationUseCase = createConversationUseCase;
@@ -77,6 +81,7 @@ public class ChatController {
     this.addConversationMemberUseCase = addConversationMemberUseCase;
     this.countUnreadMessagesUseCase = countUnreadMessagesUseCase;
     this.toggleMessageStarUseCase = toggleMessageStarUseCase;
+    this.publishTypingStatusUseCase = publishTypingStatusUseCase;
     this.markConversationReadUseCase = markConversationReadUseCase;
     this.mapper = mapper;
 }
@@ -181,6 +186,14 @@ public class ChatController {
     public ResponseEntity<Void> markAsRead(@PathVariable Long conversationId) {
         Long actorId = currentUserId();
         markConversationReadUseCase.execute(conversationId, actorId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/conversations/{conversationId}/typing")
+    public ResponseEntity<Void> publishTyping(@PathVariable Long conversationId,
+                                              @RequestBody TypingStatusRequest request) {
+        Long actorId = currentUserId();
+        publishTypingStatusUseCase.execute(actorId, conversationId, request.isTyping());
         return ResponseEntity.noContent().build();
     }
 }

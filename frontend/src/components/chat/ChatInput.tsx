@@ -1,5 +1,5 @@
 "use client";
-import { KeyboardEvent, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useState } from "react";
 
 interface Props {
   onSend: (content: string) => Promise<void> | void;
@@ -7,9 +7,17 @@ interface Props {
   sending?: boolean;
   replyPreview?: string;
   onCancelReply?: () => void;
+  onTypingChange?: (typing: boolean) => void;
 }
 
-export default function ChatInput({ onSend, disabled, sending, replyPreview, onCancelReply }: Props) {
+export default function ChatInput({
+  onSend,
+  disabled,
+  sending,
+  replyPreview,
+  onCancelReply,
+  onTypingChange,
+}: Props) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -18,6 +26,7 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
     if (!trimmed || disabled || sending) return;
     setValue("");
     if (ref.current) ref.current.style.height = "auto";
+    onTypingChange?.(false);
     await onSend(trimmed);
   };
 
@@ -27,6 +36,10 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
       void handleSend();
     }
   };
+
+  useEffect(() => {
+    onTypingChange?.(value.trim().length > 0);
+  }, [onTypingChange, value]);
 
   return (
     <div className="px-4 py-3 bg-white border-t border-slate-100">

@@ -57,10 +57,14 @@ export default function FloatingChatWindow({
   const [starPendingIds, setStarPendingIds] = useState<number[]>([]);
   const [focusedReplyTargetId, setFocusedReplyTargetId] = useState<number | null>(null);
   const [filterMode, setFilterMode] = useState<"ALL" | "MEDIA" | "FILES" | "LINKS" | "STARRED">("ALL");
+  const [peerTyping, setPeerTyping] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageNodeRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const typingTimerRef = useRef<number | null>(null);
+  const lastTypingSentRef = useRef<number>(0);
+  const typingStateRef = useRef<boolean>(false);
 
   const loadingOlderRef = useRef(false);
   const lastCursorRef = useRef<number | null>(null);
@@ -270,6 +274,16 @@ export default function FloatingChatWindow({
         setMessages((prev) =>
           prev.map((m) => (m.id === event.messageId ? { ...m, starred: Boolean(event.starred) } : m))
         );
+      } else if (event.eventName === "chat.typing") {
+        if (event.senderId === currentUserId) return;
+        const nextTyping = Boolean(event.typing);
+        setPeerTyping(nextTyping);
+        if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+        if (nextTyping) {
+          typingTimerRef.current = window.setTimeout(() => {
+            setPeerTyping(false);
+          }, 3200);
+        }
       }
     });
 
@@ -277,6 +291,15 @@ export default function FloatingChatWindow({
       unsub();
     };
   }, [addOrUpdate, conversation.id, currentUserId, isNearBottom]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+      if (typingStateRef.current) {
+        void chatApi.sendTyping(conversation.id, false).catch(() => undefined);
+      }
+    };
+  }, [conversation.id]);
 
   useEffect(() => {
     if (prependingRef.current) return;
@@ -295,6 +318,8 @@ export default function FloatingChatWindow({
       const sent = await chatApi.sendMessage(conversation.id, content, `${Date.now()}`, replyTo?.id ?? null);
       addOrUpdate(sent);
       setReplyTo(null);
+      typingStateRef.current = false;
+      void chatApi.sendTyping(conversation.id, false).catch(() => undefined);
       shouldStickBottomRef.current = true;
     } catch (e) {
       console.error(e);
@@ -322,6 +347,17 @@ export default function FloatingChatWindow({
       console.error(e);
     }
   };
+
+  const handleTypingChange = useCallback(
+    (typing: boolean) => {
+      const now = Date.now();
+      if (typing === typingStateRef.current && now - lastTypingSentRef.current < 1200) return;
+      typingStateRef.current = typing;
+      lastTypingSentRef.current = now;
+      void chatApi.sendTyping(conversation.id, typing).catch(() => undefined);
+    },
+    [conversation.id]
+  );
 
   const rightOffset = 288 + 8 + offsetIndex * (320 + 8);
 
@@ -484,6 +520,19 @@ export default function FloatingChatWindow({
                 </div>
               ))
             )}
+
+            {peerTyping && (
+              <div className="flex items-end justify-start px-2 py-1">
+                <div className="w-8 mr-2 flex-shrink-0" />
+                <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm">
+                  <div className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:120ms]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:240ms]" />
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
           {showJumpBottom && (
@@ -515,7 +564,11 @@ export default function FloatingChatWindow({
               <div className="flex items-center gap-2">
                 <input
                   value={inputVal}
-                  onChange={(e) => setInputVal(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setInputVal(v);
+                    handleTypingChange(v.trim().length > 0);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

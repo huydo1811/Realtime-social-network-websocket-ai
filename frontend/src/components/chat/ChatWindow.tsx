@@ -55,6 +55,10 @@ export default function ChatWindow({
   const [filterMode, setFilterMode] = useState<"ALL" | "MEDIA" | "FILES" | "LINKS" | "STARRED">("ALL");
   const [starPendingIds, setStarPendingIds] = useState<number[]>([]);
   const [focusedReplyTargetId, setFocusedReplyTargetId] = useState<number | null>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingTimerRef = useRef<number | null>(null);
+  const lastTypingSentRef = useRef<number>(0);
+  const typingStateRef = useRef<boolean>(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -264,6 +268,16 @@ export default function ChatWindow({
             m.id === event.messageId ? { ...m, starred: Boolean(event.starred) } : m
           )
         );
+      } else if (event.eventName === "chat.typing") {
+        if (event.senderId === currentUserId) return;
+        const nextTyping = Boolean(event.typing);
+        setPeerTyping(nextTyping);
+        if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+        if (nextTyping) {
+          typingTimerRef.current = window.setTimeout(() => {
+            setPeerTyping(false);
+          }, 3200);
+        }
       }
     };
 
@@ -272,6 +286,15 @@ export default function ChatWindow({
       unsub();
     };
   }, [addOrUpdateMessage, conversation.id, currentUserId, isNearBottom, onNewMessage, onOwnMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+      if (typingStateRef.current) {
+        void chatApi.sendTyping(conversation.id, false).catch(() => undefined);
+      }
+    };
+  }, [conversation.id]);
 
   useEffect(() => {
     if (prependingRef.current) return;
@@ -369,6 +392,17 @@ export default function ChatWindow({
     setFocusedReplyTargetId(messageId);
     window.setTimeout(() => setFocusedReplyTargetId((prev) => (prev === messageId ? null : prev)), 1400);
   }, []);
+
+  const handleTypingChange = useCallback(
+    (typing: boolean) => {
+      const now = Date.now();
+      if (typing === typingStateRef.current && now - lastTypingSentRef.current < 1200) return;
+      typingStateRef.current = typing;
+      lastTypingSentRef.current = now;
+      void chatApi.sendTyping(conversation.id, typing).catch(() => undefined);
+    },
+    [conversation.id]
+  );
 
   return (
     <div className="relative flex flex-col h-full bg-white">
@@ -542,6 +576,19 @@ export default function ChatWindow({
           ))
         )}
 
+        {peerTyping && (
+          <div className="flex items-end justify-start px-3 py-1">
+            <div className="w-8 mr-2 flex-shrink-0" />
+            <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm">
+              <div className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:120ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:240ms]" />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -564,6 +611,7 @@ export default function ChatWindow({
         sending={sending}
         replyPreview={replyTo?.content.slice(0, 100)}
         onCancelReply={() => setReplyTo(null)}
+        onTypingChange={handleTypingChange}
       />
     </div>
   );

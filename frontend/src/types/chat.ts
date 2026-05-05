@@ -27,7 +27,7 @@ export interface MessageResponse {
 // Realtime event nhận từ STOMP
 export interface ChatRealtimeEvent {
   eventId: string;
-  eventName: "chat.message.sent" | "chat.message.edited" | "chat.message.deleted" | "chat.message.starred";
+  eventName: "chat.message.sent" | "chat.message.edited" | "chat.message.deleted" | "chat.message.starred" | "chat.typing";
   conversationId: number;
   messageId: number;
   senderId: number;
@@ -37,5 +37,6 @@ export interface ChatRealtimeEvent {
   deletedAt: string | null;
   replyToMessageId?: number | null;
   starred?: boolean;
+  typing?: boolean;
   occurredAt: string;
 }

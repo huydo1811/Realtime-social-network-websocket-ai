@@ -15,6 +15,7 @@ public class ChatRealtimeEvent implements Serializable {
     private LocalDateTime deletedAt;
     private Long replyToMessageId;
     private Boolean starred;
+    private Boolean typing;
     private LocalDateTime occurredAt;
 
     public ChatRealtimeEvent() {
@@ -114,5 +115,13 @@ public class ChatRealtimeEvent implements Serializable {
 
     public void setStarred(Boolean starred) {
         this.starred = starred;
+    }
+
+    public Boolean getTyping() {
+        return typing;
+    }
+
+    public void setTyping(Boolean typing) {
+        this.typing = typing;
     }
 }

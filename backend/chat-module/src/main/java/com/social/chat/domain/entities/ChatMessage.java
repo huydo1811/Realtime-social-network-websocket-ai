@@ -149,4 +149,9 @@ public class ChatMessage {
     public String getIdempotencyKey() {
         return idempotencyKey;
     }
+
+    public void markAsRead() {
+        this.isRead = true;
+    }
+
 }

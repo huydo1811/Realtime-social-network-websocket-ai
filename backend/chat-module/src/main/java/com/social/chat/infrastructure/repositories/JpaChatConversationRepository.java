@@ -11,7 +11,22 @@ import com.social.chat.domain.entities.ChatConversation;
 
 public interface JpaChatConversationRepository extends JpaRepository<ChatConversation, Long> {
 
-    @Query("select distinct c from ChatConversation c join c.memberIds m where m = :memberId order by c.createdAt desc")
+    /**
+     * Sắp xếp theo cuộc trò chuyện gần nhất:
+     * - nếu có message: dùng MAX(chat_messages.created_at)
+     * - nếu chưa có message: fallback chat_rooms.created_at
+     */
+    @Query(value = """
+            SELECT cr.*
+            FROM chat_rooms cr
+            JOIN chat_room_members m ON m.room_id = cr.id AND m.user_id = :memberId
+            LEFT JOIN (
+                SELECT room_id, MAX(created_at) AS last_message_at
+                FROM chat_messages
+                GROUP BY room_id
+            ) lm ON lm.room_id = cr.id
+            ORDER BY COALESCE(lm.last_message_at, cr.created_at) DESC
+            """, nativeQuery = true)
     List<ChatConversation> findByMemberId(@Param("memberId") Long memberId);
 
     @Query("select c from ChatConversation c join c.memberIds m where c.id = :conversationId and m = :memberId")
@@ -32,6 +47,6 @@ public interface JpaChatConversationRepository extends JpaRepository<ChatConvers
                                                        @Param("userB") Long userB);
 
     @Query("select c from ChatConversation c join c.memberIds m where m = :creatorId and c.idempotencyKey = :idempotencyKey")
-    Optional<ChatConversation> findByIdempotencyKey(@Param("creatorId") Long creatorId, 
+    Optional<ChatConversation> findByIdempotencyKey(@Param("creatorId") Long creatorId,
                                                     @Param("idempotencyKey") String idempotencyKey);
 }

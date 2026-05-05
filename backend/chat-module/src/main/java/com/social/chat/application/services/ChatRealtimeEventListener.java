@@ -20,7 +20,6 @@ public class ChatRealtimeEventListener {
         this.eventPublisher = eventPublisher;
     }
 
-    @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleChatRealtimeEvent(ChatRealtimeEvent event) {
         try {

@@ -35,7 +35,7 @@ import com.social.chat.presentation.dto.EditMessageRequest;
 import com.social.chat.presentation.dto.MessageResponse;
 import com.social.chat.presentation.dto.SendMessageRequest;
 import com.social.chat.presentation.mapper.ChatPresentationMapper;
-
+import com.social.chat.application.usecases.MarkConversationReadUseCase;
 import jakarta.validation.Valid;
 
 @RestController
@@ -52,28 +52,30 @@ public class ChatController {
     private final AddConversationMemberUseCase addConversationMemberUseCase;
     private final CountUnreadMessagesUseCase countUnreadMessagesUseCase;
     private final ChatPresentationMapper mapper;
-
+    private final MarkConversationReadUseCase markConversationReadUseCase;
     public ChatController(CreateConversationUseCase createConversationUseCase,
-            ListMyConversationsUseCase listMyConversationsUseCase,
-            GetConversationDetailUseCase getConversationDetailUseCase,
-            GetConversationMessagesUseCase getConversationMessagesUseCase,
-            SendMessageUseCase sendMessageUseCase,
-            EditMessageUseCase editMessageUseCase,
-            DeleteMessageUseCase deleteMessageUseCase,
-            AddConversationMemberUseCase addConversationMemberUseCase,
-            CountUnreadMessagesUseCase countUnreadMessagesUseCase,
-            ChatPresentationMapper mapper) {
-        this.createConversationUseCase = createConversationUseCase;
-        this.listMyConversationsUseCase = listMyConversationsUseCase;
-        this.getConversationDetailUseCase = getConversationDetailUseCase;
-        this.getConversationMessagesUseCase = getConversationMessagesUseCase;
-        this.sendMessageUseCase = sendMessageUseCase;
-        this.editMessageUseCase = editMessageUseCase;
-        this.deleteMessageUseCase = deleteMessageUseCase;
-        this.addConversationMemberUseCase = addConversationMemberUseCase;
-        this.countUnreadMessagesUseCase = countUnreadMessagesUseCase;
-        this.mapper = mapper;
-    }
+        ListMyConversationsUseCase listMyConversationsUseCase,
+        GetConversationDetailUseCase getConversationDetailUseCase,
+        GetConversationMessagesUseCase getConversationMessagesUseCase,
+        SendMessageUseCase sendMessageUseCase,
+        EditMessageUseCase editMessageUseCase,
+        DeleteMessageUseCase deleteMessageUseCase,
+        AddConversationMemberUseCase addConversationMemberUseCase,
+        CountUnreadMessagesUseCase countUnreadMessagesUseCase,
+        MarkConversationReadUseCase markConversationReadUseCase,
+        ChatPresentationMapper mapper) {
+    this.createConversationUseCase = createConversationUseCase;
+    this.listMyConversationsUseCase = listMyConversationsUseCase;
+    this.getConversationDetailUseCase = getConversationDetailUseCase;
+    this.getConversationMessagesUseCase = getConversationMessagesUseCase;
+    this.sendMessageUseCase = sendMessageUseCase;
+    this.editMessageUseCase = editMessageUseCase;
+    this.deleteMessageUseCase = deleteMessageUseCase;
+    this.addConversationMemberUseCase = addConversationMemberUseCase;
+    this.countUnreadMessagesUseCase = countUnreadMessagesUseCase;
+    this.markConversationReadUseCase = markConversationReadUseCase;
+    this.mapper = mapper;
+}
 
     @PostMapping("/conversations")
     public ResponseEntity<ConversationResponse> createConversation(
@@ -162,5 +164,12 @@ public class ChatController {
         } catch (NumberFormatException e) {
             throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn");
         }
+    }
+
+    @PostMapping("/conversations/{conversationId}/read")
+    public ResponseEntity<Void> markAsRead(@PathVariable Long conversationId) {
+        Long actorId = currentUserId();
+        markConversationReadUseCase.execute(conversationId, actorId);
+        return ResponseEntity.noContent().build();
     }
 }

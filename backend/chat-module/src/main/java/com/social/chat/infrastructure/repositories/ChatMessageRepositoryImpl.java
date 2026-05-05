@@ -57,4 +57,9 @@ public class ChatMessageRepositoryImpl implements ChatMessageRepository {
         }
         return unreadCounts;
     }
+
+    @Override
+    public void markAllAsRead(Long conversationId, Long actorId) {
+        jpaRepository.markAllAsRead(conversationId, actorId);
+    }
 }

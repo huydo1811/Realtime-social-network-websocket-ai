@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.social.chat.domain.entities.ChatMessage;
+import org.springframework.data.jpa.repository.Modifying;
 
 public interface JpaChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
@@ -25,4 +26,8 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessage, Lon
 
     @Query("select m.conversation.id, count(m) from ChatMessage m where m.conversation.id in :conversationIds and m.senderId != :actorId and m.isRead = false group by m.conversation.id")
     java.util.List<Object[]> countUnreadMessagesByConversationIds(@Param("conversationIds") java.util.Collection<Long> conversationIds, @Param("actorId") Long actorId);
+
+    @Modifying
+    @Query("update ChatMessage m set m.isRead = true where m.conversation.id = :conversationId and m.senderId != :actorId and m.isRead = false")
+    void markAllAsRead(@Param("conversationId") Long conversationId, @Param("actorId") Long actorId);
 }

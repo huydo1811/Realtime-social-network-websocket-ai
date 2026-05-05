@@ -52,6 +52,7 @@ export default function FloatingChatWindow({
   const [inputVal, setInputVal] = useState("");
   const [sending, setSending] = useState(false);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
+  const [showJumpBottom, setShowJumpBottom] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -176,6 +177,7 @@ export default function FloatingChatWindow({
     if (restoringScrollRef.current) return;
 
     shouldStickBottomRef.current = isNearBottom();
+    setShowJumpBottom(!shouldStickBottomRef.current);
 
     if (loading || loadingOlderRef.current || !hasOlder) return;
     if (el.scrollTop < 80) {
@@ -415,6 +417,19 @@ export default function FloatingChatWindow({
             )}
             <div ref={bottomRef} />
           </div>
+          {showJumpBottom && (
+            <button
+              type="button"
+              onClick={() => {
+                shouldStickBottomRef.current = true;
+                bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+                setShowJumpBottom(false);
+              }}
+              className="cursor-pointer absolute bottom-16 right-3 bg-rose-500 text-white text-[11px] px-2.5 py-1.5 rounded-full shadow hover:bg-rose-600 transition"
+            >
+              Tin mới nhất
+            </button>
+          )}
 
           <div className="px-3 py-2 bg-white border-t border-slate-100 flex items-center gap-2">
             <input

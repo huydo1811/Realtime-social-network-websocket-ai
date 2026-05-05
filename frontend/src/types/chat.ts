@@ -7,6 +7,8 @@ export interface ConversationResponse {
   memberIds: number[];
   createdAt: string;
   unreadCount: number;
+  lastMessageContent?: string;
+  lastMessageAt?: string;
 }
 
 export interface MessageResponse {

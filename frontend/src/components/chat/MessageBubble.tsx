@@ -9,6 +9,8 @@ interface Props {
   showAvatar?: boolean;
   senderGradient?: string;
   senderName?: string;
+  highlightTerm?: string;
+  isActiveSearchHit?: boolean;
   onEdit?: (id: number, content: string) => void;
   onDelete?: (id: number) => void;
 }
@@ -26,6 +28,8 @@ export default function MessageBubble({
   showAvatar,
   senderGradient = "from-slate-400 to-slate-500",
   senderName,
+  highlightTerm,
+  isActiveSearchHit,
   onEdit,
   onDelete,
 }: Props) {
@@ -48,6 +52,25 @@ export default function MessageBubble({
       </div>
     );
   }
+
+  const renderHighlightedContent = () => {
+    const content = message.content;
+    const term = highlightTerm?.trim();
+    if (!term) return content;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "ig");
+    const parts = content.split(regex);
+    const lowerTerm = term.toLowerCase();
+    return parts.map((part, idx) =>
+      part.toLowerCase() === lowerTerm ? (
+        <mark key={`${part}-${idx}`} className="bg-yellow-200 text-inherit rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        <span key={`${part}-${idx}`}>{part}</span>
+      )
+    );
+  };
 
   return (
     <div
@@ -101,9 +124,10 @@ export default function MessageBubble({
         ) : (
           <div
             className={`relative px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm
-            ${isOwn ? "bg-rose-500 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"}`}
+            ${isOwn ? "bg-rose-500 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"}
+            ${isActiveSearchHit ? "ring-2 ring-amber-300" : ""}`}
           >
-            {message.content}
+            {renderHighlightedContent()}
             {message.editedAt && (
               <span className={`text-[10px] ml-1.5 ${isOwn ? "text-rose-200" : "text-slate-400"}`}>
                 (đã sửa)

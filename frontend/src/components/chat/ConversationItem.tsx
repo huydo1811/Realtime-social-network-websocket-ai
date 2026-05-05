@@ -8,6 +8,8 @@ interface Props {
   currentUserId: number;
   onClick: () => void;
   resolvedName?: string;
+  preview?: string;
+  timeLabel?: string;
 }
 
 const GRADIENTS = [
@@ -39,6 +41,8 @@ export default function ConversationItem({
   currentUserId,
   onClick,
   resolvedName,
+  preview,
+  timeLabel,
 }: Props) {
   const name = resolvedName || getFallbackName(conversation, currentUserId);
   const gradient = avatarGradient(name);
@@ -77,17 +81,20 @@ export default function ConversationItem({
       </div>
 
       <div className="flex-1 min-w-0">
-        <p
-          className={`
-          text-sm truncate font-semibold
-          ${isActive ? "text-rose-600" : "text-slate-900"}
-          ${unread > 0 ? "font-bold" : ""}
-        `}
-        >
-          {name}
-        </p>
+        <div className="flex items-center gap-2">
+          <p
+            className={`
+            text-sm truncate font-semibold flex-1 min-w-0
+            ${isActive ? "text-rose-600" : "text-slate-900"}
+            ${unread > 0 ? "font-bold" : ""}
+          `}
+          >
+            {name}
+          </p>
+          {timeLabel && <span className="text-[10px] text-slate-400">{timeLabel}</span>}
+        </div>
         <p className={`text-xs truncate mt-0.5 ${unread > 0 ? "text-slate-700 font-medium" : "text-slate-400"}`}>
-          {conversation.type === "GROUP" ? `${conversation.memberIds.length} thành viên` : "Tin nhắn riêng tư"}
+          {preview || (conversation.type === "GROUP" ? `${conversation.memberIds.length} thành viên` : "Tin nhắn riêng tư")}
         </p>
       </div>
     </button>

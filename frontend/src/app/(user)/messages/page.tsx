@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { chatApi } from "@/lib/api/chatApi";
@@ -8,6 +8,7 @@ import ConversationList from "@/components/chat/ConversationList";
 import ChatWindow from "@/components/chat/ChatWindow";
 import LeftSidebar from "@/components/home/LeftSidebar";
 import { dispatchRead } from "@/lib/event/chatEvents";
+import { initChatSocket, subscribeConversation } from "@/lib/socket/chatSocket";
 
 function parseUserIdFromToken(token: string): number | null {
   try {
@@ -34,7 +35,12 @@ export default function MessagesPage() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [active, setActive] = useState<ConversationResponse | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [incomingBanner, setIncomingBanner] = useState<string | null>(null);
   const activeIdRef = useRef<number | null>(null);
+  const conversationIdsKey = useMemo(
+    () => conversations.map((c) => c.id).sort((a, b) => a - b).join(","),
+    [conversations]
+  );
 
 
   useEffect(() => {
@@ -50,6 +56,22 @@ export default function MessagesPage() {
   }, [active?.id]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "chat:activeConversationId") return;
+      const nextId = Number(event.newValue || "0");
+      if (!nextId) return;
+      setActive((prev) => {
+        if (prev?.id === nextId) return prev;
+        const found = conversations.find((c) => c.id === nextId);
+        return found ?? prev;
+      });
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [conversations]);
+
+  useEffect(() => {
     if (currentUserId === undefined) return;
 
     if (currentUserId === null) {
@@ -59,10 +81,58 @@ export default function MessagesPage() {
 
     chatApi
       .listConversations()
-      .then(setConversations)
+      .then(async (list) => {
+        const enriched = await Promise.all(
+          list.map(async (c) => {
+            try {
+              const latest = await chatApi.getMessages(c.id, undefined, 1);
+              const msg = latest[0];
+              return {
+                ...c,
+                lastMessageContent: msg?.deleted ? "Tin nhắn đã bị xóa" : msg?.content,
+                lastMessageAt: msg?.createdAt,
+              };
+            } catch {
+              return c;
+            }
+          })
+        );
+        setConversations(enriched);
+      })
       .catch(console.error)
       .finally(() => setLoadingConvs(false));
   }, [currentUserId, router]);
+
+  useEffect(() => {
+    if (currentUserId == null || !conversationIdsKey) return;
+    initChatSocket();
+    const ids = conversationIdsKey
+      .split(",")
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    const unsubs = ids.map((conversationId) =>
+      subscribeConversation(conversationId, (ev) => {
+        if (ev.eventName !== "chat.message.sent") return;
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === ev.conversationId
+              ? {
+                  ...c,
+                  unreadCount: ev.senderId === currentUserId || activeIdRef.current === ev.conversationId
+                    ? c.unreadCount
+                    : c.unreadCount + 1,
+                  lastMessageContent: ev.content,
+                  lastMessageAt: ev.createdAt,
+                }
+              : c
+          )
+        );
+      })
+    );
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [conversationIdsKey, currentUserId]);
 
   const promoteConversation = useCallback((conversationId: number, unreadDelta = 0) => {
     setConversations((prev) => {
@@ -97,9 +167,15 @@ export default function MessagesPage() {
     (conversationId: number) => {
       // Nếu đang mở conversation này thì không tăng unread
       if (activeIdRef.current === conversationId) return;
+      const conv = conversations.find((c) => c.id === conversationId);
+      setIncomingBanner(
+        conv?.name
+          ? `Tin nhắn mới từ ${conv.name}`
+          : `Bạn có tin nhắn mới ở cuộc trò chuyện #${conversationId}`
+      );
       promoteConversation(conversationId, 1);
     },
-    [promoteConversation]
+    [conversations, promoteConversation]
   );
 
   const handleOwnMessage = useCallback(
@@ -109,6 +185,18 @@ export default function MessagesPage() {
     },
     [promoteConversation]
   );
+
+  const handleConversationCreated = useCallback((conv: ConversationResponse) => {
+    setConversations((prev) => {
+      const existed = prev.find((c) => c.id === conv.id);
+      if (existed) {
+        return [existed, ...prev.filter((c) => c.id !== conv.id)];
+      }
+      return [conv, ...prev];
+    });
+    setActive(conv);
+    setMobileView("chat");
+  }, []);
 
   if (currentUserId === undefined) {
     return (
@@ -140,6 +228,7 @@ export default function MessagesPage() {
         activeId={active?.id ?? null}
         currentUserId={currentUserId}
         onSelect={handleSelect}
+        onConversationCreated={handleConversationCreated}
       />
     </div>
   );
@@ -184,6 +273,18 @@ export default function MessagesPage() {
     <div className="min-h-screen bg-slate-50">
       <LeftSidebar />
       <div className="md:ml-64 lg:ml-72 h-screen flex overflow-hidden">
+        {incomingBanner && (
+          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-3 py-2 rounded-full shadow-lg flex items-center gap-2">
+            <span>{incomingBanner}</span>
+            <button
+              onClick={() => setIncomingBanner(null)}
+              className="text-slate-300 hover:text-white transition"
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {chatPanel}
         {listPanel}
       </div>

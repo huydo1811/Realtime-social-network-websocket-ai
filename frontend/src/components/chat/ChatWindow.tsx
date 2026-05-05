@@ -48,9 +48,13 @@ export default function ChatWindow({
   const [sending, setSending] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showJumpBottom, setShowJumpBottom] = useState(false);
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messageNodeRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const loadingOlderRef = useRef(false);
   const lastCursorRef = useRef<number | null>(null);
@@ -166,6 +170,7 @@ export default function ChatWindow({
     if (restoringScrollRef.current) return;
 
     shouldStickBottomRef.current = isNearBottom();
+    setShowJumpBottom(!shouldStickBottomRef.current);
 
     if (loading || loadingOlderRef.current || !hasOlder) return;
     if (el.scrollTop < 80) void loadOlder();
@@ -312,8 +317,28 @@ export default function ChatWindow({
     return g;
   }, [messages]);
 
+  const matchedMessageIds = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return [];
+    return messages.filter((m) => m.content.toLowerCase().includes(q)).map((m) => m.id);
+  }, [messages, searchTerm]);
+
+  useEffect(() => {
+    setActiveMatchIdx(0);
+  }, [searchTerm, conversation.id]);
+
+  useEffect(() => {
+    if (matchedMessageIds.length === 0) return;
+    if (activeMatchIdx >= matchedMessageIds.length) {
+      setActiveMatchIdx(0);
+      return;
+    }
+    const id = matchedMessageIds[activeMatchIdx];
+    messageNodeRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeMatchIdx, matchedMessageIds]);
+
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="relative flex flex-col h-full bg-white">
       <div className="flex items-center gap-3 px-5 py-3.5 bg-white border-b border-slate-100 shadow-sm z-10">
         {onBack && (
           <button
@@ -342,6 +367,43 @@ export default function ChatWindow({
             </span>
           </div>
         </div>
+        <div className="w-64 hidden sm:flex items-center gap-1">
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Tìm trong cuộc trò chuyện..."
+            className="flex-1 px-3 py-1.5 text-xs rounded-full bg-slate-100 border border-slate-200 outline-none focus:ring-2 focus:ring-rose-100"
+          />
+          {searchTerm.trim() && (
+            <>
+              <span className="text-[10px] text-slate-500 px-1">
+                {matchedMessageIds.length ? `${activeMatchIdx + 1}/${matchedMessageIds.length}` : "0/0"}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveMatchIdx((idx) =>
+                    matchedMessageIds.length ? (idx - 1 + matchedMessageIds.length) % matchedMessageIds.length : 0
+                  )
+                }
+                className="text-slate-500 hover:text-slate-700 text-xs px-1"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveMatchIdx((idx) =>
+                    matchedMessageIds.length ? (idx + 1) % matchedMessageIds.length : 0
+                  )
+                }
+                className="text-slate-500 hover:text-slate-700 text-xs px-1"
+              >
+                ↓
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div ref={listRef} onScroll={onScroll} className="flex-1 overflow-y-auto bg-white px-2 py-4">
@@ -352,8 +414,12 @@ export default function ChatWindow({
         )}
 
         {loading ? (
-          <div className="flex justify-center items-center h-full">
-            <div className="w-7 h-7 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-3 px-3 py-2 animate-pulse">
+            {[...Array(6)].map((_, idx) => (
+              <div key={idx} className={`flex ${idx % 2 ? "justify-end" : "justify-start"}`}>
+                <div className={`h-10 rounded-2xl ${idx % 2 ? "w-52 bg-rose-100" : "w-40 bg-slate-100"}`} />
+              </div>
+            ))}
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -382,16 +448,24 @@ export default function ChatWindow({
                   const showAvatar = !isOwn && (!prev || prev.senderId !== msg.senderId);
 
                   return (
-                    <MessageBubble
+                    <div
                       key={msg.id}
-                      message={msg}
-                      isOwn={isOwn}
-                      showAvatar={showAvatar}
-                      senderGradient={gradient}
-                      senderName={userNames[msg.senderId]}
-                      onEdit={isOwn ? handleEdit : undefined}
-                      onDelete={isOwn ? handleDelete : undefined}
-                    />
+                      ref={(node) => {
+                        messageNodeRefs.current[msg.id] = node;
+                      }}
+                    >
+                      <MessageBubble
+                        message={msg}
+                        isOwn={isOwn}
+                        showAvatar={showAvatar}
+                        senderGradient={gradient}
+                        senderName={userNames[msg.senderId]}
+                        highlightTerm={searchTerm}
+                        isActiveSearchHit={matchedMessageIds[activeMatchIdx] === msg.id}
+                        onEdit={isOwn ? handleEdit : undefined}
+                        onDelete={isOwn ? handleDelete : undefined}
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -401,6 +475,20 @@ export default function ChatWindow({
 
         <div ref={bottomRef} />
       </div>
+
+      {showJumpBottom && (
+        <button
+          type="button"
+          onClick={() => {
+            shouldStickBottomRef.current = true;
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            setShowJumpBottom(false);
+          }}
+          className="cursor-pointer absolute bottom-24 right-6 bg-rose-500 text-white text-xs px-3 py-2 rounded-full shadow-lg hover:bg-rose-600 transition"
+        >
+          Tin mới nhất
+        </button>
+      )}
 
       <ChatInput onSend={handleSend} sending={sending} />
     </div>

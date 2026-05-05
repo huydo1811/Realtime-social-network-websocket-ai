@@ -27,6 +27,7 @@ import com.social.chat.application.usecases.GetConversationDetailUseCase;
 import com.social.chat.application.usecases.GetConversationMessagesUseCase;
 import com.social.chat.application.usecases.ListMyConversationsUseCase;
 import com.social.chat.application.usecases.SendMessageUseCase;
+import com.social.chat.application.usecases.ToggleMessageStarUseCase;
 import com.social.chat.application.usecases.AddConversationMemberUseCase;
 import com.social.chat.presentation.dto.AddConversationMemberRequest;
 import com.social.chat.presentation.dto.ConversationResponse;
@@ -51,6 +52,7 @@ public class ChatController {
     private final DeleteMessageUseCase deleteMessageUseCase;
     private final AddConversationMemberUseCase addConversationMemberUseCase;
     private final CountUnreadMessagesUseCase countUnreadMessagesUseCase;
+    private final ToggleMessageStarUseCase toggleMessageStarUseCase;
     private final ChatPresentationMapper mapper;
     private final MarkConversationReadUseCase markConversationReadUseCase;
     public ChatController(CreateConversationUseCase createConversationUseCase,
@@ -62,6 +64,7 @@ public class ChatController {
         DeleteMessageUseCase deleteMessageUseCase,
         AddConversationMemberUseCase addConversationMemberUseCase,
         CountUnreadMessagesUseCase countUnreadMessagesUseCase,
+        ToggleMessageStarUseCase toggleMessageStarUseCase,
         MarkConversationReadUseCase markConversationReadUseCase,
         ChatPresentationMapper mapper) {
     this.createConversationUseCase = createConversationUseCase;
@@ -73,6 +76,7 @@ public class ChatController {
     this.deleteMessageUseCase = deleteMessageUseCase;
     this.addConversationMemberUseCase = addConversationMemberUseCase;
     this.countUnreadMessagesUseCase = countUnreadMessagesUseCase;
+    this.toggleMessageStarUseCase = toggleMessageStarUseCase;
     this.markConversationReadUseCase = markConversationReadUseCase;
     this.mapper = mapper;
 }
@@ -135,7 +139,14 @@ public class ChatController {
             @Valid @RequestBody SendMessageRequest request) {
         Long actorId = currentUserId();
         var message = sendMessageUseCase.execute(actorId, conversationId, request.getContent(),
-                request.getIdempotencyKey());
+                request.getIdempotencyKey(), request.getReplyToMessageId());
+        return ResponseEntity.ok(mapper.toMessageResponse(message));
+    }
+
+    @PostMapping("/messages/{messageId}/star")
+    public ResponseEntity<MessageResponse> toggleMessageStar(@PathVariable Long messageId) {
+        Long actorId = currentUserId();
+        var message = toggleMessageStarUseCase.execute(actorId, messageId);
         return ResponseEntity.ok(mapper.toMessageResponse(message));
     }
 

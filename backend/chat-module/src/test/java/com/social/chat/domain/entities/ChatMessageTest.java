@@ -13,7 +13,7 @@ class ChatMessageTest {
     @Test
     void shouldEditMessageBySender() {
         ChatConversation c = ChatConversation.privateConversation(1L, 2L);
-        ChatMessage m = ChatMessage.create(c, 1L, "Hello", "k1");
+        ChatMessage m = ChatMessage.create(c, 1L, "Hello", "k1", null);
 
         m.editBy(1L, "Hello edited");
 
@@ -23,7 +23,7 @@ class ChatMessageTest {
     @Test
     void shouldRejectEditByOtherUser() {
         ChatConversation c = ChatConversation.privateConversation(1L, 2L);
-        ChatMessage m = ChatMessage.create(c, 1L, "Hello", "k1");
+        ChatMessage m = ChatMessage.create(c, 1L, "Hello", "k1", null);
 
         assertThrows(ChatPermissionDeniedException.class, () -> m.editBy(2L, "hack"));
     }
@@ -31,7 +31,7 @@ class ChatMessageTest {
     @Test
     void shouldRejectBlankContent() {
         ChatConversation c = ChatConversation.privateConversation(1L, 2L);
-        ChatMessage m = ChatMessage.create(c, 1L, "Hello", null);
+        ChatMessage m = ChatMessage.create(c, 1L, "Hello", null, null);
 
         assertThrows(InvalidMessageException.class, () -> m.editBy(1L, "   "));
     }

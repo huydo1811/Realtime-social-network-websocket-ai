@@ -51,6 +51,10 @@ export default function ChatWindow({
   const [searchTerm, setSearchTerm] = useState("");
   const [showJumpBottom, setShowJumpBottom] = useState(false);
   const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  const [replyTo, setReplyTo] = useState<MessageResponse | null>(null);
+  const [filterMode, setFilterMode] = useState<"ALL" | "MEDIA" | "FILES" | "LINKS" | "STARRED">("ALL");
+  const [starPendingIds, setStarPendingIds] = useState<number[]>([]);
+  const [focusedReplyTargetId, setFocusedReplyTargetId] = useState<number | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -232,6 +236,8 @@ export default function ChatWindow({
           createdAt: event.createdAt,
           editedAt: null,
           deletedAt: null,
+          replyToMessageId: event.replyToMessageId ?? null,
+          starred: Boolean(event.starred),
         };
 
         addOrUpdateMessage(msg);
@@ -252,6 +258,12 @@ export default function ChatWindow({
         setMessages((prev) =>
           prev.map((m) => (m.id === event.messageId ? { ...m, deleted: true } : m))
         );
+      } else if (event.eventName === "chat.message.starred") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === event.messageId ? { ...m, starred: Boolean(event.starred) } : m
+          )
+        );
       }
     };
 
@@ -270,7 +282,14 @@ export default function ChatWindow({
   const handleSend = async (content: string) => {
     setSending(true);
     try {
-      await chatApi.sendMessage(conversation.id, content, `${Date.now()}`);
+      const sent = await chatApi.sendMessage(
+        conversation.id,
+        content,
+        `${Date.now()}`,
+        replyTo?.id ?? null
+      );
+      addOrUpdateMessage(sent);
+      setReplyTo(null);
       shouldStickBottomRef.current = true;
       onOwnMessage?.(conversation.id);
     } catch (e) {
@@ -300,7 +319,15 @@ export default function ChatWindow({
 
   const grouped = useMemo(() => {
     const g: { dateLabel: string; msgs: MessageResponse[] }[] = [];
-    messages.forEach((msg) => {
+    const withFilter = messages.filter((msg) => {
+      const content = msg.content.toLowerCase();
+      if (filterMode === "STARRED") return Boolean(msg.starred);
+      if (filterMode === "MEDIA") return /(https?:\/\/\S+\.(png|jpg|jpeg|gif|webp|svg|mp4|mov))/i.test(content);
+      if (filterMode === "FILES") return /(https?:\/\/\S+\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|txt))/i.test(content);
+      if (filterMode === "LINKS") return /https?:\/\/\S+/i.test(content);
+      return true;
+    });
+    withFilter.forEach((msg) => {
       const date = new Date(msg.createdAt);
       const today = new Date();
       const yesterday = new Date(today);
@@ -315,13 +342,13 @@ export default function ChatWindow({
       else g.push({ dateLabel: label, msgs: [msg] });
     });
     return g;
-  }, [messages]);
+  }, [filterMode, messages]);
 
   const matchedMessageIds = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return [];
-    return messages.filter((m) => m.content.toLowerCase().includes(q)).map((m) => m.id);
-  }, [messages, searchTerm]);
+    return grouped.flatMap((group) => group.msgs).filter((m) => m.content.toLowerCase().includes(q)).map((m) => m.id);
+  }, [grouped, searchTerm]);
 
   useEffect(() => {
     setActiveMatchIdx(0);
@@ -336,6 +363,12 @@ export default function ChatWindow({
     const id = matchedMessageIds[activeMatchIdx];
     messageNodeRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeMatchIdx, matchedMessageIds]);
+
+  const jumpToMessage = useCallback((messageId: number) => {
+    messageNodeRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFocusedReplyTargetId(messageId);
+    window.setTimeout(() => setFocusedReplyTargetId((prev) => (prev === messageId ? null : prev)), 1400);
+  }, []);
 
   return (
     <div className="relative flex flex-col h-full bg-white">
@@ -386,7 +419,7 @@ export default function ChatWindow({
                     matchedMessageIds.length ? (idx - 1 + matchedMessageIds.length) % matchedMessageIds.length : 0
                   )
                 }
-                className="text-slate-500 hover:text-slate-700 text-xs px-1"
+                className="cursor-pointer text-slate-500 hover:text-slate-700 text-xs px-1"
               >
                 ↑
               </button>
@@ -397,13 +430,27 @@ export default function ChatWindow({
                     matchedMessageIds.length ? (idx + 1) % matchedMessageIds.length : 0
                   )
                 }
-                className="text-slate-500 hover:text-slate-700 text-xs px-1"
+                className="cursor-pointer text-slate-500 hover:text-slate-700 text-xs px-1"
               >
                 ↓
               </button>
             </>
           )}
         </div>
+      </div>
+      <div className="px-4 py-2 border-b border-slate-100 bg-white flex items-center gap-1 overflow-x-auto">
+        {(["ALL", "MEDIA", "FILES", "LINKS", "STARRED"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setFilterMode(mode)}
+            className={`cursor-pointer text-[11px] px-2.5 py-1 rounded-full border transition ${
+              filterMode === mode ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            {mode === "ALL" ? "Tất cả" : mode === "MEDIA" ? "Ảnh" : mode === "FILES" ? "Files" : mode === "LINKS" ? "Links" : "Đã ghim"}
+          </button>
+        ))}
       </div>
 
       <div ref={listRef} onScroll={onScroll} className="flex-1 overflow-y-auto bg-white px-2 py-4">
@@ -453,6 +500,7 @@ export default function ChatWindow({
                       ref={(node) => {
                         messageNodeRefs.current[msg.id] = node;
                       }}
+                      className={focusedReplyTargetId === msg.id ? "rounded-2xl ring-2 ring-sky-300 bg-sky-50/40 transition" : ""}
                     >
                       <MessageBubble
                         message={msg}
@@ -462,6 +510,27 @@ export default function ChatWindow({
                         senderName={userNames[msg.senderId]}
                         highlightTerm={searchTerm}
                         isActiveSearchHit={matchedMessageIds[activeMatchIdx] === msg.id}
+                        isStarred={Boolean(msg.starred)}
+                        replyPreview={
+                          msg.replyToMessageId
+                            ? messages.find((m) => m.id === msg.replyToMessageId)?.content.slice(0, 80) || "Tin nhắn gốc"
+                            : undefined
+                        }
+                        replyToMessageId={msg.replyToMessageId ?? null}
+                        onJumpToReplyTarget={jumpToMessage}
+                        onReply={(message) => setReplyTo(message)}
+                        onToggleStar={async (messageId) => {
+                          if (starPendingIds.includes(messageId)) return;
+                          setStarPendingIds((prev) => [...prev, messageId]);
+                          try {
+                            const updated = await chatApi.toggleStar(messageId);
+                            addOrUpdateMessage(updated);
+                          } catch (e) {
+                            console.error(e);
+                          } finally {
+                            setStarPendingIds((prev) => prev.filter((id) => id !== messageId));
+                          }
+                        }}
                         onEdit={isOwn ? handleEdit : undefined}
                         onDelete={isOwn ? handleDelete : undefined}
                       />
@@ -490,7 +559,12 @@ export default function ChatWindow({
         </button>
       )}
 
-      <ChatInput onSend={handleSend} sending={sending} />
+      <ChatInput
+        onSend={handleSend}
+        sending={sending}
+        replyPreview={replyTo?.content.slice(0, 100)}
+        onCancelReply={() => setReplyTo(null)}
+      />
     </div>
   );
 }

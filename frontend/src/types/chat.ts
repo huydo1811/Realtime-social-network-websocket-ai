@@ -20,12 +20,14 @@ export interface MessageResponse {
   createdAt: string;
   editedAt: string | null;
   deletedAt: string | null;
+  replyToMessageId?: number | null;
+  starred?: boolean;
 }
 
 // Realtime event nhận từ STOMP
 export interface ChatRealtimeEvent {
   eventId: string;
-  eventName: "chat.message.sent" | "chat.message.edited" | "chat.message.deleted";
+  eventName: "chat.message.sent" | "chat.message.edited" | "chat.message.deleted" | "chat.message.starred";
   conversationId: number;
   messageId: number;
   senderId: number;
@@ -33,5 +35,7 @@ export interface ChatRealtimeEvent {
   createdAt: string;
   editedAt: string | null;
   deletedAt: string | null;
+  replyToMessageId?: number | null;
+  starred?: boolean;
   occurredAt: string;
 }

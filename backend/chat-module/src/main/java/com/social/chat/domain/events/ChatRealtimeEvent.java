@@ -13,6 +13,8 @@ public class ChatRealtimeEvent implements Serializable {
     private LocalDateTime createdAt;
     private LocalDateTime editedAt;
     private LocalDateTime deletedAt;
+    private Long replyToMessageId;
+    private Boolean starred;
     private LocalDateTime occurredAt;
 
     public ChatRealtimeEvent() {
@@ -96,5 +98,21 @@ public class ChatRealtimeEvent implements Serializable {
 
     public void setOccurredAt(LocalDateTime occurredAt) {
         this.occurredAt = occurredAt;
+    }
+
+    public Long getReplyToMessageId() {
+        return replyToMessageId;
+    }
+
+    public void setReplyToMessageId(Long replyToMessageId) {
+        this.replyToMessageId = replyToMessageId;
+    }
+
+    public Boolean getStarred() {
+        return starred;
+    }
+
+    public void setStarred(Boolean starred) {
+        this.starred = starred;
     }
 }

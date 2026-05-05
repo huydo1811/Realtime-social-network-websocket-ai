@@ -16,17 +16,17 @@ import com.social.chat.domain.repositories.ChatConversationRepository;
 import com.social.chat.domain.repositories.ChatMessageRepository;
 
 @Service
-public class EditMessageUseCase {
+public class ToggleMessageStarUseCase {
 
     private final ChatMessageRepository messageRepository;
     private final ChatConversationRepository conversationRepository;
     private final ChatPermissionService permissionService;
     private final ChatEventPublisher eventPublisher;
 
-    public EditMessageUseCase(ChatMessageRepository messageRepository,
-                              ChatConversationRepository conversationRepository,
-                              ChatPermissionService permissionService,
-                              ChatEventPublisher eventPublisher) {
+    public ToggleMessageStarUseCase(ChatMessageRepository messageRepository,
+            ChatConversationRepository conversationRepository,
+            ChatPermissionService permissionService,
+            ChatEventPublisher eventPublisher) {
         this.messageRepository = messageRepository;
         this.conversationRepository = conversationRepository;
         this.permissionService = permissionService;
@@ -34,27 +34,26 @@ public class EditMessageUseCase {
     }
 
     @Transactional
-    public ChatMessage execute(Long actorId, Long messageId, String content) {
+    public ChatMessage execute(Long actorId, Long messageId) {
         ChatMessage message = messageRepository.findById(messageId)
-            .orElseThrow(() -> new MessageNotFoundException(messageId));
+                .orElseThrow(() -> new MessageNotFoundException(messageId));
 
         Long conversationId = message.getConversation().getId();
         var conversation = conversationRepository.findById(conversationId)
-            .orElseThrow(() -> new ConversationNotFoundException(conversationId));
+                .orElseThrow(() -> new ConversationNotFoundException(conversationId));
         permissionService.ensureConversationMember(conversation, actorId);
 
-        message.editBy(actorId, content);
+        message.toggleStar();
         ChatMessage saved = messageRepository.save(message);
 
         ChatRealtimeEvent event = new ChatRealtimeEvent();
         event.setEventId(UUID.randomUUID().toString());
-        event.setEventName("chat.message.edited");
+        event.setEventName("chat.message.starred");
         event.setConversationId(conversationId);
         event.setMessageId(saved.getId());
         event.setSenderId(saved.getSenderId());
         event.setContent(saved.getContent());
         event.setCreatedAt(saved.getCreatedAt());
-        event.setEditedAt(saved.getEditedAt());
         event.setReplyToMessageId(saved.getReplyToMessageId());
         event.setStarred(saved.getStarred());
         event.setOccurredAt(LocalDateTime.now());

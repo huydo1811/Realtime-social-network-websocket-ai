@@ -11,6 +11,8 @@ public class MessageResponse {
     private LocalDateTime createdAt;
     private LocalDateTime editedAt;
     private LocalDateTime deletedAt;
+    private Long replyToMessageId;
+    private boolean starred;
 
     public Long getId() {
         return id;
@@ -74,5 +76,21 @@ public class MessageResponse {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public Long getReplyToMessageId() {
+        return replyToMessageId;
+    }
+
+    public void setReplyToMessageId(Long replyToMessageId) {
+        this.replyToMessageId = replyToMessageId;
+    }
+
+    public boolean isStarred() {
+        return starred;
+    }
+
+    public void setStarred(boolean starred) {
+        this.starred = starred;
     }
 }

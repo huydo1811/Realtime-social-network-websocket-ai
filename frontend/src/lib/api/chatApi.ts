@@ -79,11 +79,12 @@ export const chatApi = {
   sendMessage: async (
     conversationId: number,
     content: string,
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    replyToMessageId?: number | null
   ): Promise<MessageResponse> => {
     const res = await chatFetch(`/chat/conversations/${conversationId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content, idempotencyKey }),
+      body: JSON.stringify({ content, idempotencyKey, replyToMessageId }),
     });
     if (!res.ok) throw new Error("Không thể gửi tin nhắn");
     return res.json();
@@ -106,5 +107,11 @@ export const chatApi = {
   deleteMessage: async (messageId: number): Promise<void> => {
     const res = await chatFetch(`/chat/messages/${messageId}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Không thể xóa tin nhắn");
+  },
+
+  toggleStar: async (messageId: number): Promise<MessageResponse> => {
+    const res = await chatFetch(`/chat/messages/${messageId}/star`, { method: "POST" });
+    if (!res.ok) throw new Error("Không thể ghim sao tin nhắn");
+    return res.json();
   },
 };

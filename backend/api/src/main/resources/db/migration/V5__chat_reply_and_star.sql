@@ -1,0 +1,5 @@
+ALTER TABLE chat_messages
+    ADD COLUMN IF NOT EXISTS reply_to_message_id BIGINT;
+
+ALTER TABLE chat_messages
+    ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT FALSE;

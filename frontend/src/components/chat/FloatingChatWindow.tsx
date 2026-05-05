@@ -53,9 +53,14 @@ export default function FloatingChatWindow({
   const [sending, setSending] = useState(false);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
   const [showJumpBottom, setShowJumpBottom] = useState(false);
+  const [replyTo, setReplyTo] = useState<MessageResponse | null>(null);
+  const [starPendingIds, setStarPendingIds] = useState<number[]>([]);
+  const [focusedReplyTargetId, setFocusedReplyTargetId] = useState<number | null>(null);
+  const [filterMode, setFilterMode] = useState<"ALL" | "MEDIA" | "FILES" | "LINKS" | "STARRED">("ALL");
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messageNodeRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const loadingOlderRef = useRef(false);
   const lastCursorRef = useRef<number | null>(null);
@@ -223,6 +228,12 @@ export default function FloatingChatWindow({
     };
   }, [conversation.memberIds, messages, userNames]);
 
+  const jumpToMessage = useCallback((messageId: number) => {
+    messageNodeRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFocusedReplyTargetId(messageId);
+    window.setTimeout(() => setFocusedReplyTargetId((prev) => (prev === messageId ? null : prev)), 1400);
+  }, []);
+
   useEffect(() => {
     initChatSocket();
     const unsub = subscribeConversation(conversation.id, (event: ChatRealtimeEvent) => {
@@ -238,6 +249,8 @@ export default function FloatingChatWindow({
           createdAt: event.createdAt,
           editedAt: null,
           deletedAt: null,
+          replyToMessageId: event.replyToMessageId ?? null,
+          starred: Boolean(event.starred),
         });
 
         if (event.senderId !== currentUserId) {
@@ -252,6 +265,10 @@ export default function FloatingChatWindow({
       } else if (event.eventName === "chat.message.deleted") {
         setMessages((prev) =>
           prev.map((m) => (m.id === event.messageId ? { ...m, deleted: true } : m))
+        );
+      } else if (event.eventName === "chat.message.starred") {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === event.messageId ? { ...m, starred: Boolean(event.starred) } : m))
         );
       }
     });
@@ -275,7 +292,9 @@ export default function FloatingChatWindow({
     setSending(true);
 
     try {
-      await chatApi.sendMessage(conversation.id, content, `${Date.now()}`);
+      const sent = await chatApi.sendMessage(conversation.id, content, `${Date.now()}`, replyTo?.id ?? null);
+      addOrUpdate(sent);
+      setReplyTo(null);
       shouldStickBottomRef.current = true;
     } catch (e) {
       console.error(e);
@@ -308,7 +327,15 @@ export default function FloatingChatWindow({
 
   const grouped = useMemo(() => {
     const g: { dateLabel: string; msgs: MessageResponse[] }[] = [];
-    messages.forEach((msg) => {
+    const withFilter = messages.filter((msg) => {
+      const content = msg.content.toLowerCase();
+      if (filterMode === "STARRED") return Boolean(msg.starred);
+      if (filterMode === "MEDIA") return /(https?:\/\/\S+\.(png|jpg|jpeg|gif|webp|svg|mp4|mov))/i.test(content);
+      if (filterMode === "FILES") return /(https?:\/\/\S+\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|txt))/i.test(content);
+      if (filterMode === "LINKS") return /https?:\/\/\S+/i.test(content);
+      return true;
+    });
+    withFilter.forEach((msg) => {
       const date = new Date(msg.createdAt);
       const today = new Date();
       const yesterday = new Date(today);
@@ -323,7 +350,7 @@ export default function FloatingChatWindow({
       else g.push({ dateLabel: label, msgs: [msg] });
     });
     return g;
-  }, [messages]);
+  }, [filterMode, messages]);
 
   return (
     <div
@@ -370,6 +397,20 @@ export default function FloatingChatWindow({
 
       {!minimized && (
         <>
+          <div className="px-2 py-1.5 border-b border-slate-100 bg-white flex items-center gap-1 overflow-x-auto">
+            {(["ALL", "MEDIA", "FILES", "LINKS", "STARRED"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setFilterMode(mode)}
+                className={`cursor-pointer text-[10px] px-2 py-0.5 rounded-full border transition whitespace-nowrap ${
+                  filterMode === mode ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {mode === "ALL" ? "Tất cả" : mode === "MEDIA" ? "Ảnh" : mode === "FILES" ? "Files" : mode === "LINKS" ? "Links" : "Đã ghim"}
+              </button>
+            ))}
+          </div>
           <div ref={listRef} onScroll={onScroll} className="h-80 overflow-y-auto bg-white px-2 py-3 space-y-1.5">
             {loadingOlder && (
               <div className="flex justify-center py-1">
@@ -399,16 +440,44 @@ export default function FloatingChatWindow({
                       const showAvatar = !isOwn && (!prev || prev.senderId !== msg.senderId);
 
                       return (
-                        <MessageBubble
+                        <div
                           key={msg.id}
-                          message={msg}
-                          isOwn={isOwn}
-                          showAvatar={showAvatar}
-                          senderGradient={gradient}
-                          senderName={userNames[msg.senderId]}
-                          onEdit={isOwn ? handleEdit : undefined}
-                          onDelete={isOwn ? handleDelete : undefined}
-                        />
+                          ref={(node) => {
+                            messageNodeRefs.current[msg.id] = node;
+                          }}
+                          className={focusedReplyTargetId === msg.id ? "rounded-2xl ring-2 ring-sky-300 bg-sky-50/40 transition" : ""}
+                        >
+                          <MessageBubble
+                            message={msg}
+                            isOwn={isOwn}
+                            showAvatar={showAvatar}
+                            senderGradient={gradient}
+                            senderName={userNames[msg.senderId]}
+                            isStarred={Boolean(msg.starred)}
+                            replyPreview={
+                              msg.replyToMessageId
+                                ? messages.find((m) => m.id === msg.replyToMessageId)?.content.slice(0, 80) || "Tin nhắn gốc"
+                                : undefined
+                            }
+                            replyToMessageId={msg.replyToMessageId ?? null}
+                            onJumpToReplyTarget={jumpToMessage}
+                            onReply={(message) => setReplyTo(message)}
+                            onToggleStar={async (messageId) => {
+                              if (starPendingIds.includes(messageId)) return;
+                              setStarPendingIds((prev) => [...prev, messageId]);
+                              try {
+                                const updated = await chatApi.toggleStar(messageId);
+                                addOrUpdate(updated);
+                              } catch (e) {
+                                console.error(e);
+                              } finally {
+                                setStarPendingIds((prev) => prev.filter((id) => id !== messageId));
+                              }
+                            }}
+                            onEdit={isOwn ? handleEdit : undefined}
+                            onDelete={isOwn ? handleDelete : undefined}
+                          />
+                        </div>
                       );
                     })}
                   </div>
@@ -432,32 +501,46 @@ export default function FloatingChatWindow({
           )}
 
           <div className="px-3 py-2 bg-white border-t border-slate-100 flex items-center gap-2">
-            <input
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder="Nhập tin nhắn..."
-              className="flex-1 text-sm bg-slate-100 rounded-full px-4 py-2 outline-none focus:bg-slate-200 transition placeholder-slate-400"
-            />
-            <button
-              type="button"
-              onClick={() => void handleSend()}
-              disabled={!inputVal.trim() || sending}
-              className="cursor-pointer w-8 h-8 flex items-center justify-center rounded-full bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-40 active:scale-95 transition flex-shrink-0"
-            >
-              {sending ? (
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                </svg>
+            <div className="flex-1">
+              {replyTo && (
+                <div className="mb-1.5 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1 flex items-start gap-2">
+                  <div className="w-1 self-stretch rounded-full bg-rose-300" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-rose-500 font-semibold">Đang trả lời</p>
+                    <p className="text-[11px] text-slate-600 truncate">{replyTo.content}</p>
+                  </div>
+                  <button type="button" onClick={() => setReplyTo(null)} className="text-slate-400 hover:text-slate-700">×</button>
+                </div>
               )}
-            </button>
+              <div className="flex items-center gap-2">
+                <input
+                  value={inputVal}
+                  onChange={(e) => setInputVal(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  placeholder="Nhập tin nhắn..."
+                  className="flex-1 text-sm bg-slate-100 rounded-full px-4 py-2 outline-none focus:bg-slate-200 transition placeholder-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleSend()}
+                  disabled={!inputVal.trim() || sending}
+                  className="cursor-pointer w-8 h-8 flex items-center justify-center rounded-full bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-40 active:scale-95 transition flex-shrink-0"
+                >
+                  {sending ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </>
       )}

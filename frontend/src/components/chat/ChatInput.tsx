@@ -5,9 +5,11 @@ interface Props {
   onSend: (content: string) => Promise<void> | void;
   disabled?: boolean;
   sending?: boolean;
+  replyPreview?: string;
+  onCancelReply?: () => void;
 }
 
-export default function ChatInput({ onSend, disabled, sending }: Props) {
+export default function ChatInput({ onSend, disabled, sending, replyPreview, onCancelReply }: Props) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -28,6 +30,22 @@ export default function ChatInput({ onSend, disabled, sending }: Props) {
 
   return (
     <div className="px-4 py-3 bg-white border-t border-slate-100">
+      {replyPreview && (
+        <div className="mb-2 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 flex items-start gap-2">
+          <div className="w-1 self-stretch rounded-full bg-rose-300" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-rose-500 font-semibold">Đang trả lời</p>
+            <p className="text-xs text-slate-600 truncate">{replyPreview}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="text-slate-400 hover:text-slate-700 transition"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div
         className="flex items-end gap-3 bg-slate-50 rounded-2xl px-4 py-2
           border border-slate-200 focus-within:border-rose-300

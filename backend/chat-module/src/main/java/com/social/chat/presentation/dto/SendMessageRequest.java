@@ -12,6 +12,8 @@ public class SendMessageRequest {
     @Size(max = 100, message = "Idempotency key tối đa 100 ký tự")
     private String idempotencyKey;
 
+    private Long replyToMessageId;
+
     public String getContent() {
         return content;
     }
@@ -26,5 +28,13 @@ public class SendMessageRequest {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public Long getReplyToMessageId() {
+        return replyToMessageId;
+    }
+
+    public void setReplyToMessageId(Long replyToMessageId) {
+        this.replyToMessageId = replyToMessageId;
     }
 }

@@ -49,6 +49,12 @@ public class ChatMessage {
     @Column(name = "idempotency_key")
     private String idempotencyKey;
 
+    @Column(name = "reply_to_message_id")
+    private Long replyToMessageId;
+
+    @Column(name = "is_starred", nullable = false)
+    private Boolean isStarred = false;
+
     @Version
     @Column(name = "version")
     private Long version;
@@ -56,7 +62,7 @@ public class ChatMessage {
     public ChatMessage() {
     }
 
-    public static ChatMessage create(ChatConversation conversation, Long senderId, String content, String idempotencyKey) {
+    public static ChatMessage create(ChatConversation conversation, Long senderId, String content, String idempotencyKey, Long replyToMessageId) {
         if (conversation == null) {
             throw new InvalidMessageException("Conversation không hợp lệ");
         }
@@ -72,7 +78,9 @@ public class ChatMessage {
         m.senderId = senderId;
         m.content = content.trim();
         m.idempotencyKey = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
+        m.replyToMessageId = replyToMessageId;
         m.isRead = false;
+        m.isStarred = false;
         return m;
     }
 
@@ -152,6 +160,18 @@ public class ChatMessage {
 
     public void markAsRead() {
         this.isRead = true;
+    }
+
+    public void toggleStar() {
+        this.isStarred = !Boolean.TRUE.equals(this.isStarred);
+    }
+
+    public Long getReplyToMessageId() {
+        return replyToMessageId;
+    }
+
+    public Boolean getStarred() {
+        return isStarred;
     }
 
 }

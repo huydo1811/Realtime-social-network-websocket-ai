@@ -30,6 +30,8 @@ public class ChatPresentationMapper {
         response.setCreatedAt(message.getCreatedAt());
         response.setEditedAt(message.getEditedAt());
         response.setDeletedAt(message.getDeletedAt());
+        response.setReplyToMessageId(message.getReplyToMessageId());
+        response.setStarred(Boolean.TRUE.equals(message.getStarred()));
         return response;
     }
 }

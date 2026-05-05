@@ -55,6 +55,8 @@ public class DeleteMessageUseCase {
         event.setContent(saved.getContent());
         event.setCreatedAt(saved.getCreatedAt());
         event.setDeletedAt(saved.getDeletedAt());
+        event.setReplyToMessageId(saved.getReplyToMessageId());
+        event.setStarred(saved.getStarred());
         event.setOccurredAt(LocalDateTime.now());
         eventPublisher.publish(event);
     }

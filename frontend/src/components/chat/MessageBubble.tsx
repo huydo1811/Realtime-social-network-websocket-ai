@@ -11,6 +11,12 @@ interface Props {
   senderName?: string;
   highlightTerm?: string;
   isActiveSearchHit?: boolean;
+  isStarred?: boolean;
+  replyPreview?: string;
+  replyToMessageId?: number | null;
+  onJumpToReplyTarget?: (messageId: number) => void;
+  onReply?: (message: MessageResponse) => void;
+  onToggleStar?: (messageId: number) => void;
   onEdit?: (id: number, content: string) => void;
   onDelete?: (id: number) => void;
 }
@@ -30,6 +36,12 @@ export default function MessageBubble({
   senderName,
   highlightTerm,
   isActiveSearchHit,
+  isStarred,
+  replyPreview,
+  replyToMessageId,
+  onJumpToReplyTarget,
+  onReply,
+  onToggleStar,
   onEdit,
   onDelete,
 }: Props) {
@@ -127,6 +139,19 @@ export default function MessageBubble({
             ${isOwn ? "bg-rose-500 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"}
             ${isActiveSearchHit ? "ring-2 ring-amber-300" : ""}`}
           >
+            {replyPreview && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (replyToMessageId) onJumpToReplyTarget?.(replyToMessageId);
+                }}
+                className={`cursor-pointer mb-1.5 w-full text-left text-[11px] rounded-lg px-2.5 py-1.5 border transition
+                ${isOwn ? "bg-rose-400/40 border-rose-300 text-rose-100 hover:bg-rose-400/55" : "bg-white/85 border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+              >
+
+                {replyPreview}
+              </button>
+            )}
             {renderHighlightedContent()}
             {message.editedAt && (
               <span className={`text-[10px] ml-1.5 ${isOwn ? "text-rose-200" : "text-slate-400"}`}>
@@ -141,8 +166,34 @@ export default function MessageBubble({
             {fmtTime(message.createdAt)}
           </span>
 
-          {isOwn && hovered && !editing && (
+          {hovered && !editing && (
             <div className="flex items-center gap-1">
+              {onReply && (
+                <button
+                  onClick={() => onReply(message)}
+                  className="cursor-pointer p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                  title="Trả lời"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v3m0 0l-3-3m3 3l3-3" />
+                  </svg>
+                </button>
+              )}
+              {onToggleStar && (
+                <button
+                  onClick={() => onToggleStar(message.id)}
+                  className={`cursor-pointer p-1 rounded-full transition ${
+                    isStarred ? "text-amber-500 hover:bg-amber-50" : "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
+                  }`}
+                  title={isStarred ? "Bỏ ghim sao" : "Ghim sao"}
+                >
+                  <svg className="w-3.5 h-3.5" fill={isStarred ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l2.033 6.26a1 1 0 00.95.69h6.58c.969 0 1.371 1.24.588 1.81l-5.322 3.867a1 1 0 00-.364 1.118l2.033 6.26c.3.922-.755 1.688-1.538 1.118l-5.322-3.866a1 1 0 00-1.176 0l-5.322 3.866c-.783.57-1.838-.196-1.539-1.118l2.034-6.26a1 1 0 00-.364-1.118L.898 11.687c-.783-.57-.38-1.81.588-1.81h6.58a1 1 0 00.95-.69l2.033-6.26z" />
+                  </svg>
+                </button>
+              )}
+              {isOwn && (
+                <>
               <button
                 onClick={() => {
                   setEditVal(message.content);
@@ -173,6 +224,8 @@ export default function MessageBubble({
                   />
                 </svg>
               </button>
+                </>
+              )}
             </div>
           )}
         </div>

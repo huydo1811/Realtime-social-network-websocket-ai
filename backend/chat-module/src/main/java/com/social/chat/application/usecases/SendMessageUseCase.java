@@ -12,9 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.social.chat.application.services.ChatPermissionService;
 import com.social.chat.domain.entities.ChatConversation;
 import com.social.chat.domain.entities.ChatMessage;
-import com.social.chat.domain.events.ChatEventPublisher;
 import com.social.chat.domain.events.ChatRealtimeEvent;
 import com.social.chat.domain.exceptions.ConversationNotFoundException;
+import com.social.chat.domain.exceptions.InvalidMessageException;
+import com.social.chat.domain.exceptions.MessageNotFoundException;
 import com.social.chat.domain.repositories.ChatConversationRepository;
 import com.social.chat.domain.repositories.ChatMessageRepository;
 
@@ -39,7 +40,7 @@ public class SendMessageUseCase {
     }
 
     @Transactional
-    public ChatMessage execute(Long actorId, Long conversationId, String content, String idempotencyKey) {
+    public ChatMessage execute(Long actorId, Long conversationId, String content, String idempotencyKey, Long replyToMessageId) {
         ChatConversation conversation = conversationRepository.findById(conversationId)
             .orElseThrow(() -> new ConversationNotFoundException(conversationId));
 
@@ -52,7 +53,15 @@ public class SendMessageUseCase {
             }
         }
 
-        ChatMessage saved = messageRepository.save(ChatMessage.create(conversation, actorId, content, idempotencyKey));
+        if (replyToMessageId != null) {
+            ChatMessage replyTo = messageRepository.findById(replyToMessageId)
+                .orElseThrow(() -> new MessageNotFoundException(replyToMessageId));
+            if (!replyTo.getConversation().getId().equals(conversationId)) {
+                throw new InvalidMessageException("Tin nhắn trả lời không thuộc cùng cuộc trò chuyện");
+            }
+        }
+
+        ChatMessage saved = messageRepository.save(ChatMessage.create(conversation, actorId, content, idempotencyKey, replyToMessageId));
 
         ChatRealtimeEvent event = new ChatRealtimeEvent();
         event.setEventId(UUID.randomUUID().toString());
@@ -62,6 +71,8 @@ public class SendMessageUseCase {
         event.setSenderId(saved.getSenderId());
         event.setContent(saved.getContent());
         event.setCreatedAt(saved.getCreatedAt());
+        event.setReplyToMessageId(saved.getReplyToMessageId());
+        event.setStarred(saved.getStarred());
         event.setOccurredAt(LocalDateTime.now());
         
         // Push event internally, then an AFTER_COMMIT listener will handle it.

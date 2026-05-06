@@ -15,6 +15,7 @@ import ChatInput from "./ChatInput";
 import MessageBubble from "./MessageBubble";
 import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
 import { computeDeliveryFooterForMessage } from "@/lib/chat/deliveryFooterStatus";
+import { decodeMessageContent, encodeMessageContent } from "@/lib/chat/messageAttachment";
 type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
 type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
@@ -497,15 +498,24 @@ export default function ChatWindow({
     return () => window.clearTimeout(t);
   }, [footerStatus, loading, messages.length, scrollChatToBottom, viewMode]);
 
-  const handleSend = async (content: string) => {
+  const handleSend = async ({ text, files }: { text: string; files: File[] }) => {
     setSending(true);
     try {
-      const sent = await chatApi.sendMessage(
-        conversation.id,
-        content,
-        `${Date.now()}`,
-        replyTo?.id ?? null
-      );
+      const idempotencyKey = `${Date.now()}`;
+      const sent =
+        files.length > 0
+          ? await chatApi.sendMessageWithFiles(conversation.id, {
+              content: text,
+              files,
+              idempotencyKey,
+              replyToMessageId: replyTo?.id ?? null,
+            })
+          : await chatApi.sendMessage(
+              conversation.id,
+              encodeMessageContent(text, []),
+              idempotencyKey,
+              replyTo?.id ?? null
+            );
       addOrUpdateMessage(sent);
       setReplyTo(null);
       shouldStickBottomRef.current = true;
@@ -539,10 +549,16 @@ export default function ChatWindow({
   const grouped = useMemo(() => {
     const g: { dateLabel: string; msgs: MessageResponse[] }[] = [];
     const withFilter = messages.filter((msg) => {
-      const content = msg.content.toLowerCase();
+      if (msg.deleted && (filterMode === "MEDIA" || filterMode === "FILES" || filterMode === "STARRED")) {
+        return false;
+      }
+      const parsed = decodeMessageContent(msg.content);
+      const content = parsed.text.toLowerCase();
+      const hasMediaAttachment = parsed.attachments.some((item) => item.kind === "image" || item.kind === "video");
+      const hasFileAttachment = parsed.attachments.some((item) => item.kind === "file" || item.kind === "audio");
       if (filterMode === "STARRED") return Boolean(msg.starred);
-      if (filterMode === "MEDIA") return /(https?:\/\/\S+\.(png|jpg|jpeg|gif|webp|svg|mp4|mov))/i.test(content);
-      if (filterMode === "FILES") return /(https?:\/\/\S+\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|txt))/i.test(content);
+      if (filterMode === "MEDIA") return hasMediaAttachment || /(https?:\/\/\S+\.(png|jpg|jpeg|gif|webp|svg|mp4|mov))/i.test(content);
+      if (filterMode === "FILES") return hasFileAttachment || /(https?:\/\/\S+\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|txt))/i.test(content);
       if (filterMode === "LINKS") return /https?:\/\/\S+/i.test(content);
       return true;
     });
@@ -566,7 +582,10 @@ export default function ChatWindow({
   const matchedMessageIds = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return [];
-    return grouped.flatMap((group) => group.msgs).filter((m) => m.content.toLowerCase().includes(q)).map((m) => m.id);
+    return grouped
+      .flatMap((group) => group.msgs)
+      .filter((m) => decodeMessageContent(m.content).text.toLowerCase().includes(q))
+      .map((m) => m.id);
   }, [grouped, searchTerm]);
 
   useEffect(() => {
@@ -741,7 +760,12 @@ export default function ChatWindow({
           <button
             key={mode}
             type="button"
-            onClick={() => setFilterMode(mode)}
+            onClick={() => {
+              setFilterMode(mode);
+              shouldStickBottomRef.current = true;
+              setShowJumpBottom(false);
+              requestAnimationFrame(() => scrollChatToBottom());
+            }}
             className={`cursor-pointer text-[11px] px-2.5 py-1 rounded-full border transition ${
               filterMode === mode ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
             }`}
@@ -903,7 +927,7 @@ export default function ChatWindow({
                         isStarred={Boolean(msg.starred)}
                         replyPreview={
                           msg.replyToMessageId
-                            ? messages.find((m) => m.id === msg.replyToMessageId)?.content.slice(0, 80) || "Tin nhắn gốc"
+                            ? decodeMessageContent(messages.find((m) => m.id === msg.replyToMessageId)?.content || "").text.slice(0, 80) || "Tin nhắn gốc"
                             : undefined
                         }
                         replyToMessageId={msg.replyToMessageId ?? null}
@@ -974,7 +998,7 @@ export default function ChatWindow({
       <ChatInput
         onSend={handleSend}
         sending={sending}
-        replyPreview={replyTo?.content.slice(0, 100)}
+        replyPreview={decodeMessageContent(replyTo?.content || "").text.slice(0, 100)}
         onCancelReply={() => setReplyTo(null)}
         onTypingChange={handleTypingChange}
       />

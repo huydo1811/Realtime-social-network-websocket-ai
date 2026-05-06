@@ -2,10 +2,13 @@ package com.social.chat.presentation.controllers;
 
 import java.util.List;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.Map;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.social.chat.domain.exceptions.UnauthorizedException;
 import com.social.chat.application.usecases.CreateConversationUseCase;
@@ -49,6 +53,10 @@ import com.social.chat.presentation.dto.UpdateConversationAppearanceRequest;
 import com.social.chat.presentation.dto.UserPresenceResponse;
 import com.social.chat.presentation.mapper.ChatPresentationMapper;
 import com.social.chat.application.usecases.MarkConversationReadUseCase;
+import com.social.chat.application.services.ChatMediaUploadService;
+import com.social.chat.presentation.dto.ChatUploadResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 
 @RestController
@@ -73,6 +81,8 @@ public class ChatController {
     private final ChatRoomUserSettingRepository roomUserSettingRepository;
     private final ChatPresentationMapper mapper;
     private final MarkConversationReadUseCase markConversationReadUseCase;
+    private final ChatMediaUploadService chatMediaUploadService;
+    private final ObjectMapper objectMapper;
     public ChatController(CreateConversationUseCase createConversationUseCase,
         ListMyConversationsUseCase listMyConversationsUseCase,
         GetConversationDetailUseCase getConversationDetailUseCase,
@@ -90,6 +100,8 @@ public class ChatController {
         GetConversationReadStatusesUseCase getConversationReadStatusesUseCase,
         ChatRoomUserSettingRepository roomUserSettingRepository,
         MarkConversationReadUseCase markConversationReadUseCase,
+        ChatMediaUploadService chatMediaUploadService,
+        ObjectMapper objectMapper,
         ChatPresentationMapper mapper) {
     this.createConversationUseCase = createConversationUseCase;
     this.listMyConversationsUseCase = listMyConversationsUseCase;
@@ -108,6 +120,8 @@ public class ChatController {
     this.getConversationReadStatusesUseCase = getConversationReadStatusesUseCase;
     this.roomUserSettingRepository = roomUserSettingRepository;
     this.markConversationReadUseCase = markConversationReadUseCase;
+    this.chatMediaUploadService = chatMediaUploadService;
+    this.objectMapper = objectMapper;
     this.mapper = mapper;
 }
 
@@ -183,6 +197,106 @@ public class ChatController {
         var message = sendMessageUseCase.execute(actorId, conversationId, request.getContent(),
                 request.getIdempotencyKey(), request.getReplyToMessageId());
         return ResponseEntity.ok(mapper.toMessageResponse(message));
+    }
+
+    @PostMapping(value = "/uploads", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ChatUploadResponse> uploadFile(@RequestParam("file") MultipartFile file) {
+        currentUserId();
+        return ResponseEntity.ok(chatMediaUploadService.upload(file));
+    }
+
+    @PostMapping(value = "/conversations/{conversationId}/messages/with-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<MessageResponse> sendMessageWithFiles(
+            @PathVariable Long conversationId,
+            @RequestParam(value = "content", required = false, defaultValue = "") String content,
+            @RequestParam(value = "idempotencyKey", required = false) String idempotencyKey,
+            @RequestParam(value = "replyToMessageId", required = false) Long replyToMessageId,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files) {
+        Long actorId = currentUserId();
+        String encodedContent = content;
+        if (files != null && !files.isEmpty()) {
+            List<Map<String, Object>> attachments = new ArrayList<>();
+            for (MultipartFile file : files) {
+                ChatUploadResponse uploaded = chatMediaUploadService.upload(file);
+                attachments.add(Map.of(
+                        "kind", mapAttachmentKind(file.getContentType(), file.getOriginalFilename(), uploaded.getResourceType()),
+                        "url", uploaded.getUrl(),
+                        "name", firstNonBlank(uploaded.getOriginalFilename(), file.getOriginalFilename(), "attachment"),
+                        "mimeType", file.getContentType() != null ? file.getContentType() : "application/octet-stream",
+                        "size", uploaded.getBytes() != null ? uploaded.getBytes() : file.getSize(),
+                        "publicId", uploaded.getPublicId() != null ? uploaded.getPublicId() : "",
+                        "resourceType", uploaded.getResourceType() != null ? uploaded.getResourceType() : ""));
+            }
+            encodedContent = encodeContentWithAttachments(content, attachments);
+        }
+        var message = sendMessageUseCase.execute(actorId, conversationId, encodedContent, idempotencyKey, replyToMessageId);
+        return ResponseEntity.ok(mapper.toMessageResponse(message));
+    }
+
+    @GetMapping("/downloads")
+    public ResponseEntity<Map<String, String>> getDownloadUrl(@RequestParam("url") String url, @RequestParam(value = "name", required = false) String name) {
+        currentUserId();
+        String downloadUrl = toDownloadUrl(url, name);
+        return ResponseEntity.ok(Map.of("url", downloadUrl));
+    }
+
+    private String mapAttachmentKind(String mimeType, String filename, String resourceType) {
+        String safeMime = mimeType == null ? "" : mimeType.toLowerCase();
+        if (safeMime.startsWith("image/")) return "image";
+        if (safeMime.startsWith("video/")) return "video";
+        if (safeMime.startsWith("audio/")) return "audio";
+
+        String ext = "";
+        if (filename != null && filename.contains(".")) {
+            ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+        }
+        if (ext.matches("png|jpg|jpeg|gif|webp|bmp|svg")) return "image";
+        if (ext.matches("mp4|mov|webm|mkv|m4v")) return "video";
+        if (ext.matches("mp3|wav|ogg|m4a|aac")) return "audio";
+        if (ext.matches("pdf|txt|doc|docx|xls|xlsx|ppt|pptx|zip|rar|7z|csv|json|xml")) return "file";
+
+        if (safeMime.isBlank() && ext.isBlank()) {
+            if ("video".equalsIgnoreCase(resourceType)) return "video";
+            if ("image".equalsIgnoreCase(resourceType)) return "image";
+        }
+        return "file";
+    }
+
+    private String encodeContentWithAttachments(String text, List<Map<String, Object>> attachments) {
+        try {
+            String payload = objectMapper.writeValueAsString(attachments);
+            String normalizedText = text == null ? "" : text.trim();
+            if (normalizedText.isEmpty()) return "[[chat-attachments]]" + payload;
+            return "[[chat-attachments]]" + payload + "\n" + normalizedText;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Không thể mã hóa metadata tệp đính kèm", e);
+        }
+    }
+
+    private String toDownloadUrl(String url, String filename) {
+        if (url == null || url.isBlank()) return url;
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String host = uri.getHost() == null ? "" : uri.getHost();
+            if (!host.contains("res.cloudinary.com")) return url;
+            String path = uri.getPath();
+            String marker = "/upload/";
+            int idx = path.lastIndexOf(marker);
+            if (idx < 0) return url;
+            String before = path.substring(0, idx + marker.length());
+            String after = path.substring(idx + marker.length());
+            String safeName = filename == null || filename.isBlank() ? "attachment" : filename;
+            String transformedPath = before + "fl_attachment:" + java.net.URLEncoder.encode(safeName, java.nio.charset.StandardCharsets.UTF_8) + "/" + after;
+            return uri.getScheme() + "://" + uri.getAuthority() + transformedPath;
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    private String firstNonBlank(String a, String b, String fallback) {
+        if (a != null && !a.isBlank()) return a;
+        if (b != null && !b.isBlank()) return b;
+        return fallback;
     }
 
     @PostMapping("/messages/{messageId}/star")

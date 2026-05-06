@@ -12,11 +12,12 @@ async function chatFetch(path: string, options: RequestInit = {}): Promise<Respo
   const tokens = getAuthTokens();
   if (!tokens?.accessToken) throw new Error("Chưa đăng nhập");
 
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const doFetch = (token: string) =>
     fetch(API_BASE + path, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         Authorization: "Bearer " + token,
         ...(options.headers as Record<string, string>),
       },
@@ -43,6 +44,21 @@ async function chatFetch(path: string, options: RequestInit = {}): Promise<Respo
 }
 
 export const chatApi = {
+  uploadAttachment: async (file: File, signal?: AbortSignal): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await chatFetch("/chat/uploads", {
+      method: "POST",
+      body: formData,
+      signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Không thể upload tệp");
+    }
+    return res.json();
+  },
+
   listConversations: async (): Promise<ConversationResponse[]> => {
     const res = await chatFetch("/chat/conversations");
     if (!res.ok) throw new Error("Không thể tải danh sách cuộc trò chuyện");
@@ -105,6 +121,36 @@ export const chatApi = {
     });
     if (!res.ok) throw new Error("Không thể gửi tin nhắn");
     return res.json();
+  },
+
+  sendMessageWithFiles: async (
+    conversationId: number,
+    payload: { content: string; idempotencyKey?: string; replyToMessageId?: number | null; files: File[] }
+  ): Promise<MessageResponse> => {
+    const formData = new FormData();
+    formData.append("content", payload.content);
+    if (payload.idempotencyKey) formData.append("idempotencyKey", payload.idempotencyKey);
+    if (payload.replyToMessageId != null) formData.append("replyToMessageId", String(payload.replyToMessageId));
+    payload.files.forEach((file) => formData.append("files", file));
+    const res = await chatFetch(`/chat/conversations/${conversationId}/messages/with-files`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Không thể gửi tin nhắn kèm tệp");
+    }
+    return res.json();
+  },
+
+  getDownloadUrl: async (url: string, name?: string): Promise<string> => {
+    const params = new URLSearchParams({ url });
+    if (name) params.set("name", name);
+    const res = await chatFetch(`/chat/downloads?${params.toString()}`);
+    if (!res.ok) throw new Error("Không thể tạo link tải");
+    const body = (await res.json()) as { url?: string };
+    if (!body?.url) throw new Error("Link tải không hợp lệ");
+    return body.url;
   },
 
   markAsRead: async (conversationId: number): Promise<void> => {

@@ -34,6 +34,7 @@ build/
 user-module/src/main/resources/application.properties
 auth-module/src/main/resources/application.properties
 api/src/main/resources/application.properties
+api/src/main/resources/application-dev.properties
 BACKEND_GUIDELINES.md
 user-module/MODULE_GUIDELINES.md
 auth-module/MODULE_GUIDELINES.md

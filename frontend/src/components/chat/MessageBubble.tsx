@@ -2,6 +2,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { MessageResponse } from "@/types/chat";
+import { decodeMessageContent, type ChatAttachmentKind } from "@/lib/chat/messageAttachment";
+import { chatApi } from "@/lib/api/chatApi";
 
 interface Props {
   message: MessageResponse;
@@ -53,11 +55,22 @@ export default function MessageBubble({
   const [editVal, setEditVal] = useState("");
   const [hovered, setHovered] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; kind: ChatAttachmentKind; name: string } | null>(null);
+  const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editing) return;
     editInputRef.current?.focus({ preventScroll: true });
   }, [editing]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightbox]);
 
   if (message.deleted) {
     return (
@@ -69,8 +82,20 @@ export default function MessageBubble({
     );
   }
 
+  const parsed = decodeMessageContent(message.content);
+  const textContent = parsed.text;
+  const attachments = parsed.attachments;
+  const isMediaOnly = attachments.length > 0 && !textContent.trim();
+  const isFileOnly =
+    attachments.length > 0 &&
+    !textContent.trim() &&
+    attachments.every((item) => item.kind === "file" || item.kind === "audio");
+  const isSingleImage = isMediaOnly && attachments.length === 1 && attachments[0].kind === "image";
+  const isSingleVideo = isMediaOnly && attachments.length === 1 && attachments[0].kind === "video";
+  const maxWidthClass = isSingleImage || isSingleVideo || isFileOnly ? "max-w-[92%] sm:max-w-[560px]" : "max-w-[78%]";
+
   const renderHighlightedContent = () => {
-    const content = message.content;
+    const content = textContent;
     const term = highlightTerm?.trim();
     if (!term) return content;
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -86,6 +111,25 @@ export default function MessageBubble({
         <span key={`${part}-${idx}`}>{part}</span>
       )
     );
+  };
+
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      setDownloadingUrl(url);
+      const signedUrl = await chatApi.getDownloadUrl(url, filename);
+      const anchor = document.createElement("a");
+      anchor.href = signedUrl;
+      anchor.download = filename || "attachment";
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch {
+      window.open(toDownloadUrl(url, filename), "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloadingUrl(null);
+    }
   };
 
   return (
@@ -107,7 +151,7 @@ export default function MessageBubble({
         </div>
       )}
 
-      <div className={`flex flex-col max-w-[78%] ${isOwn ? "items-end ml-10" : "items-start"}`}>
+      <div className={`flex flex-col ${maxWidthClass} ${isOwn ? "items-end ml-10" : "items-start"}`}>
         {editing ? (
           <div className="flex gap-2 items-center w-full">
             <input
@@ -139,11 +183,15 @@ export default function MessageBubble({
           </div>
         ) : (
           <div
-            className={`relative rounded-2xl text-sm break-words shadow-sm px-4 py-2.5 leading-relaxed
+            className={`relative break-words shadow-sm
             ${
-              isOwn
-                ? ownBubbleClassName || "bg-rose-500 text-white rounded-br-sm"
-                : peerBubbleClassName || "bg-slate-100 text-slate-800 rounded-bl-sm"
+              isSingleImage || isSingleVideo || isFileOnly
+                ? "bg-transparent"
+                : `rounded-2xl text-sm px-4 py-2.5 leading-relaxed ${
+                    isOwn
+                      ? ownBubbleClassName || "bg-rose-500 text-white rounded-br-sm"
+                      : peerBubbleClassName || "bg-slate-100 text-slate-800 rounded-bl-sm"
+                  }`
             }
             ${isActiveSearchHit ? "ring-2 ring-amber-300" : ""}`}
           >
@@ -154,13 +202,137 @@ export default function MessageBubble({
                   if (replyToMessageId) onJumpToReplyTarget?.(replyToMessageId);
                 }}
                 className={`cursor-pointer mb-1.5 w-full text-left text-[11px] rounded-lg px-2.5 py-1.5 border transition
-                ${isOwn ? "bg-rose-400/40 border-rose-300 text-rose-100 hover:bg-rose-400/55" : "bg-white/85 border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+                ${
+                  isSingleImage || isSingleVideo
+                    ? "bg-white/85 border-slate-200 text-slate-600 hover:bg-slate-50"
+                    : isOwn
+                      ? "bg-rose-400/40 border-rose-300 text-rose-100 hover:bg-rose-400/55"
+                      : "bg-white/85 border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
               >
-
                 {replyPreview}
               </button>
             )}
-            {renderHighlightedContent()}
+
+            {attachments.length > 0 ? (
+              isSingleImage || isSingleVideo ? (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLightbox({
+                        url: attachments[0].url,
+                        kind: attachments[0].kind,
+                        name: attachments[0].name,
+                      })
+                    }
+                    className="cursor-pointer w-full text-left"
+                    title="Mở ảnh/video"
+                  >
+                    {isSingleImage && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={attachments[0].url}
+                        alt={attachments[0].name}
+                        className="rounded-2xl w-full max-h-[70vh] object-contain border border-slate-200 bg-white"
+                      />
+                    )}
+                    {isSingleVideo && (
+                      <video
+                        src={attachments[0].url}
+                        controls
+                        className="rounded-2xl w-full max-h-[70vh] bg-black border border-slate-200"
+                      />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownload(attachments[0].url, attachments[0].name)}
+                    className="cursor-pointer absolute bottom-3 right-3 w-9 h-9 rounded-full bg-black/40 hover:bg-black/55 text-white flex items-center justify-center"
+                    title="Tải xuống"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4" strokeLinecap="round" strokeLinejoin="round">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 10l5 5 5-5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15V3" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {attachments.map((file) => (
+                    <div
+                      key={`${message.id}-${file.url}`}
+                      className={`rounded-xl border px-3 py-2.5 text-xs ${
+                        isFileOnly
+                          ? "border-slate-200 bg-white text-slate-700 shadow-sm min-w-[280px]"
+                          : isOwn
+                            ? "border-white/30 bg-white/15"
+                            : "border-slate-200 bg-white/90"
+                      }`}
+                    >
+                      {file.kind === "image" && (
+                        <button
+                          type="button"
+                          className="cursor-pointer w-full text-left"
+                          onClick={() => setLightbox({ url: file.url, kind: file.kind, name: file.name })}
+                          title="Mở ảnh"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={file.url} alt={file.name} className="mb-2 max-h-56 w-full rounded-md object-cover" />
+                        </button>
+                      )}
+                      {file.kind === "video" && (
+                        <video src={file.url} controls className="mb-2 max-h-56 w-full rounded-md bg-black/80" />
+                      )}
+                      {file.kind === "audio" && <audio src={file.url} controls className="mb-2 w-full" />}
+                      {(file.kind === "file" || file.kind === "audio") && (
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">📄</span>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-700">{file.name}</div>
+                            <div className="text-[11px] text-slate-400">Tệp đính kèm</div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-1 flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => void handleDownload(file.url, file.name)}
+                          className={`cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                            isFileOnly
+                              ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                              : isOwn
+                                ? "bg-white/20 hover:bg-white/30 text-white"
+                                : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                          }`}
+                          title="Tải xuống"
+                          disabled={downloadingUrl === file.url}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="w-4 h-4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7 10l5 5 5-5" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15V3" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {textContent && <div>{renderHighlightedContent()}</div>}
+                </div>
+              )
+            ) : (
+              renderHighlightedContent()
+            )}
             {message.editedAt && (
               <span className={`text-[10px] ml-1.5 ${isOwn ? "text-rose-200" : "text-slate-400"}`}>
                 (đã sửa)
@@ -237,7 +409,58 @@ export default function MessageBubble({
             </div>
           )}
         </div>
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative w-full max-w-[980px]" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setLightbox(null)}
+              className="cursor-pointer absolute -top-3 right-0 bg-white rounded-full shadow w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-50"
+              title="Đóng"
+            >
+              ×
+            </button>
+            {lightbox.kind === "image" && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={lightbox.url}
+                alt={lightbox.name}
+                className="w-full max-h-[78vh] object-contain rounded-2xl bg-black"
+              />
+            )}
+            {lightbox.kind === "video" && (
+              <video src={lightbox.url} controls className="w-full max-h-[78vh] rounded-2xl bg-black" />
+            )}
+            {lightbox.kind !== "image" && lightbox.kind !== "video" && (
+              <a href={lightbox.url} className="text-white underline" download>
+                Tải xuống {lightbox.name}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
+}
+
+function toDownloadUrl(url: string, filename: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("res.cloudinary.com")) {
+      const parts = parsed.pathname.split("/upload/");
+      if (parts.length === 2) {
+        const transformed = `${parts[0]}/upload/fl_attachment:${encodeURIComponent(filename || "attachment")}/${parts[1]}`;
+        return `${parsed.origin}${transformed}`;
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }

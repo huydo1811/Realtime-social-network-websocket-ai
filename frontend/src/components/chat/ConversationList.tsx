@@ -7,6 +7,7 @@ import { chatApi } from "@/lib/api/chatApi";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { getMyProfile } from "@/lib/api/authApi";
 import ConversationItem from "./ConversationItem";
+import { decodeMessageContent } from "@/lib/chat/messageAttachment";
 
 interface Props {
   conversations: ConversationResponse[];
@@ -170,9 +171,13 @@ export default function ConversationList({
       lastMessageAt?: string;
       lastMessage?: { content?: string; createdAt?: string };
     };
-    const preview = data.lastMessageContent || data.lastMessage?.content || "";
+    const raw = data.lastMessageContent || data.lastMessage?.content || "";
+    const decoded = decodeMessageContent(raw);
+
+    const hasImageAttachment = decoded.attachments.some((a) => a.kind === "image");
+    const preview = hasImageAttachment ? "Hình ảnh" : decoded.text;
     const time = data.lastMessageAt || data.lastMessage?.createdAt || "";
-    return { preview, time };
+    return { preview, time, hasImageAttachment };
   };
 
   return (
@@ -241,7 +246,7 @@ export default function ConversationList({
             const otherId = c.memberIds.find((id) => id !== currentUserId);
             const resolvedName =
               c.type === "GROUP" ? c.name || "Nhóm chat" : otherId ? userNames[otherId] : undefined;
-            const { preview, time } = getConversationPreview(c);
+            const { preview, time, hasImageAttachment } = getConversationPreview(c);
 
             return (
               <ConversationItem
@@ -251,6 +256,7 @@ export default function ConversationList({
                 currentUserId={currentUserId}
                 resolvedName={c.nickname?.trim() || resolvedName}
                 preview={preview}
+                hasImagePreview={hasImageAttachment}
                 timeLabel={formatTime(time)}
                 isOnline={Boolean(otherId && presenceMap[otherId]?.online)}
                 onClick={() => onSelect(c)}

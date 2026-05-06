@@ -9,6 +9,7 @@ interface Props {
   onClick: () => void;
   resolvedName?: string;
   preview?: string;
+  hasImagePreview?: boolean;
   timeLabel?: string;
   isOnline?: boolean;
 }
@@ -43,6 +44,7 @@ export default function ConversationItem({
   onClick,
   resolvedName,
   preview,
+  hasImagePreview = false,
   timeLabel,
   isOnline = false,
 }: Props) {
@@ -101,9 +103,17 @@ export default function ConversationItem({
           </p>
           {timeLabel && <span className="text-[10px] text-slate-400">{timeLabel}</span>}
         </div>
-        <p className={`text-xs truncate mt-0.5 ${unread > 0 ? "text-slate-700 font-medium" : "text-slate-400"}`}>
-          {preview || (conversation.type === "GROUP" ? `${conversation.memberIds.length} thành viên` : "Tin nhắn riêng tư")}
-        </p>
+        <div className={`mt-0.5 flex items-center gap-1.5 min-w-0 ${unread > 0 ? "text-slate-700 font-medium" : "text-slate-400"}`}>
+          {hasImagePreview && (
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" className="flex-shrink-0" viewBox="0 0 16 16">
+              <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
+              <path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2zm13 1a.5.5 0 0 1 .5.5v6l-3.775-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12v.54L1 12.5v-9a.5.5 0 0 1 .5-.5z"/>
+            </svg>
+          )}
+          <p className="text-xs truncate min-w-0">
+            {preview || (conversation.type === "GROUP" ? `${conversation.memberIds.length} thành viên` : "Tin nhắn riêng tư")}
+          </p>
+        </div>
       </div>
     </button>
   );

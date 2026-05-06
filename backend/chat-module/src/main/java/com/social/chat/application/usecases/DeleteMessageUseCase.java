@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.social.chat.application.services.ChatPermissionService;
+import com.social.chat.application.services.ChatMediaUploadService;
 import com.social.chat.domain.entities.ChatMessage;
 import com.social.chat.domain.events.ChatEventPublisher;
 import com.social.chat.domain.events.ChatRealtimeEvent;
@@ -21,15 +22,18 @@ public class DeleteMessageUseCase {
     private final ChatMessageRepository messageRepository;
     private final ChatConversationRepository conversationRepository;
     private final ChatPermissionService permissionService;
+    private final ChatMediaUploadService chatMediaUploadService;
     private final ChatEventPublisher eventPublisher;
 
     public DeleteMessageUseCase(ChatMessageRepository messageRepository,
                                 ChatConversationRepository conversationRepository,
                                 ChatPermissionService permissionService,
+                                ChatMediaUploadService chatMediaUploadService,
                                 ChatEventPublisher eventPublisher) {
         this.messageRepository = messageRepository;
         this.conversationRepository = conversationRepository;
         this.permissionService = permissionService;
+        this.chatMediaUploadService = chatMediaUploadService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -43,8 +47,10 @@ public class DeleteMessageUseCase {
             .orElseThrow(() -> new ConversationNotFoundException(conversationId));
         permissionService.ensureConversationMember(conversation, actorId);
 
+        String oldContent = message.getContent();
         message.deleteBy(actorId);
         ChatMessage saved = messageRepository.save(message);
+        chatMediaUploadService.deleteAssetsFromMessageContent(oldContent);
 
         ChatRealtimeEvent event = new ChatRealtimeEvent();
         event.setEventId(UUID.randomUUID().toString());

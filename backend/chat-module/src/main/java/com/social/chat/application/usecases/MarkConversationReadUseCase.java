@@ -9,13 +9,17 @@ import com.social.chat.domain.repositories.ChatMessageRepository;
 public class MarkConversationReadUseCase {
 
     private final ChatMessageRepository messageRepository;
+    private final UpdateConversationReadStatusUseCase updateConversationReadStatusUseCase;
 
-    public MarkConversationReadUseCase(ChatMessageRepository messageRepository) {
+    public MarkConversationReadUseCase(ChatMessageRepository messageRepository,
+                                       UpdateConversationReadStatusUseCase updateConversationReadStatusUseCase) {
         this.messageRepository = messageRepository;
+        this.updateConversationReadStatusUseCase = updateConversationReadStatusUseCase;
     }
 
     @Transactional
     public void execute(Long conversationId, Long actorId) {
         messageRepository.markAllAsRead(conversationId, actorId);
+        updateConversationReadStatusUseCase.execute(conversationId, actorId);
     }
 }

@@ -1,5 +1,10 @@
 import { getAuthTokens, saveAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
-import { ConversationResponse, MessageResponse } from "@/types/chat";
+import {
+  ConversationReadStatusResponse,
+  ConversationResponse,
+  MessageResponse,
+  UserPresenceResponse,
+} from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
@@ -107,6 +112,12 @@ export const chatApi = {
     if (!res.ok) throw new Error("Không thể đánh dấu đã đọc");
   },
 
+  getConversationReadStatuses: async (conversationId: number): Promise<ConversationReadStatusResponse[]> => {
+    const res = await chatFetch(`/chat/conversations/${conversationId}/read-statuses`);
+    if (!res.ok) throw new Error("Không thể tải read receipt");
+    return res.json();
+  },
+
   editMessage: async (messageId: number, content: string): Promise<MessageResponse> => {
     const res = await chatFetch(`/chat/messages/${messageId}`, {
       method: "PUT",
@@ -133,5 +144,23 @@ export const chatApi = {
       body: JSON.stringify({ typing }),
     });
     if (!res.ok) throw new Error("Không thể cập nhật trạng thái đang nhập");
+  },
+
+  heartbeatPresence: async (online = true): Promise<UserPresenceResponse> => {
+    const res = await chatFetch("/chat/presence/heartbeat", {
+      method: "POST",
+      body: JSON.stringify({ online }),
+    });
+    if (!res.ok) throw new Error("Không thể cập nhật online/offline");
+    return res.json();
+  },
+
+  getPresence: async (userIds: number[]): Promise<UserPresenceResponse[]> => {
+    if (!userIds.length) return [];
+    const params = new URLSearchParams();
+    userIds.forEach((id) => params.append("userIds", String(id)));
+    const res = await chatFetch(`/chat/presence?${params.toString()}`);
+    if (!res.ok) throw new Error("Không thể tải trạng thái online");
+    return res.json();
   },
 };

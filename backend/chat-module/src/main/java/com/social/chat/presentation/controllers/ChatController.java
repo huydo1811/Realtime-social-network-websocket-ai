@@ -1,8 +1,8 @@
 package com.social.chat.presentation.controllers;
 
 import java.util.List;
+import java.util.Set;
 
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
@@ -31,14 +31,22 @@ import com.social.chat.application.usecases.ToggleMessageStarUseCase;
 import com.social.chat.application.usecases.PublishTypingStatusUseCase;
 import com.social.chat.application.usecases.AddConversationMemberUseCase;
 import com.social.chat.application.usecases.UpdateConversationAppearanceUseCase;
+import com.social.chat.application.usecases.UpdatePresenceHeartbeatUseCase;
+import com.social.chat.application.usecases.GetUserPresenceUseCase;
+import com.social.chat.application.usecases.GetConversationReadStatusesUseCase;
+import com.social.chat.domain.entities.ChatConversationReadStatus;
+import com.social.chat.domain.repositories.ChatRoomUserSettingRepository;
 import com.social.chat.presentation.dto.AddConversationMemberRequest;
+import com.social.chat.presentation.dto.ConversationReadStatusResponse;
 import com.social.chat.presentation.dto.ConversationResponse;
 import com.social.chat.presentation.dto.CreateConversationRequest;
 import com.social.chat.presentation.dto.EditMessageRequest;
 import com.social.chat.presentation.dto.MessageResponse;
+import com.social.chat.presentation.dto.PresenceHeartbeatRequest;
 import com.social.chat.presentation.dto.SendMessageRequest;
 import com.social.chat.presentation.dto.TypingStatusRequest;
 import com.social.chat.presentation.dto.UpdateConversationAppearanceRequest;
+import com.social.chat.presentation.dto.UserPresenceResponse;
 import com.social.chat.presentation.mapper.ChatPresentationMapper;
 import com.social.chat.application.usecases.MarkConversationReadUseCase;
 import jakarta.validation.Valid;
@@ -59,6 +67,10 @@ public class ChatController {
     private final ToggleMessageStarUseCase toggleMessageStarUseCase;
     private final PublishTypingStatusUseCase publishTypingStatusUseCase;
     private final UpdateConversationAppearanceUseCase updateConversationAppearanceUseCase;
+    private final UpdatePresenceHeartbeatUseCase updatePresenceHeartbeatUseCase;
+    private final GetUserPresenceUseCase getUserPresenceUseCase;
+    private final GetConversationReadStatusesUseCase getConversationReadStatusesUseCase;
+    private final ChatRoomUserSettingRepository roomUserSettingRepository;
     private final ChatPresentationMapper mapper;
     private final MarkConversationReadUseCase markConversationReadUseCase;
     public ChatController(CreateConversationUseCase createConversationUseCase,
@@ -73,6 +85,10 @@ public class ChatController {
         ToggleMessageStarUseCase toggleMessageStarUseCase,
         PublishTypingStatusUseCase publishTypingStatusUseCase,
         UpdateConversationAppearanceUseCase updateConversationAppearanceUseCase,
+        UpdatePresenceHeartbeatUseCase updatePresenceHeartbeatUseCase,
+        GetUserPresenceUseCase getUserPresenceUseCase,
+        GetConversationReadStatusesUseCase getConversationReadStatusesUseCase,
+        ChatRoomUserSettingRepository roomUserSettingRepository,
         MarkConversationReadUseCase markConversationReadUseCase,
         ChatPresentationMapper mapper) {
     this.createConversationUseCase = createConversationUseCase;
@@ -87,6 +103,10 @@ public class ChatController {
     this.toggleMessageStarUseCase = toggleMessageStarUseCase;
     this.publishTypingStatusUseCase = publishTypingStatusUseCase;
     this.updateConversationAppearanceUseCase = updateConversationAppearanceUseCase;
+    this.updatePresenceHeartbeatUseCase = updatePresenceHeartbeatUseCase;
+    this.getUserPresenceUseCase = getUserPresenceUseCase;
+    this.getConversationReadStatusesUseCase = getConversationReadStatusesUseCase;
+    this.roomUserSettingRepository = roomUserSettingRepository;
     this.markConversationReadUseCase = markConversationReadUseCase;
     this.mapper = mapper;
 }
@@ -97,7 +117,7 @@ public class ChatController {
         Long actorId = currentUserId();
         var conversation = createConversationUseCase.execute(actorId, request.getType(), request.getName(),
                 request.getParticipantIds(), request.getIdempotencyKey());
-        return ResponseEntity.ok(mapper.toConversationResponse(conversation));
+        return ResponseEntity.ok(applyUserSetting(mapper.toConversationResponse(conversation), actorId));
     }
 
     @GetMapping("/conversations")
@@ -108,9 +128,21 @@ public class ChatController {
         List<Long> conversationIds = conversations.stream().map(c -> c.getId()).toList();
         var unreadCounts = countUnreadMessagesUseCase.execute(conversationIds, actorId);
 
+        java.util.Map<Long, com.social.chat.domain.entities.ChatRoomUserSetting> settingsByConversationId =
+                roomUserSettingRepository.findByConversationIdsAndUserId(conversationIds, actorId).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                com.social.chat.domain.entities.ChatRoomUserSetting::getConversationId,
+                                s -> s));
+
         var response = conversations.stream().map(c -> {
             var res = mapper.toConversationResponse(c);
             res.setUnreadCount(unreadCounts.getOrDefault(c.getId(), 0));
+            var setting = settingsByConversationId.get(c.getId());
+            if (setting != null) {
+                res.setNickname(setting.getNickname());
+                res.setBubbleTheme(setting.getBubbleTheme());
+                res.setBackgroundTheme(setting.getBackgroundTheme());
+            }
             return res;
         }).toList();
 
@@ -121,7 +153,7 @@ public class ChatController {
     public ResponseEntity<ConversationResponse> getConversation(@PathVariable Long conversationId) {
         Long actorId = currentUserId();
         var conversation = getConversationDetailUseCase.execute(actorId, conversationId);
-        return ResponseEntity.ok(mapper.toConversationResponse(conversation));
+        return ResponseEntity.ok(applyUserSetting(mapper.toConversationResponse(conversation), actorId));
     }
 
     @PostMapping("/conversations/{conversationId}/members")
@@ -129,7 +161,7 @@ public class ChatController {
             @Valid @RequestBody AddConversationMemberRequest request) {
         Long actorId = currentUserId();
         var conversation = addConversationMemberUseCase.execute(actorId, conversationId, request.getMemberId());
-        return ResponseEntity.ok(mapper.toConversationResponse(conversation));
+        return ResponseEntity.ok(applyUserSetting(mapper.toConversationResponse(conversation), actorId));
     }
 
     @GetMapping("/conversations/{conversationId}/messages")
@@ -194,12 +226,45 @@ public class ChatController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/conversations/{conversationId}/read-statuses")
+    public ResponseEntity<List<ConversationReadStatusResponse>> getConversationReadStatuses(@PathVariable Long conversationId) {
+        Long actorId = currentUserId();
+        getConversationDetailUseCase.execute(actorId, conversationId);
+        List<ConversationReadStatusResponse> response = getConversationReadStatusesUseCase.execute(conversationId).stream()
+            .map(this::toConversationReadStatusResponse)
+            .toList();
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/conversations/{conversationId}/typing")
     public ResponseEntity<Void> publishTyping(@PathVariable Long conversationId,
                                               @RequestBody TypingStatusRequest request) {
         Long actorId = currentUserId();
         publishTypingStatusUseCase.execute(actorId, conversationId, request.isTyping());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/presence/heartbeat")
+    public ResponseEntity<UserPresenceResponse> heartbeatPresence(@RequestBody PresenceHeartbeatRequest request) {
+        Long actorId = currentUserId();
+        var presence = updatePresenceHeartbeatUseCase.execute(actorId, request.isOnline());
+        return ResponseEntity.ok(toUserPresenceResponse(presence.getUserId(), presence.getOnline(), presence.getLastSeenAt()));
+    }
+
+    @GetMapping("/presence")
+    public ResponseEntity<List<UserPresenceResponse>> getPresence(@RequestParam List<Long> userIds) {
+        currentUserId();
+        Set<Long> requestedUserIds = userIds.stream().filter(id -> id != null && id > 0).collect(java.util.stream.Collectors.toSet());
+        var statuses = getUserPresenceUseCase.execute(requestedUserIds);
+        java.time.LocalDateTime threshold = java.time.LocalDateTime.now().minusSeconds(45);
+        List<UserPresenceResponse> response = statuses.stream()
+            .map(p -> {
+                boolean online = Boolean.TRUE.equals(p.getOnline())
+                        && p.getLastSeenAt() != null
+                        && p.getLastSeenAt().isAfter(threshold);
+                return toUserPresenceResponse(p.getUserId(), online, p.getLastSeenAt());
+            }).toList();
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/conversations/{conversationId}/appearance")
@@ -213,6 +278,31 @@ public class ChatController {
                 request.getNickname(),
                 request.getBubbleTheme(),
                 request.getBackgroundTheme());
-        return ResponseEntity.ok(mapper.toConversationResponse(conversation));
+        return ResponseEntity.ok(applyUserSetting(mapper.toConversationResponse(conversation), actorId));
+    }
+
+    private ConversationReadStatusResponse toConversationReadStatusResponse(ChatConversationReadStatus status) {
+        ConversationReadStatusResponse response = new ConversationReadStatusResponse();
+        response.setUserId(status.getUserId());
+        response.setLastReadMessageId(status.getLastReadMessageId());
+        response.setReadAt(status.getReadAt());
+        return response;
+    }
+
+    private UserPresenceResponse toUserPresenceResponse(Long userId, Boolean online, java.time.LocalDateTime lastSeenAt) {
+        UserPresenceResponse response = new UserPresenceResponse();
+        response.setUserId(userId);
+        response.setOnline(Boolean.TRUE.equals(online));
+        response.setLastSeenAt(lastSeenAt);
+        return response;
+    }
+
+    private ConversationResponse applyUserSetting(ConversationResponse response, Long actorId) {
+        roomUserSettingRepository.findByConversationIdAndUserId(response.getId(), actorId).ifPresent(setting -> {
+            response.setNickname(setting.getNickname());
+            response.setBubbleTheme(setting.getBubbleTheme());
+            response.setBackgroundTheme(setting.getBackgroundTheme());
+        });
+        return response;
     }
 }

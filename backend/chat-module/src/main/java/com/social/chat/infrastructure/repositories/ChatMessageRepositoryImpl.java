@@ -62,4 +62,9 @@ public class ChatMessageRepositoryImpl implements ChatMessageRepository {
     public void markAllAsRead(Long conversationId, Long actorId) {
         jpaRepository.markAllAsRead(conversationId, actorId);
     }
+
+    @Override
+    public Long findLatestMessageId(Long conversationId) {
+        return jpaRepository.findLatestMessageId(conversationId);
+    }
 }

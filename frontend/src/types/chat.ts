@@ -27,6 +27,18 @@ export interface MessageResponse {
   starred?: boolean;
 }
 
+export interface ConversationReadStatusResponse {
+  userId: number;
+  lastReadMessageId: number | null;
+  readAt: string;
+}
+
+export interface UserPresenceResponse {
+  userId: number;
+  online: boolean;
+  lastSeenAt: string;
+}
+
 // Realtime event nhận từ STOMP
 export interface ChatRealtimeEvent {
   eventId: string;
@@ -36,7 +48,9 @@ export interface ChatRealtimeEvent {
     | "chat.message.deleted"
     | "chat.message.starred"
     | "chat.typing"
-    | "chat.conversation.appearance.updated";
+    | "chat.conversation.appearance.updated"
+    | "chat.conversation.read"
+    | "chat.user.presence";
   conversationId: number;
   messageId: number | null;
   senderId: number | null;
@@ -51,5 +65,10 @@ export interface ChatRealtimeEvent {
   bubbleTheme?: "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
   backgroundTheme?: "PLAIN" | "MESH" | "DOTS";
   notice?: string | null;
+  readerId?: number | null;
+  lastReadMessageId?: number | null;
+  targetUserId?: number | null;
+  online?: boolean;
+  lastSeenAt?: string | null;
   occurredAt: string;
 }

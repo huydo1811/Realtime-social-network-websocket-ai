@@ -21,6 +21,11 @@ public class ChatRealtimeEvent implements Serializable {
     private String backgroundTheme;
     private String notice;
     private LocalDateTime occurredAt;
+    private Long readerId;
+    private Long lastReadMessageId;
+    private Long targetUserId;
+    private Boolean online;
+    private LocalDateTime lastSeenAt;
 
     public ChatRealtimeEvent() {
     }
@@ -159,5 +164,45 @@ public class ChatRealtimeEvent implements Serializable {
 
     public void setNotice(String notice) {
         this.notice = notice;
+    }
+
+    public Long getReaderId() {
+        return readerId;
+    }
+
+    public void setReaderId(Long readerId) {
+        this.readerId = readerId;
+    }
+
+    public Long getLastReadMessageId() {
+        return lastReadMessageId;
+    }
+
+    public void setLastReadMessageId(Long lastReadMessageId) {
+        this.lastReadMessageId = lastReadMessageId;
+    }
+
+    public Long getTargetUserId() {
+        return targetUserId;
+    }
+
+    public void setTargetUserId(Long targetUserId) {
+        this.targetUserId = targetUserId;
+    }
+
+    public Boolean getOnline() {
+        return online;
+    }
+
+    public void setOnline(Boolean online) {
+        this.online = online;
+    }
+
+    public LocalDateTime getLastSeenAt() {
+        return lastSeenAt;
+    }
+
+    public void setLastSeenAt(LocalDateTime lastSeenAt) {
+        this.lastSeenAt = lastSeenAt;
     }
 }

@@ -15,6 +15,7 @@ interface Props {
   currentUserId: number;
   onSelect: (conv: ConversationResponse) => void;
   onConversationCreated?: (conv: ConversationResponse) => void;
+  presenceMap?: Record<number, { online: boolean; lastSeenAt: string }>;
 }
 
 export default function ConversationList({
@@ -24,6 +25,7 @@ export default function ConversationList({
   currentUserId,
   onSelect,
   onConversationCreated,
+  presenceMap = {},
 }: Props) {
   const [search, setSearch] = useState("");
   const [userNames, setUserNames] = useState<Record<number, string>>({});
@@ -250,6 +252,7 @@ export default function ConversationList({
                 resolvedName={c.nickname?.trim() || resolvedName}
                 preview={preview}
                 timeLabel={formatTime(time)}
+                isOnline={Boolean(otherId && presenceMap[otherId]?.online)}
                 onClick={() => onSelect(c)}
               />
             );

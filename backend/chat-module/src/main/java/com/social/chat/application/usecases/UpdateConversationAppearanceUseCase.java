@@ -9,21 +9,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.social.chat.application.services.ChatPermissionService;
 import com.social.chat.domain.entities.ChatConversation;
+import com.social.chat.domain.entities.ChatRoomUserSetting;
 import com.social.chat.domain.events.ChatRealtimeEvent;
 import com.social.chat.domain.exceptions.ConversationNotFoundException;
 import com.social.chat.domain.repositories.ChatConversationRepository;
+import com.social.chat.domain.repositories.ChatRoomUserSettingRepository;
 
 @Service
 public class UpdateConversationAppearanceUseCase {
 
     private final ChatConversationRepository conversationRepository;
+    private final ChatRoomUserSettingRepository roomUserSettingRepository;
     private final ChatPermissionService permissionService;
     private final ApplicationEventPublisher springEventPublisher;
 
     public UpdateConversationAppearanceUseCase(ChatConversationRepository conversationRepository,
+                                               ChatRoomUserSettingRepository roomUserSettingRepository,
                                                ChatPermissionService permissionService,
                                                ApplicationEventPublisher springEventPublisher) {
         this.conversationRepository = conversationRepository;
+        this.roomUserSettingRepository = roomUserSettingRepository;
         this.permissionService = permissionService;
         this.springEventPublisher = springEventPublisher;
     }
@@ -38,27 +43,29 @@ public class UpdateConversationAppearanceUseCase {
             .orElseThrow(() -> new ConversationNotFoundException(conversationId));
         permissionService.ensureConversationMember(conversation, actorId);
 
-        conversation.updateAppearance(nickname, bubbleTheme, backgroundTheme);
-        ChatConversation saved = conversationRepository.save(conversation);
+        ChatRoomUserSetting setting = roomUserSettingRepository.findByConversationIdAndUserId(conversationId, actorId)
+            .orElseGet(() -> ChatRoomUserSetting.create(conversationId, actorId));
+        setting.updateAppearance(nickname, bubbleTheme, backgroundTheme);
+        ChatRoomUserSetting saved = roomUserSettingRepository.save(setting);
 
         ChatRealtimeEvent event = new ChatRealtimeEvent();
         event.setEventId(UUID.randomUUID().toString());
         event.setEventName("chat.conversation.appearance.updated");
         event.setConversationId(conversationId);
         event.setSenderId(actorId);
+        event.setTargetUserId(actorId);
         event.setNickname(saved.getNickname());
         event.setBubbleTheme(saved.getBubbleTheme());
         event.setBackgroundTheme(saved.getBackgroundTheme());
         event.setNotice(buildNotice(saved));
         event.setOccurredAt(LocalDateTime.now());
         springEventPublisher.publishEvent(event);
-
-        return saved;
+        return conversation;
     }
 
-    private String buildNotice(ChatConversation conversation) {
-        String nickname = conversation.getNickname() == null ? "mặc định" : "\"" + conversation.getNickname() + "\"";
-        return "Đã cập nhật biệt danh " + nickname + ", màu bong bóng " + conversation.getBubbleTheme()
-            + " và nền " + conversation.getBackgroundTheme() + ".";
+    private String buildNotice(ChatRoomUserSetting setting) {
+        String nickname = setting.getNickname() == null ? "mặc định" : "\"" + setting.getNickname() + "\"";
+        return "Bạn đã cập nhật biệt danh " + nickname + ", màu bong bóng " + setting.getBubbleTheme()
+            + " và nền " + setting.getBackgroundTheme() + ".";
     }
 }

@@ -21,4 +21,6 @@ public interface ChatMessageRepository {
     java.util.Map<Long, Integer> countUnreadMessagesByConversationIds(java.util.Collection<Long> conversationIds, Long actorId);
 
     void markAllAsRead(Long conversationId, Long actorId);
+
+    Long findLatestMessageId(Long conversationId);
 }

@@ -6,8 +6,10 @@ import { getAuthTokens } from "@/lib/api/authToken";
 import { onRead } from "@/lib/event/chatEvents";
 import FloatingChatWindow from "@/components/chat/FloatingChatWindow";
 import { useRouter } from "next/navigation";
-import { initChatSocket, subscribeConversation } from "@/lib/socket/chatSocket";
+import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 import { getUserById } from "@/lib/api/userApi";
+import { UserPresenceResponse } from "@/types/chat";
+import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
 
 const GRADS = [
   "from-rose-400 to-pink-500",
@@ -41,6 +43,7 @@ export default function RightSidebar() {
   const [loading, setLoading] = useState(true);
   const [openChats, setOpenChats] = useState<ConversationResponse[]>([]);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
+  const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
 
   const openIds = useMemo(() => openChats.map((c) => c.id), [openChats]);
   const openIdsRef = useRef<number[]>([]);
@@ -52,6 +55,11 @@ export default function RightSidebar() {
       sessionStorage.removeItem("chat:openConversationIds");
     };
   }, [openIds]);
+
+  const contactIdsKey = useMemo(
+    () => contacts.map((c) => c.id).sort((a, b) => a - b).join(","),
+    [contacts]
+  );
 
   useEffect(() => {
     const tokens = getAuthTokens();
@@ -101,17 +109,52 @@ export default function RightSidebar() {
   }, [contacts, currentUserId, userNames]);
 
   useEffect(() => {
+    if (currentUserId == null || !contacts.length) return;
+    const peerIds = [
+      ...new Set(
+        contacts
+          .map((c) => c.memberIds.find((id) => id !== currentUserId))
+          .filter((id): id is number => typeof id === "number")
+      ),
+    ];
+    if (!peerIds.length) return;
+    chatApi
+      .getPresence(peerIds)
+      .then((list) => {
+        setPresenceMap((prev) => {
+          const next = { ...prev };
+          list.forEach((p) => {
+            next[p.userId] = p;
+          });
+          return next;
+        });
+      })
+      .catch(() => undefined);
+  }, [contactIdsKey, contacts, currentUserId]);
+
+  useEffect(() => {
+    initChatSocket();
+    const unsub = subscribePresence((ev) => {
+      if (ev.eventName !== "chat.user.presence" || ev.targetUserId == null) return;
+      setPresenceMap((prev) => ({
+        ...prev,
+        [ev.targetUserId!]: {
+          userId: ev.targetUserId!,
+          online: Boolean(ev.online),
+          lastSeenAt: ev.lastSeenAt || new Date().toISOString(),
+        },
+      }));
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     return onRead(({ conversationId }) => {
       setContacts((prev) =>
         prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
       );
     });
   }, []);
-
-  const contactIdsKey = useMemo(
-    () => contacts.map((c) => c.id).sort((a, b) => a - b).join(","),
-    [contacts]
-  );
 
   useEffect(() => {
     if (currentUserId == null || contacts.length === 0) return;
@@ -214,7 +257,11 @@ export default function RightSidebar() {
             ) : (
               contacts.slice(0, 8).map((c) => {
                 const otherId = c.memberIds.find((id) => id !== currentUserId);
-                const name = (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? c.id}`;
+                const fallbackName =
+                  (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? c.id}`;
+                const displayName = c.nickname?.trim() || fallbackName;
+                const presence = otherId != null ? presenceMap[otherId] : undefined;
+                const online = Boolean(presence?.online);
                 const isOpen = openChats.some((o) => o.id === c.id);
 
                 return (
@@ -227,12 +274,16 @@ export default function RightSidebar() {
                   >
                     <div className="relative flex-shrink-0">
                       <div
-                        className={`w-9 h-9 rounded-full bg-gradient-to-br ${grad(name)}
+                        className={`w-9 h-9 rounded-full bg-gradient-to-br ${grad(displayName)}
                           flex items-center justify-center text-white text-xs font-bold shadow-sm`}
                       >
-                        {name.charAt(0).toUpperCase()}
+                        {displayName.charAt(0).toUpperCase()}
                       </div>
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-white" />
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                          online ? "bg-green-400" : "bg-slate-400"
+                        }`}
+                      />
                       {c.unreadCount > 0 && (
                         <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none shadow">
                           {c.unreadCount > 9 ? "9+" : c.unreadCount}
@@ -246,9 +297,15 @@ export default function RightSidebar() {
                           isOpen ? "text-rose-600" : "text-slate-800 group-hover:text-slate-900"
                         } ${c.unreadCount > 0 ? "font-semibold" : ""}`}
                       >
-                        {name}
+                        {displayName}
                       </p>
-                      <p className="text-[11px] text-slate-400 truncate">Đang hoạt động</p>
+                      <p
+                        className={`text-[11px] truncate ${
+                          online ? "text-green-600 font-medium" : "text-slate-500"
+                        }`}
+                      >
+                        {online ? "Đang hoạt động" : formatLastActiveSubtitle(presence?.lastSeenAt)}
+                      </p>
                     </div>
                   </button>
                 );

@@ -3,12 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { chatApi } from "@/lib/api/chatApi";
-import { ConversationResponse } from "@/types/chat";
+import { ConversationResponse, UserPresenceResponse } from "@/types/chat";
 import ConversationList from "@/components/chat/ConversationList";
 import ChatWindow from "@/components/chat/ChatWindow";
 import LeftSidebar from "@/components/home/LeftSidebar";
 import { dispatchRead } from "@/lib/event/chatEvents";
-import { initChatSocket, subscribeConversation } from "@/lib/socket/chatSocket";
+import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 
 function parseUserIdFromToken(token: string): number | null {
   try {
@@ -35,6 +35,7 @@ export default function MessagesPage() {
   const [active, setActive] = useState<ConversationResponse | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [incomingBanner, setIncomingBanner] = useState<string | null>(null);
+  const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
   const activeIdRef = useRef<number | null>(null);
   const conversationIdsKey = useMemo(
     () => conversations.map((c) => c.id).sort((a, b) => a - b).join(","),
@@ -125,12 +126,14 @@ export default function MessagesPage() {
                     lastMessageAt: ev.createdAt || c.lastMessageAt,
                   }
                 : ev.eventName === "chat.conversation.appearance.updated"
-                  ? {
-                      ...c,
-                      nickname: ev.nickname ?? c.nickname,
-                      bubbleTheme: ev.bubbleTheme ?? c.bubbleTheme,
-                      backgroundTheme: ev.backgroundTheme ?? c.backgroundTheme,
-                    }
+                  ? ev.targetUserId && ev.targetUserId !== currentUserId
+                    ? c
+                    : {
+                        ...c,
+                        nickname: ev.nickname ?? c.nickname,
+                        bubbleTheme: ev.bubbleTheme ?? c.bubbleTheme,
+                        backgroundTheme: ev.backgroundTheme ?? c.backgroundTheme,
+                      }
                   : c
           )
         );
@@ -140,6 +143,39 @@ export default function MessagesPage() {
       unsubs.forEach((u) => u());
     };
   }, [conversationIdsKey, currentUserId]);
+
+  useEffect(() => {
+    if (!conversations.length) return;
+    const ids = new Set<number>();
+    conversations.forEach((c) => c.memberIds.forEach((id) => ids.add(id)));
+    if (currentUserId != null) ids.delete(currentUserId);
+    if (!ids.size) return;
+    chatApi
+      .getPresence([...ids])
+      .then((list) => {
+        setPresenceMap((prev) => {
+          const next = { ...prev };
+          list.forEach((item) => (next[item.userId] = item));
+          return next;
+        });
+      })
+      .catch(() => undefined);
+  }, [conversations, currentUserId]);
+
+  useEffect(() => {
+    const unsub = subscribePresence((ev) => {
+      if (ev.eventName !== "chat.user.presence" || !ev.targetUserId) return;
+      setPresenceMap((prev) => ({
+        ...prev,
+        [ev.targetUserId!]: {
+          userId: ev.targetUserId!,
+          online: Boolean(ev.online),
+          lastSeenAt: ev.lastSeenAt || new Date().toISOString(),
+        },
+      }));
+    });
+    return () => unsub();
+  }, []);
 
   const promoteConversation = useCallback((conversationId: number, unreadDelta = 0) => {
     setConversations((prev) => {
@@ -241,6 +277,7 @@ export default function MessagesPage() {
         currentUserId={currentUserId}
         onSelect={handleSelect}
         onConversationCreated={handleConversationCreated}
+        presenceMap={presenceMap}
       />
     </div>
   );

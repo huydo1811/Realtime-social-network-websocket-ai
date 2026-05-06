@@ -1,12 +1,20 @@
 // frontend/src/components/chat/ChatWindow.tsx
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { chatApi } from "@/lib/api/chatApi";
-import { initChatSocket, subscribeConversation } from "@/lib/socket/chatSocket";
-import { ChatRealtimeEvent, ConversationResponse, MessageResponse } from "@/types/chat";
+import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
+import {
+  ChatRealtimeEvent,
+  ConversationReadStatusResponse,
+  ConversationResponse,
+  MessageResponse,
+  UserPresenceResponse,
+} from "@/types/chat";
 import { getUserById } from "@/lib/api/userApi";
 import ChatInput from "./ChatInput";
 import MessageBubble from "./MessageBubble";
+import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
+import { computeDeliveryFooterForMessage } from "@/lib/chat/deliveryFooterStatus";
 type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
 type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
@@ -82,6 +90,8 @@ export default function ChatWindow({
   const [peerTyping, setPeerTyping] = useState(false);
   const [viewMode, setViewMode] = useState<"CHAT" | "CUSTOMIZE">("CHAT");
   const [appearanceSaving, setAppearanceSaving] = useState(false);
+  const [readStatuses, setReadStatuses] = useState<ConversationReadStatusResponse[]>([]);
+  const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
   const [draftNickname, setDraftNickname] = useState(conversation.nickname || "");
   const [draftTheme, setDraftTheme] = useState<ChatTheme>(conversation.bubbleTheme || "ROSE");
   const [draftBackground, setDraftBackground] = useState<ChatBackground>(conversation.backgroundTheme || "PLAIN");
@@ -98,6 +108,8 @@ export default function ChatWindow({
   const prependingRef = useRef(false);
   const restoringScrollRef = useRef(false);
   const shouldStickBottomRef = useRef(true);
+  /** Tránh onScroll coi cuộn tự động là user kéo lên → tắt stick bottom */
+  const programmaticScrollRef = useRef(false);
 
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
   const bubbleTheme: ChatTheme = conversation.bubbleTheme || "ROSE";
@@ -107,6 +119,7 @@ export default function ChatWindow({
     (conversation.type === "GROUP"
       ? conversation.name || "Nhóm chat"
       : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`);
+  const otherPresence = otherId ? presenceMap[otherId] : undefined;
 
   const gradient = avatarGradient(displayName);
   const ownBubbleClassName =
@@ -137,6 +150,19 @@ export default function ChatWindow({
     return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
 
+  const scrollChatToBottom = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    programmaticScrollRef.current = true;
+    restoringScrollRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+      restoringScrollRef.current = false;
+      programmaticScrollRef.current = false;
+    });
+  }, []);
+
   const addOrUpdateMessage = useCallback((msg: MessageResponse) => {
     setMessages((prev) => {
       const idx = prev.findIndex((m) => m.id === msg.id);
@@ -162,12 +188,31 @@ export default function ChatWindow({
       const chronological = [...msgs].reverse();
       setMessages(chronological);
       setHasOlder(msgs.length >= PAGE_SIZE);
+      const statuses = await chatApi.getConversationReadStatuses(conversation.id).catch(() => []);
+      setReadStatuses(statuses);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
   }, [conversation.id]);
+
+  useEffect(() => {
+    const ids = conversation.memberIds.filter((id) => id !== currentUserId);
+    if (!ids.length) return;
+    chatApi
+      .getPresence(ids)
+      .then((items) => {
+        setPresenceMap((prev) => {
+          const next = { ...prev };
+          items.forEach((item) => {
+            next[item.userId] = item;
+          });
+          return next;
+        });
+      })
+      .catch(() => undefined);
+  }, [conversation.memberIds, currentUserId]);
 
   const loadOlder = useCallback(async () => {
     if (loadingOlderRef.current || restoringScrollRef.current || !hasOlder || messages.length === 0) return;
@@ -229,6 +274,7 @@ export default function ChatWindow({
     const el = listRef.current;
     if (!el) return;
     if (restoringScrollRef.current) return;
+    if (programmaticScrollRef.current) return;
 
     shouldStickBottomRef.current = isNearBottom();
     setShowJumpBottom(!shouldStickBottomRef.current);
@@ -335,6 +381,7 @@ export default function ChatWindow({
           }, 3200);
         }
       } else if (event.eventName === "chat.conversation.appearance.updated") {
+        if (event.targetUserId && event.targetUserId !== currentUserId) return;
         onConversationAppearanceUpdated?.({
           ...conversation,
           nickname: event.nickname ?? conversation.nickname,
@@ -355,6 +402,21 @@ export default function ChatWindow({
             starred: false,
           });
         }
+      } else if (event.eventName === "chat.conversation.read") {
+        const readerId = event.readerId;
+        if (!readerId) return;
+        setReadStatuses((prev) => {
+          const idx = prev.findIndex((x) => x.userId === readerId);
+          const nextItem: ConversationReadStatusResponse = {
+            userId: readerId,
+            lastReadMessageId: event.lastReadMessageId ?? null,
+            readAt: event.occurredAt,
+          };
+          if (idx < 0) return [...prev, nextItem];
+          const next = [...prev];
+          next[idx] = nextItem;
+          return next;
+        });
       }
     };
 
@@ -365,6 +427,44 @@ export default function ChatWindow({
   }, [addOrUpdateMessage, conversation, conversation.id, currentUserId, isNearBottom, onConversationAppearanceUpdated, onNewMessage, onOwnMessage]);
 
   useEffect(() => {
+    const unsub = subscribePresence((event) => {
+      if (event.eventName !== "chat.user.presence" || !event.targetUserId) return;
+      setPresenceMap((prev) => ({
+        ...prev,
+        [event.targetUserId!]: {
+          userId: event.targetUserId!,
+          online: Boolean(event.online),
+          lastSeenAt: event.lastSeenAt || new Date().toISOString(),
+        },
+      }));
+    });
+    return () => unsub();
+  }, []);
+
+  const getMessageStatus = useCallback(
+    (message: MessageResponse) =>
+      computeDeliveryFooterForMessage(message, {
+        currentUserId,
+        conversation,
+        readStatuses,
+        presenceMap,
+        userNames,
+      }),
+    [conversation, currentUserId, presenceMap, readStatuses, userNames]
+  );
+  const latestOwnMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg = messages[i];
+      if (msg.senderId === currentUserId && !msg.deleted) return msg;
+    }
+    return null;
+  }, [currentUserId, messages]);
+  const footerStatus = useMemo(
+    () => (latestOwnMessage ? getMessageStatus(latestOwnMessage) : null),
+    [getMessageStatus, latestOwnMessage]
+  );
+
+  useEffect(() => {
     return () => {
       if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
       if (typingStateRef.current) {
@@ -373,11 +473,29 @@ export default function ChatWindow({
     };
   }, [conversation.id]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (viewMode !== "CHAT") return;
+    if (loading) return;
     if (prependingRef.current) return;
     if (!shouldStickBottomRef.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [messages.length]);
+    if (messages.length === 0) return;
+
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollChatToBottom();
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [conversation.id, loading, messages.length, scrollChatToBottom, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "CHAT") return;
+    if (loading) return;
+    if (!shouldStickBottomRef.current) return;
+    if (messages.length === 0) return;
+    const t = window.setTimeout(() => scrollChatToBottom(), 80);
+    return () => window.clearTimeout(t);
+  }, [footerStatus, loading, messages.length, scrollChatToBottom, viewMode]);
 
   const handleSend = async (content: string) => {
     setSending(true);
@@ -391,6 +509,7 @@ export default function ChatWindow({
       addOrUpdateMessage(sent);
       setReplyTo(null);
       shouldStickBottomRef.current = true;
+      requestAnimationFrame(() => scrollChatToBottom());
       onOwnMessage?.(conversation.id);
     } catch (e) {
       console.error(e);
@@ -536,9 +655,35 @@ export default function ChatWindow({
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm leading-tight truncate text-slate-900">{displayName}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <span className={`w-2 h-2 rounded-full ${socketReady ? "bg-green-400" : "bg-amber-400"}`} />
-            <span className={`text-[11px] font-medium ${socketReady ? "text-green-500" : "text-amber-500"}`}>
-              {socketReady ? "Đang hoạt động" : "Đang kết nối..."}
+            <span
+              className={`w-2 h-2 rounded-full ${
+                conversation.type === "PRIVATE" && otherPresence
+                  ? otherPresence.online
+                    ? "bg-green-400"
+                    : "bg-slate-400"
+                  : socketReady
+                    ? "bg-green-400"
+                    : "bg-amber-400"
+              }`}
+            />
+            <span
+              className={`text-[11px] font-medium ${
+                conversation.type === "PRIVATE" && otherPresence
+                  ? otherPresence.online
+                    ? "text-green-500"
+                    : "text-slate-500"
+                  : socketReady
+                    ? "text-green-500"
+                    : "text-amber-500"
+              }`}
+            >
+              {conversation.type === "PRIVATE" && otherPresence
+                ? otherPresence.online
+                  ? "Đang hoạt động"
+                  : formatLastActiveSubtitle(otherPresence.lastSeenAt)
+                : socketReady
+                  ? "Đang hoạt động"
+                  : "Đang kết nối..."}
             </span>
           </div>
         </div>
@@ -623,11 +768,11 @@ export default function ChatWindow({
             <div className="mt-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-5">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Biệt danh</label>
+                  <label className="text-sm font-semibold text-slate-700">Biệt danh người này (chỉ bạn thấy)</label>
                   <input
                     value={draftNickname}
                     onChange={(e) => setDraftNickname(e.target.value)}
-                    placeholder="Đặt biệt danh cho cuộc trò chuyện"
+                    placeholder="Đặt tên riêng cho người này"
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
                   />
                 </div>
@@ -802,6 +947,12 @@ export default function ChatWindow({
           </div>
         )}
 
+        {footerStatus && (footerStatus.statusLabel || footerStatus.readByLabel) && (
+          <div className="px-6 pt-2 text-[11px] text-slate-400 text-right">
+            {footerStatus.statusLabel}
+            {footerStatus.readByLabel ? ` · ${footerStatus.readByLabel}` : ""}
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
       )}
@@ -811,7 +962,7 @@ export default function ChatWindow({
           type="button"
           onClick={() => {
             shouldStickBottomRef.current = true;
-            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            scrollChatToBottom();
             setShowJumpBottom(false);
           }}
           className="cursor-pointer absolute bottom-24 right-6 bg-rose-500 text-white text-xs px-3 py-2 rounded-full shadow-lg hover:bg-rose-600 transition"

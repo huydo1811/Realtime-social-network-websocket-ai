@@ -21,7 +21,7 @@ public class ChatRedisSubscriber {
     }
 
     public void onMessage(ChatRealtimeEvent event) {
-        if (event == null || event.getConversationId() == null) {
+        if (event == null) {
             return;
         }
 
@@ -30,7 +30,14 @@ public class ChatRedisSubscriber {
             return;
         }
 
-        String destination = "/topic/chat/conversations/" + event.getConversationId();
+        String destination;
+        if ("chat.user.presence".equals(event.getEventName())) {
+            destination = "/topic/chat/presence";
+        } else if (event.getConversationId() != null) {
+            destination = "/topic/chat/conversations/" + event.getConversationId();
+        } else {
+            return;
+        }
         messagingTemplate.convertAndSend(destination, event);
     }
 

@@ -30,4 +30,7 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessage, Lon
     @Modifying
     @Query("update ChatMessage m set m.isRead = true where m.conversation.id = :conversationId and m.senderId != :actorId and m.isRead = false")
     void markAllAsRead(@Param("conversationId") Long conversationId, @Param("actorId") Long actorId);
+
+    @Query("select max(m.id) from ChatMessage m where m.conversation.id = :conversationId")
+    Long findLatestMessageId(@Param("conversationId") Long conversationId);
 }

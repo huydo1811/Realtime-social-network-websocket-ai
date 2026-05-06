@@ -10,6 +10,8 @@ type Listener = (event: ChatRealtimeEvent) => void;
 let client: Client | null = null;
 const roomSubs = new Map<number, StompSubscription>();
 const roomListeners = new Map<number, Set<Listener>>();
+let presenceSub: StompSubscription | null = null;
+const presenceListeners = new Set<Listener>();
 const connectCallbacks = new Set<() => void>();
 
 function ensureConversationSub(conversationId: number) {
@@ -31,6 +33,18 @@ function rebindAllConversationSubs() {
   for (const conversationId of roomListeners.keys()) {
     ensureConversationSub(conversationId);
   }
+}
+
+function ensurePresenceSub() {
+  if (!client?.connected || presenceSub) return;
+  presenceSub = client.subscribe("/topic/chat/presence", (frame: IMessage) => {
+    try {
+      const event = JSON.parse(frame.body) as ChatRealtimeEvent;
+      presenceListeners.forEach((cb) => cb(event));
+    } catch {
+      console.error("[ChatSocket] Failed to parse presence event:", frame.body);
+    }
+  });
 }
 
 export function initChatSocket(
@@ -57,10 +71,12 @@ export function initChatSocket(
     heartbeatOutgoing: 10000,
     onConnect: () => {
       rebindAllConversationSubs();
+      ensurePresenceSub();
       connectCallbacks.forEach((cb) => cb());
     },
     onDisconnect: () => {
       roomSubs.clear();
+      presenceSub = null;
     },
     onStompError: (frame) => {
       console.error("[ChatSocket] STOMP error:", frame.headers["message"]);
@@ -114,10 +130,24 @@ export function disconnectChatSocket(): void {
   client?.deactivate();
   roomSubs.clear();
   roomListeners.clear();
+  presenceSub = null;
+  presenceListeners.clear();
   connectCallbacks.clear();
   client = null;
 }
 
 export function isChatSocketConnected(): boolean {
   return client?.connected ?? false;
+}
+
+export function subscribePresence(onEvent: Listener): () => void {
+  presenceListeners.add(onEvent);
+  ensurePresenceSub();
+  return () => {
+    presenceListeners.delete(onEvent);
+    if (presenceListeners.size === 0) {
+      presenceSub?.unsubscribe();
+      presenceSub = null;
+    }
+  };
 }

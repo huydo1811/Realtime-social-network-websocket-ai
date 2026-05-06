@@ -1,8 +1,16 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { chatApi } from "@/lib/api/chatApi";
-import { initChatSocket, subscribeConversation } from "@/lib/socket/chatSocket";
-import { ChatRealtimeEvent, ConversationResponse, MessageResponse } from "@/types/chat";
+import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
+import {
+  ChatRealtimeEvent,
+  ConversationReadStatusResponse,
+  ConversationResponse,
+  MessageResponse,
+  UserPresenceResponse,
+} from "@/types/chat";
+import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
+import { computeDeliveryFooterForMessage } from "@/lib/chat/deliveryFooterStatus";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { dispatchRead } from "@/lib/event/chatEvents";
 import { getUserById } from "@/lib/api/userApi";
@@ -65,6 +73,8 @@ export default function FloatingChatWindow({
   const [nickname, setNickname] = useState(conversation.nickname || "");
   const [bubbleTheme, setBubbleTheme] = useState<ChatTheme>(conversation.bubbleTheme || "ROSE");
   const [backgroundTheme, setBackgroundTheme] = useState<ChatBackground>(conversation.backgroundTheme || "PLAIN");
+  const [readStatuses, setReadStatuses] = useState<ConversationReadStatusResponse[]>([]);
+  const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -78,6 +88,7 @@ export default function FloatingChatWindow({
   const prependingRef = useRef(false);
   const restoringScrollRef = useRef(false);
   const shouldStickBottomRef = useRef(true);
+  const programmaticScrollRef = useRef(false);
 
   const currentUserId = parseUserId(getAuthTokens()?.accessToken ?? "") ?? -1;
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
@@ -87,6 +98,8 @@ export default function FloatingChatWindow({
     (conversation.type === "GROUP"
       ? conversation.name || "Nhóm"
       : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`);
+
+  const otherPresence = otherId != null ? presenceMap[otherId] : undefined;
 
   const gradient = grad(displayName);
   const ownBubbleClassName =
@@ -116,6 +129,19 @@ export default function FloatingChatWindow({
     const el = listRef.current;
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
+  const scrollChatToBottom = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    programmaticScrollRef.current = true;
+    restoringScrollRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+      restoringScrollRef.current = false;
+      programmaticScrollRef.current = false;
+    });
   }, []);
 
   const addOrUpdate = useCallback((msg: MessageResponse) => {
@@ -148,6 +174,8 @@ export default function FloatingChatWindow({
       const chronological = [...msgs].reverse();
       setMessages(chronological);
       setHasOlder(msgs.length >= PAGE_SIZE);
+      const statuses = await chatApi.getConversationReadStatuses(conversation.id).catch(() => []);
+      setReadStatuses(statuses);
     } catch (e) {
       console.error(e);
     } finally {
@@ -214,6 +242,7 @@ export default function FloatingChatWindow({
     const el = listRef.current;
     if (!el) return;
     if (restoringScrollRef.current) return;
+    if (programmaticScrollRef.current) return;
 
     shouldStickBottomRef.current = isNearBottom();
     setShowJumpBottom(!shouldStickBottomRef.current);
@@ -227,6 +256,23 @@ export default function FloatingChatWindow({
   useEffect(() => {
     void loadLatest();
   }, [loadLatest]);
+
+  useEffect(() => {
+    const ids = conversation.memberIds.filter((id) => id !== currentUserId);
+    if (!ids.length || currentUserId < 0) return;
+    chatApi
+      .getPresence(ids)
+      .then((items) => {
+        setPresenceMap((prev) => {
+          const next = { ...prev };
+          items.forEach((item) => {
+            next[item.userId] = item;
+          });
+          return next;
+        });
+      })
+      .catch(() => undefined);
+  }, [conversation.memberIds, currentUserId]);
 
   useEffect(() => {
     const ids = new Set<number>(conversation.memberIds);
@@ -266,6 +312,21 @@ export default function FloatingChatWindow({
     messageNodeRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" });
     setFocusedReplyTargetId(messageId);
     window.setTimeout(() => setFocusedReplyTargetId((prev) => (prev === messageId ? null : prev)), 1400);
+  }, []);
+
+  useEffect(() => {
+    const unsubPresence = subscribePresence((event) => {
+      if (event.eventName !== "chat.user.presence" || !event.targetUserId) return;
+      setPresenceMap((prev) => ({
+        ...prev,
+        [event.targetUserId!]: {
+          userId: event.targetUserId!,
+          online: Boolean(event.online),
+          lastSeenAt: event.lastSeenAt || new Date().toISOString(),
+        },
+      }));
+    });
+    return () => unsubPresence();
   }, []);
 
   useEffect(() => {
@@ -318,6 +379,7 @@ export default function FloatingChatWindow({
           }, 3200);
         }
       } else if (event.eventName === "chat.conversation.appearance.updated") {
+        if (event.targetUserId && event.targetUserId !== currentUserId) return;
         setNickname(event.nickname ?? "");
         setBubbleTheme((event.bubbleTheme as ChatTheme) || "ROSE");
         setBackgroundTheme((event.backgroundTheme as ChatBackground) || "PLAIN");
@@ -335,6 +397,21 @@ export default function FloatingChatWindow({
             starred: false,
           });
         }
+      } else if (event.eventName === "chat.conversation.read") {
+        const readerId = event.readerId;
+        if (!readerId) return;
+        setReadStatuses((prev) => {
+          const idx = prev.findIndex((x) => x.userId === readerId);
+          const nextItem: ConversationReadStatusResponse = {
+            userId: readerId,
+            lastReadMessageId: event.lastReadMessageId ?? null,
+            readAt: event.occurredAt,
+          };
+          if (idx < 0) return [...prev, nextItem];
+          const next = [...prev];
+          next[idx] = nextItem;
+          return next;
+        });
       }
     });
 
@@ -352,13 +429,6 @@ export default function FloatingChatWindow({
     };
   }, [conversation.id]);
 
-  useEffect(() => {
-    if (prependingRef.current) return;
-    if (minimized) return;
-    if (!shouldStickBottomRef.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [messages.length, minimized]);
-
   const handleSend = async () => {
     if (!inputVal.trim() || sending) return;
     const content = inputVal.trim();
@@ -372,6 +442,7 @@ export default function FloatingChatWindow({
       typingStateRef.current = false;
       void chatApi.sendTyping(conversation.id, false).catch(() => undefined);
       shouldStickBottomRef.current = true;
+      requestAnimationFrame(() => scrollChatToBottom());
     } catch (e) {
       console.error(e);
     } finally {
@@ -455,6 +526,55 @@ export default function FloatingChatWindow({
     return g;
   }, [filterMode, messages]);
 
+  const getMessageStatus = useCallback(
+    (message: MessageResponse) =>
+      computeDeliveryFooterForMessage(message, {
+        currentUserId,
+        conversation,
+        readStatuses,
+        presenceMap,
+        userNames,
+      }),
+    [conversation, currentUserId, presenceMap, readStatuses, userNames]
+  );
+  const latestOwnMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg = messages[i];
+      if (msg.senderId === currentUserId && !msg.deleted) return msg;
+    }
+    return null;
+  }, [currentUserId, messages]);
+  const footerStatus = useMemo(
+    () => (latestOwnMessage ? getMessageStatus(latestOwnMessage) : null),
+    [getMessageStatus, latestOwnMessage]
+  );
+
+  useLayoutEffect(() => {
+    if (viewMode !== "CHAT") return;
+    if (minimized) return;
+    if (loading) return;
+    if (prependingRef.current) return;
+    if (!shouldStickBottomRef.current) return;
+    if (messages.length === 0) return;
+
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollChatToBottom();
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [conversation.id, loading, messages.length, minimized, scrollChatToBottom, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "CHAT") return;
+    if (minimized) return;
+    if (loading) return;
+    if (!shouldStickBottomRef.current) return;
+    if (messages.length === 0) return;
+    const t = window.setTimeout(() => scrollChatToBottom(), 80);
+    return () => window.clearTimeout(t);
+  }, [footerStatus, loading, messages.length, minimized, scrollChatToBottom, viewMode]);
+
   return (
     <div
       className="fixed bottom-0 z-50 w-80 flex flex-col rounded-t-2xl shadow-2xl border border-slate-200 overflow-hidden bg-white"
@@ -469,7 +589,32 @@ export default function FloatingChatWindow({
         >
           {displayName.charAt(0).toUpperCase()}
         </div>
-        <p className="flex-1 font-semibold text-sm text-slate-900 truncate">{displayName}</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-slate-900 truncate">{displayName}</p>
+          {conversation.type === "PRIVATE" && otherId != null && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  otherPresence?.online ? "bg-green-400" : "bg-slate-400"
+                }`}
+              />
+              <span
+                className={`text-[10px] font-medium truncate ${
+                  otherPresence?.online ? "text-green-600" : "text-slate-500"
+                }`}
+              >
+                {otherPresence?.online
+                  ? "Đang hoạt động"
+                  : formatLastActiveSubtitle(otherPresence?.lastSeenAt)}
+              </span>
+            </div>
+          )}
+          {conversation.type === "GROUP" && (
+            <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+              {conversation.memberIds.length} thành viên
+            </p>
+          )}
+        </div>
 
         <button
           onClick={(e) => {
@@ -678,7 +823,7 @@ export default function FloatingChatWindow({
               type="button"
               onClick={() => {
                 shouldStickBottomRef.current = true;
-                bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+                scrollChatToBottom();
                 setShowJumpBottom(false);
               }}
               className="cursor-pointer absolute bottom-16 right-3 bg-rose-500 text-white text-[11px] px-2.5 py-1.5 rounded-full shadow hover:bg-rose-600 transition"
@@ -689,6 +834,12 @@ export default function FloatingChatWindow({
 
           <div className="px-3 py-2 bg-white border-t border-slate-100 flex items-center gap-2">
             <div className="flex-1">
+              {footerStatus && (footerStatus.statusLabel || footerStatus.readByLabel) && (
+                <div className="mb-1 text-[10px] text-slate-400 text-right">
+                  {footerStatus.statusLabel}
+                  {footerStatus.readByLabel ? ` · ${footerStatus.readByLabel}` : ""}
+                </div>
+              )}
               {replyTo && (
                 <div className="mb-1.5 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1 flex items-start gap-2">
                   <div className="w-1 self-stretch rounded-full bg-rose-300" />

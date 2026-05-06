@@ -7,6 +7,8 @@ import { ChatRealtimeEvent, ConversationResponse, MessageResponse } from "@/type
 import { getUserById } from "@/lib/api/userApi";
 import ChatInput from "./ChatInput";
 import MessageBubble from "./MessageBubble";
+type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
+type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
 interface Props {
   conversation: ConversationResponse;
@@ -14,6 +16,7 @@ interface Props {
   onBack?: () => void;
   onNewMessage?: (conversationId: number) => void;
   onOwnMessage?: (conversationId: number) => void;
+  onConversationAppearanceUpdated?: (conversation: ConversationResponse) => void;
 }
 
 const PAGE_SIZE = 30;
@@ -26,6 +29,26 @@ const GRADIENTS = [
   "from-teal-400 to-cyan-500",
   "from-fuchsia-400 to-pink-500",
   "from-indigo-400 to-blue-500",
+];
+const THEME_OPTIONS: Array<{ value: ChatTheme; label: string; previewClass: string }> = [
+  { value: "ROSE", label: "Rose", previewClass: "from-rose-400 to-pink-500" },
+  { value: "OCEAN", label: "Ocean", previewClass: "from-sky-400 to-blue-500" },
+  { value: "FOREST", label: "Forest", previewClass: "from-emerald-400 to-teal-500" },
+  { value: "SUNSET", label: "Sunset", previewClass: "from-orange-400 to-amber-500" },
+];
+const BACKGROUND_OPTIONS: Array<{ value: ChatBackground; label: string; previewClass: string }> = [
+  { value: "PLAIN", label: "Plain", previewClass: "bg-white" },
+  {
+    value: "MESH",
+    label: "Mesh",
+    previewClass:
+      "bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.14),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.14),transparent_35%),#ffffff]",
+  },
+  {
+    value: "DOTS",
+    label: "Dots",
+    previewClass: "bg-[radial-gradient(rgba(148,163,184,0.22)_1px,transparent_1px)] [background-size:10px_10px] bg-white",
+  },
 ];
 
 function avatarGradient(name: string) {
@@ -40,6 +63,7 @@ export default function ChatWindow({
   onBack,
   onNewMessage,
   onOwnMessage,
+  onConversationAppearanceUpdated,
 }: Props) {
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +80,11 @@ export default function ChatWindow({
   const [starPendingIds, setStarPendingIds] = useState<number[]>([]);
   const [focusedReplyTargetId, setFocusedReplyTargetId] = useState<number | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
+  const [viewMode, setViewMode] = useState<"CHAT" | "CUSTOMIZE">("CHAT");
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
+  const [draftNickname, setDraftNickname] = useState(conversation.nickname || "");
+  const [draftTheme, setDraftTheme] = useState<ChatTheme>(conversation.bubbleTheme || "ROSE");
+  const [draftBackground, setDraftBackground] = useState<ChatBackground>(conversation.backgroundTheme || "PLAIN");
   const typingTimerRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const typingStateRef = useRef<boolean>(false);
@@ -71,12 +100,36 @@ export default function ChatWindow({
   const shouldStickBottomRef = useRef(true);
 
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
+  const bubbleTheme: ChatTheme = conversation.bubbleTheme || "ROSE";
+  const background: ChatBackground = conversation.backgroundTheme || "PLAIN";
   const displayName =
-    conversation.type === "GROUP"
+    conversation.nickname?.trim() ||
+    (conversation.type === "GROUP"
       ? conversation.name || "Nhóm chat"
-      : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`;
+      : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`);
 
   const gradient = avatarGradient(displayName);
+  const ownBubbleClassName =
+    bubbleTheme === "OCEAN"
+      ? "bg-sky-600 text-white rounded-br-sm"
+      : bubbleTheme === "FOREST"
+        ? "bg-emerald-600 text-white rounded-br-sm"
+        : bubbleTheme === "SUNSET"
+          ? "bg-orange-500 text-white rounded-br-sm"
+          : "bg-rose-500 text-white rounded-br-sm";
+  const peerBubbleClassName = bubbleTheme === "OCEAN"
+    ? "bg-sky-50 text-slate-800 rounded-bl-sm border border-sky-100"
+    : bubbleTheme === "FOREST"
+      ? "bg-emerald-50 text-slate-800 rounded-bl-sm border border-emerald-100"
+      : bubbleTheme === "SUNSET"
+        ? "bg-amber-50 text-slate-800 rounded-bl-sm border border-amber-100"
+        : "bg-slate-100 text-slate-800 rounded-bl-sm";
+  const bodyBgClassName =
+    background === "MESH"
+      ? "bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.10),transparent_35%),#ffffff]"
+      : background === "DOTS"
+        ? "bg-[radial-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:12px_12px] bg-white"
+        : "bg-white";
 
   const isNearBottom = useCallback(() => {
     const el = listRef.current;
@@ -229,6 +282,7 @@ export default function ChatWindow({
   useEffect(() => {
     const handleEvent = (event: ChatRealtimeEvent) => {
       if (event.eventName === "chat.message.sent") {
+        if (event.messageId == null || event.senderId == null || !event.content || !event.createdAt) return;
         shouldStickBottomRef.current = isNearBottom();
 
         const msg: MessageResponse = {
@@ -253,9 +307,11 @@ export default function ChatWindow({
           onOwnMessage?.(event.conversationId);
         }
       } else if (event.eventName === "chat.message.edited") {
+        const editedContent = event.content;
+        if (event.messageId == null || editedContent == null) return;
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === event.messageId ? { ...m, content: event.content, editedAt: event.editedAt } : m
+            m.id === event.messageId ? { ...m, content: editedContent, editedAt: event.editedAt } : m
           )
         );
       } else if (event.eventName === "chat.message.deleted") {
@@ -278,6 +334,27 @@ export default function ChatWindow({
             setPeerTyping(false);
           }, 3200);
         }
+      } else if (event.eventName === "chat.conversation.appearance.updated") {
+        onConversationAppearanceUpdated?.({
+          ...conversation,
+          nickname: event.nickname ?? conversation.nickname,
+          bubbleTheme: event.bubbleTheme ?? conversation.bubbleTheme,
+          backgroundTheme: event.backgroundTheme ?? conversation.backgroundTheme,
+        });
+        if (event.notice) {
+          addOrUpdateMessage({
+            id: Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+            conversationId: conversation.id,
+            senderId: event.senderId ?? currentUserId,
+            content: `🔔 ${event.notice}`,
+            deleted: false,
+            createdAt: event.occurredAt || new Date().toISOString(),
+            editedAt: null,
+            deletedAt: null,
+            replyToMessageId: null,
+            starred: false,
+          });
+        }
       }
     };
 
@@ -285,7 +362,7 @@ export default function ChatWindow({
     return () => {
       unsub();
     };
-  }, [addOrUpdateMessage, conversation.id, currentUserId, isNearBottom, onNewMessage, onOwnMessage]);
+  }, [addOrUpdateMessage, conversation, conversation.id, currentUserId, isNearBottom, onConversationAppearanceUpdated, onNewMessage, onOwnMessage]);
 
   useEffect(() => {
     return () => {
@@ -404,13 +481,44 @@ export default function ChatWindow({
     [conversation.id]
   );
 
+  const saveAppearance = async (patch: { nickname?: string | null; bubbleTheme?: ChatTheme; backgroundTheme?: ChatBackground }) => {
+    setAppearanceSaving(true);
+    try {
+      const updated = await chatApi.updateConversationAppearance(conversation.id, {
+        nickname: patch.nickname ?? conversation.nickname ?? null,
+        bubbleTheme: patch.bubbleTheme ?? bubbleTheme,
+        backgroundTheme: patch.backgroundTheme ?? background,
+      });
+      onConversationAppearanceUpdated?.(updated);
+      setViewMode("CHAT");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAppearanceSaving(false);
+    }
+  };
+
+  const saveAllAppearance = async () => {
+    await saveAppearance({
+      nickname: draftNickname.trim() || null,
+      bubbleTheme: draftTheme,
+      backgroundTheme: draftBackground,
+    });
+  };
+
+  useEffect(() => {
+    setDraftNickname(conversation.nickname || "");
+    setDraftTheme(conversation.bubbleTheme || "ROSE");
+    setDraftBackground(conversation.backgroundTheme || "PLAIN");
+  }, [conversation.backgroundTheme, conversation.bubbleTheme, conversation.id, conversation.nickname]);
+
   return (
     <div className="relative flex flex-col h-full bg-white">
-      <div className="flex items-center gap-3 px-5 py-3.5 bg-white border-b border-slate-100 shadow-sm z-10">
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b shadow-sm z-10 bg-white border-slate-100">
         {onBack && (
           <button
             onClick={onBack}
-            className="md:hidden -ml-1 p-2 rounded-full hover:bg-slate-100 text-slate-500 transition"
+            className="md:hidden -ml-1 p-2 rounded-full transition hover:bg-slate-100 text-slate-500"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -426,7 +534,7 @@ export default function ChatWindow({
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-slate-900 text-sm leading-tight truncate">{displayName}</p>
+          <p className="font-bold text-sm leading-tight truncate text-slate-900">{displayName}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className={`w-2 h-2 rounded-full ${socketReady ? "bg-green-400" : "bg-amber-400"}`} />
             <span className={`text-[11px] font-medium ${socketReady ? "text-green-500" : "text-amber-500"}`}>
@@ -435,13 +543,15 @@ export default function ChatWindow({
           </div>
         </div>
         <div className="w-64 hidden sm:flex items-center gap-1">
-          <input
+          {viewMode === "CHAT" && (
+            <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Tìm trong cuộc trò chuyện..."
-            className="flex-1 px-3 py-1.5 text-xs rounded-full bg-slate-100 border border-slate-200 outline-none focus:ring-2 focus:ring-rose-100"
-          />
-          {searchTerm.trim() && (
+            className="flex-1 px-3 py-1.5 text-xs rounded-full border outline-none bg-slate-100 border-slate-200 focus:ring-2 focus:ring-rose-100"
+            />
+          )}
+          {viewMode === "CHAT" && searchTerm.trim() && (
             <>
               <span className="text-[10px] text-slate-500 px-1">
                 {matchedMessageIds.length ? `${activeMatchIdx + 1}/${matchedMessageIds.length}` : "0/0"}
@@ -470,9 +580,18 @@ export default function ChatWindow({
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => setViewMode((prev) => (prev === "CHAT" ? "CUSTOMIZE" : "CHAT"))}
+            className="cursor-pointer ml-1 p-1.5 rounded-full transition text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+            title={viewMode === "CHAT" ? "Tùy chỉnh cuộc trò chuyện" : "Quay lại chat"}
+          >
+            {viewMode === "CHAT" ? "⚙" : "←"}
+          </button>
         </div>
       </div>
-      <div className="px-4 py-2 border-b border-slate-100 bg-white flex items-center gap-1 overflow-x-auto">
+      {viewMode === "CHAT" && (
+      <div className="px-4 py-2 border-b flex items-center gap-1 overflow-x-auto border-slate-100 bg-white">
         {(["ALL", "MEDIA", "FILES", "LINKS", "STARRED"] as const).map((mode) => (
           <button
             key={mode}
@@ -486,8 +605,98 @@ export default function ChatWindow({
           </button>
         ))}
       </div>
+      )}
 
-      <div ref={listRef} onScroll={onScroll} className="flex-1 overflow-y-auto bg-white px-2 py-4">
+      {viewMode === "CUSTOMIZE" ? (
+        <div className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-5 sm:p-7">
+          <div className="max-w-3xl mx-auto rounded-[28px] border border-slate-200 bg-white p-5 sm:p-7 shadow-[0_12px_40px_-20px_rgba(15,23,42,0.35)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Tùy chỉnh cuộc trò chuyện</h2>
+                <p className="text-sm text-slate-500 mt-1">Cập nhật biệt danh, màu bong bóng và hình nền theo phong cách hiện đại.</p>
+              </div>
+              <div className={`h-10 min-w-10 px-3 rounded-full text-xs font-semibold flex items-center justify-center ${appearanceSaving ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>
+                {appearanceSaving ? "Đang lưu" : "Sẵn sàng"}
+              </div>
+            </div>
+
+            <div className="mt-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-5">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Biệt danh</label>
+                  <input
+                    value={draftNickname}
+                    onChange={(e) => setDraftNickname(e.target.value)}
+                    placeholder="Đặt biệt danh cho cuộc trò chuyện"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Màu bong bóng</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {THEME_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setDraftTheme(option.value)}
+                        className={`rounded-2xl border p-2 transition ${draftTheme === option.value ? "border-rose-300 ring-2 ring-rose-100 bg-rose-50/50" : "border-slate-200 hover:border-slate-300"}`}
+                      >
+                        <div className={`h-8 rounded-xl bg-gradient-to-r ${option.previewClass}`} />
+                        <p className="text-[11px] font-semibold text-slate-700 mt-1.5">{option.label}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Nền đoạn chat</label>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {BACKGROUND_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setDraftBackground(option.value)}
+                        className={`rounded-2xl border p-2 transition ${draftBackground === option.value ? "border-rose-300 ring-2 ring-rose-100 bg-rose-50/50" : "border-slate-200 hover:border-slate-300"}`}
+                      >
+                        <div className={`h-8 rounded-xl border border-slate-200 ${option.previewClass}`} />
+                        <p className="text-[11px] font-semibold text-slate-700 mt-1.5">{option.label}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Xem trước</p>
+                <div className={`rounded-2xl border border-slate-200 p-3 space-y-2 min-h-44 ${draftBackground === "MESH" ? "bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.10),transparent_35%),#ffffff]" : draftBackground === "DOTS" ? "bg-[radial-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:12px_12px] bg-white" : "bg-white"}`}>
+                  <div className="flex justify-start">
+                    <div className="rounded-2xl rounded-bl-sm px-3 py-2 text-xs border border-slate-200 bg-slate-100 text-slate-700">Xin chao, day la preview.</div>
+                  </div>
+                  <div className="flex justify-end">
+                    <div className={`rounded-2xl rounded-br-sm px-3 py-2 text-xs text-white ${draftTheme === "OCEAN" ? "bg-sky-600" : draftTheme === "FOREST" ? "bg-emerald-600" : draftTheme === "SUNSET" ? "bg-orange-500" : "bg-rose-500"}`}>Giao dien moi trong dep hon.</div>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-3">
+                  Tên hiển thị: <span className="font-semibold text-slate-700">{draftNickname.trim() || displayName}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button className="cursor-pointer px-4 py-2.5 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 transition" onClick={() => setViewMode("CHAT")}>Hủy</button>
+              <button
+                className="cursor-pointer px-4 py-2.5 text-sm rounded-xl bg-rose-500 text-white disabled:opacity-60 hover:bg-rose-600 transition"
+                disabled={appearanceSaving}
+                onClick={() => void saveAllAppearance()}
+              >
+                {appearanceSaving ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+      <div ref={listRef} onScroll={onScroll} className={`flex-1 overflow-y-auto px-2 py-4 ${bodyBgClassName}`}>
         {loadingOlder && (
           <div className="flex justify-center pb-2">
             <div className="w-5 h-5 border-2 border-rose-300 border-t-rose-500 rounded-full animate-spin" />
@@ -498,7 +707,9 @@ export default function ChatWindow({
           <div className="space-y-3 px-3 py-2 animate-pulse">
             {[...Array(6)].map((_, idx) => (
               <div key={idx} className={`flex ${idx % 2 ? "justify-end" : "justify-start"}`}>
-                <div className={`h-10 rounded-2xl ${idx % 2 ? "w-52 bg-rose-100" : "w-40 bg-slate-100"}`} />
+                <div
+                  className={`rounded-2xl ${idx % 2 ? "w-52 bg-rose-100" : "w-40 bg-slate-100"} h-10`}
+                />
               </div>
             ))}
           </div>
@@ -567,6 +778,8 @@ export default function ChatWindow({
                         }}
                         onEdit={isOwn ? handleEdit : undefined}
                         onDelete={isOwn ? handleDelete : undefined}
+                        ownBubbleClassName={ownBubbleClassName}
+                        peerBubbleClassName={peerBubbleClassName}
                       />
                     </div>
                   );
@@ -579,7 +792,7 @@ export default function ChatWindow({
         {peerTyping && (
           <div className="flex items-end justify-start px-3 py-1">
             <div className="w-8 mr-2 flex-shrink-0" />
-            <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm">
+            <div className="rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm border bg-slate-100 border-slate-200">
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:120ms]" />
@@ -591,6 +804,7 @@ export default function ChatWindow({
 
         <div ref={bottomRef} />
       </div>
+      )}
 
       {showJumpBottom && (
         <button

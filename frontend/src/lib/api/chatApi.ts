@@ -64,6 +64,18 @@ export const chatApi = {
     return res.json();
   },
 
+  updateConversationAppearance: async (
+    conversationId: number,
+    payload: { nickname?: string | null; bubbleTheme?: string; backgroundTheme?: string }
+  ): Promise<ConversationResponse> => {
+    const res = await chatFetch(`/chat/conversations/${conversationId}/appearance`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("Khong the cap nhat giao dien cuoc tro chuyen");
+    return res.json();
+  },
+
   getMessages: async (
     conversationId: number,
     cursorId?: number,

@@ -12,6 +12,9 @@ public class ConversationResponse {
     private Set<Long> memberIds;
     private LocalDateTime createdAt;
     private int unreadCount;
+    private String nickname;
+    private String bubbleTheme;
+    private String backgroundTheme;
 
     public int getUnreadCount() {
         return unreadCount;
@@ -59,5 +62,29 @@ public class ConversationResponse {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public void setNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public String getBubbleTheme() {
+        return bubbleTheme;
+    }
+
+    public void setBubbleTheme(String bubbleTheme) {
+        this.bubbleTheme = bubbleTheme;
+    }
+
+    public String getBackgroundTheme() {
+        return backgroundTheme;
+    }
+
+    public void setBackgroundTheme(String backgroundTheme) {
+        this.backgroundTheme = backgroundTheme;
     }
 }

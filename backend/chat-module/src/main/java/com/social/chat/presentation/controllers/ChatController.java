@@ -30,6 +30,7 @@ import com.social.chat.application.usecases.SendMessageUseCase;
 import com.social.chat.application.usecases.ToggleMessageStarUseCase;
 import com.social.chat.application.usecases.PublishTypingStatusUseCase;
 import com.social.chat.application.usecases.AddConversationMemberUseCase;
+import com.social.chat.application.usecases.UpdateConversationAppearanceUseCase;
 import com.social.chat.presentation.dto.AddConversationMemberRequest;
 import com.social.chat.presentation.dto.ConversationResponse;
 import com.social.chat.presentation.dto.CreateConversationRequest;
@@ -37,6 +38,7 @@ import com.social.chat.presentation.dto.EditMessageRequest;
 import com.social.chat.presentation.dto.MessageResponse;
 import com.social.chat.presentation.dto.SendMessageRequest;
 import com.social.chat.presentation.dto.TypingStatusRequest;
+import com.social.chat.presentation.dto.UpdateConversationAppearanceRequest;
 import com.social.chat.presentation.mapper.ChatPresentationMapper;
 import com.social.chat.application.usecases.MarkConversationReadUseCase;
 import jakarta.validation.Valid;
@@ -56,6 +58,7 @@ public class ChatController {
     private final CountUnreadMessagesUseCase countUnreadMessagesUseCase;
     private final ToggleMessageStarUseCase toggleMessageStarUseCase;
     private final PublishTypingStatusUseCase publishTypingStatusUseCase;
+    private final UpdateConversationAppearanceUseCase updateConversationAppearanceUseCase;
     private final ChatPresentationMapper mapper;
     private final MarkConversationReadUseCase markConversationReadUseCase;
     public ChatController(CreateConversationUseCase createConversationUseCase,
@@ -69,6 +72,7 @@ public class ChatController {
         CountUnreadMessagesUseCase countUnreadMessagesUseCase,
         ToggleMessageStarUseCase toggleMessageStarUseCase,
         PublishTypingStatusUseCase publishTypingStatusUseCase,
+        UpdateConversationAppearanceUseCase updateConversationAppearanceUseCase,
         MarkConversationReadUseCase markConversationReadUseCase,
         ChatPresentationMapper mapper) {
     this.createConversationUseCase = createConversationUseCase;
@@ -82,6 +86,7 @@ public class ChatController {
     this.countUnreadMessagesUseCase = countUnreadMessagesUseCase;
     this.toggleMessageStarUseCase = toggleMessageStarUseCase;
     this.publishTypingStatusUseCase = publishTypingStatusUseCase;
+    this.updateConversationAppearanceUseCase = updateConversationAppearanceUseCase;
     this.markConversationReadUseCase = markConversationReadUseCase;
     this.mapper = mapper;
 }
@@ -195,5 +200,19 @@ public class ChatController {
         Long actorId = currentUserId();
         publishTypingStatusUseCase.execute(actorId, conversationId, request.isTyping());
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/conversations/{conversationId}/appearance")
+    public ResponseEntity<ConversationResponse> updateConversationAppearance(
+            @PathVariable Long conversationId,
+            @Valid @RequestBody UpdateConversationAppearanceRequest request) {
+        Long actorId = currentUserId();
+        var conversation = updateConversationAppearanceUseCase.execute(
+                actorId,
+                conversationId,
+                request.getNickname(),
+                request.getBubbleTheme(),
+                request.getBackgroundTheme());
+        return ResponseEntity.ok(mapper.toConversationResponse(conversation));
     }
 }

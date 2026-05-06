@@ -42,13 +42,13 @@ export default function ChatInput({
   }, [onTypingChange, value]);
 
   return (
-    <div className="px-4 py-3 bg-white border-t border-slate-100">
+    <div className="px-4 py-3 border-t bg-white border-slate-100">
       {replyPreview && (
-        <div className="mb-2 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 flex items-start gap-2">
+        <div className="mb-2 rounded-xl px-3 py-2 flex items-start gap-2 border bg-rose-50 border-rose-100">
           <div className="w-1 self-stretch rounded-full bg-rose-300" />
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-rose-500 font-semibold">Đang trả lời</p>
-            <p className="text-xs text-slate-600 truncate">{replyPreview}</p>
+            <p className="text-[11px] font-semibold text-rose-500">Đang trả lời</p>
+            <p className="text-xs truncate text-slate-600">{replyPreview}</p>
           </div>
           <button
             type="button"
@@ -60,9 +60,7 @@ export default function ChatInput({
         </div>
       )}
       <div
-        className="flex items-end gap-3 bg-slate-50 rounded-2xl px-4 py-2
-          border border-slate-200 focus-within:border-rose-300
-          focus-within:ring-2 focus-within:ring-rose-100 transition-all"
+        className="flex items-end gap-3 rounded-2xl px-4 py-2 border transition-all bg-slate-50 border-slate-200 focus-within:border-rose-300 focus-within:ring-2 focus-within:ring-rose-100"
       >
         <textarea
           ref={ref}
@@ -77,8 +75,7 @@ export default function ChatInput({
           placeholder="Nhập tin nhắn… (Enter để gửi)"
           disabled={disabled}
           rows={1}
-          className="flex-1 bg-transparent resize-none outline-none text-sm
-            text-slate-800 placeholder-slate-400 max-h-30 py-1.5 leading-relaxed"
+          className="flex-1 bg-transparent resize-none outline-none text-sm max-h-30 py-1.5 leading-relaxed text-slate-800 placeholder-slate-400"
         />
         <button
           onClick={() => void handleSend()}

@@ -37,6 +37,15 @@ public class ChatConversation {
     @Column(name = "name")
     private String name;
 
+    @Column(name = "nickname")
+    private String nickname;
+
+    @Column(name = "bubble_theme", nullable = false)
+    private String bubbleTheme = "ROSE";
+
+    @Column(name = "background_theme", nullable = false)
+    private String backgroundTheme = "PLAIN";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -130,5 +139,23 @@ public class ChatConversation {
 
     public Set<Long> getMemberIds() {
         return Collections.unmodifiableSet(memberIds);
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public String getBubbleTheme() {
+        return bubbleTheme;
+    }
+
+    public String getBackgroundTheme() {
+        return backgroundTheme;
+    }
+
+    public void updateAppearance(String nextNickname, String nextBubbleTheme, String nextBackgroundTheme) {
+        this.nickname = nextNickname == null || nextNickname.isBlank() ? null : nextNickname.trim();
+        this.bubbleTheme = nextBubbleTheme == null || nextBubbleTheme.isBlank() ? "ROSE" : nextBubbleTheme.trim();
+        this.backgroundTheme = nextBackgroundTheme == null || nextBackgroundTheme.isBlank() ? "PLAIN" : nextBackgroundTheme.trim();
     }
 }

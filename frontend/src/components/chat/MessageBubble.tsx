@@ -19,6 +19,8 @@ interface Props {
   onToggleStar?: (messageId: number) => void;
   onEdit?: (id: number, content: string) => void;
   onDelete?: (id: number) => void;
+  ownBubbleClassName?: string;
+  peerBubbleClassName?: string;
 }
 
 function fmtTime(iso: string) {
@@ -44,6 +46,8 @@ export default function MessageBubble({
   onToggleStar,
   onEdit,
   onDelete,
+  ownBubbleClassName,
+  peerBubbleClassName,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState("");
@@ -58,7 +62,7 @@ export default function MessageBubble({
   if (message.deleted) {
     return (
       <div className={`flex ${isOwn ? "justify-end" : "justify-start"} px-3 py-0.5`}>
-        <span className="text-xs text-slate-400 italic bg-slate-50 rounded-2xl px-3 py-1.5 border border-slate-100">
+        <span className="text-xs italic rounded-2xl px-3 border text-slate-400 bg-slate-50 border-slate-100 py-1.5">
           Tin nhắn đã bị xóa
         </span>
       </div>
@@ -135,8 +139,12 @@ export default function MessageBubble({
           </div>
         ) : (
           <div
-            className={`relative px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm
-            ${isOwn ? "bg-rose-500 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"}
+            className={`relative rounded-2xl text-sm break-words shadow-sm px-4 py-2.5 leading-relaxed
+            ${
+              isOwn
+                ? ownBubbleClassName || "bg-rose-500 text-white rounded-br-sm"
+                : peerBubbleClassName || "bg-slate-100 text-slate-800 rounded-bl-sm"
+            }
             ${isActiveSearchHit ? "ring-2 ring-amber-300" : ""}`}
           >
             {replyPreview && (

@@ -17,6 +17,9 @@ public class ChatPresentationMapper {
         response.setName(conversation.getName());
         response.setMemberIds(conversation.getMemberIds());
         response.setCreatedAt(conversation.getCreatedAt());
+        response.setNickname(conversation.getNickname());
+        response.setBubbleTheme(conversation.getBubbleTheme());
+        response.setBackgroundTheme(conversation.getBackgroundTheme());
         return response;
     }
 

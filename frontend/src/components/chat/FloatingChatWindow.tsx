@@ -7,6 +7,8 @@ import { getAuthTokens } from "@/lib/api/authToken";
 import { dispatchRead } from "@/lib/event/chatEvents";
 import { getUserById } from "@/lib/api/userApi";
 import MessageBubble from "./MessageBubble";
+type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
+type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
 interface Props {
   conversation: ConversationResponse;
@@ -58,6 +60,11 @@ export default function FloatingChatWindow({
   const [focusedReplyTargetId, setFocusedReplyTargetId] = useState<number | null>(null);
   const [filterMode, setFilterMode] = useState<"ALL" | "MEDIA" | "FILES" | "LINKS" | "STARRED">("ALL");
   const [peerTyping, setPeerTyping] = useState(false);
+  const [viewMode, setViewMode] = useState<"CHAT" | "CUSTOMIZE">("CHAT");
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
+  const [nickname, setNickname] = useState(conversation.nickname || "");
+  const [bubbleTheme, setBubbleTheme] = useState<ChatTheme>(conversation.bubbleTheme || "ROSE");
+  const [backgroundTheme, setBackgroundTheme] = useState<ChatBackground>(conversation.backgroundTheme || "PLAIN");
 
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -76,11 +83,34 @@ export default function FloatingChatWindow({
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
 
   const displayName =
-    conversation.type === "GROUP"
+    nickname.trim() ||
+    (conversation.type === "GROUP"
       ? conversation.name || "Nhóm"
-      : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`;
+      : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`);
 
   const gradient = grad(displayName);
+  const ownBubbleClassName =
+    bubbleTheme === "OCEAN"
+      ? "bg-sky-600 text-white rounded-br-sm"
+      : bubbleTheme === "FOREST"
+        ? "bg-emerald-600 text-white rounded-br-sm"
+        : bubbleTheme === "SUNSET"
+          ? "bg-orange-500 text-white rounded-br-sm"
+          : "bg-rose-500 text-white rounded-br-sm";
+  const peerBubbleClassName =
+    bubbleTheme === "OCEAN"
+      ? "bg-sky-50 text-slate-800 rounded-bl-sm border border-sky-100"
+      : bubbleTheme === "FOREST"
+        ? "bg-emerald-50 text-slate-800 rounded-bl-sm border border-emerald-100"
+        : bubbleTheme === "SUNSET"
+          ? "bg-amber-50 text-slate-800 rounded-bl-sm border border-amber-100"
+          : "bg-slate-100 text-slate-800 rounded-bl-sm";
+  const bodyBgClassName =
+    backgroundTheme === "MESH"
+      ? "bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.10),transparent_35%),#ffffff]"
+      : backgroundTheme === "DOTS"
+        ? "bg-[radial-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:12px_12px] bg-white"
+        : "bg-white";
 
   const isNearBottom = useCallback(() => {
     const el = listRef.current;
@@ -242,6 +272,7 @@ export default function FloatingChatWindow({
     initChatSocket();
     const unsub = subscribeConversation(conversation.id, (event: ChatRealtimeEvent) => {
       if (event.eventName === "chat.message.sent") {
+        if (event.messageId == null || event.senderId == null || !event.content || !event.createdAt) return;
         shouldStickBottomRef.current = isNearBottom();
 
         addOrUpdate({
@@ -261,9 +292,11 @@ export default function FloatingChatWindow({
           void chatApi.markAsRead(conversation.id).catch(console.error);
         }
       } else if (event.eventName === "chat.message.edited") {
+        const editedContent = event.content;
+        if (event.messageId == null || editedContent == null) return;
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === event.messageId ? { ...m, content: event.content, editedAt: event.editedAt } : m
+            m.id === event.messageId ? { ...m, content: editedContent, editedAt: event.editedAt } : m
           )
         );
       } else if (event.eventName === "chat.message.deleted") {
@@ -283,6 +316,24 @@ export default function FloatingChatWindow({
           typingTimerRef.current = window.setTimeout(() => {
             setPeerTyping(false);
           }, 3200);
+        }
+      } else if (event.eventName === "chat.conversation.appearance.updated") {
+        setNickname(event.nickname ?? "");
+        setBubbleTheme((event.bubbleTheme as ChatTheme) || "ROSE");
+        setBackgroundTheme((event.backgroundTheme as ChatBackground) || "PLAIN");
+        if (event.notice) {
+          addOrUpdate({
+            id: Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+            conversationId: conversation.id,
+            senderId: event.senderId ?? currentUserId,
+            content: `🔔 ${event.notice}`,
+            deleted: false,
+            createdAt: event.occurredAt || new Date().toISOString(),
+            editedAt: null,
+            deletedAt: null,
+            replyToMessageId: null,
+            starred: false,
+          });
         }
       }
     });
@@ -359,6 +410,22 @@ export default function FloatingChatWindow({
     [conversation.id]
   );
 
+  const saveAppearance = async () => {
+    setAppearanceSaving(true);
+    try {
+      await chatApi.updateConversationAppearance(conversation.id, {
+        nickname: nickname.trim() || null,
+        bubbleTheme,
+        backgroundTheme,
+      });
+      setViewMode("CHAT");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAppearanceSaving(false);
+    }
+  };
+
   const rightOffset = 288 + 8 + offsetIndex * (320 + 8);
 
   const grouped = useMemo(() => {
@@ -407,6 +474,18 @@ export default function FloatingChatWindow({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            setViewMode((prev) => (prev === "CHAT" ? "CUSTOMIZE" : "CHAT"));
+          }}
+          className="cursor-pointer p-1 rounded-full hover:bg-slate-100 text-slate-400 transition"
+          type="button"
+          title={viewMode === "CHAT" ? "Tùy chỉnh cuộc trò chuyện" : "Quay lại chat"}
+        >
+          {viewMode === "CHAT" ? "⚙" : "←"}
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
             setMinimized((v) => !v);
           }}
           className="cursor-pointer p-1 rounded-full hover:bg-slate-100 text-slate-400 transition"
@@ -433,6 +512,7 @@ export default function FloatingChatWindow({
 
       {!minimized && (
         <>
+          {viewMode === "CHAT" && (
           <div className="px-2 py-1.5 border-b border-slate-100 bg-white flex items-center gap-1 overflow-x-auto">
             {(["ALL", "MEDIA", "FILES", "LINKS", "STARRED"] as const).map((mode) => (
               <button
@@ -447,7 +527,62 @@ export default function FloatingChatWindow({
               </button>
             ))}
           </div>
-          <div ref={listRef} onScroll={onScroll} className="h-80 overflow-y-auto bg-white px-2 py-3 space-y-1.5">
+          )}
+          {viewMode === "CUSTOMIZE" ? (
+            <div className="h-80 overflow-y-auto bg-slate-50 p-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-3">
+                <p className="text-sm font-semibold text-slate-800">Tùy chỉnh đoạn chat</p>
+                <input
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="Biệt danh..."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-rose-100"
+                />
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(["ROSE", "OCEAN", "FOREST", "SUNSET"] as const).map((theme) => (
+                    <button
+                      key={theme}
+                      type="button"
+                      onClick={() => setBubbleTheme(theme)}
+                      className={`text-[10px] rounded-lg border px-1.5 py-1.5 ${bubbleTheme === theme ? "border-rose-300 bg-rose-50 text-rose-600" : "border-slate-200 text-slate-600"}`}
+                    >
+                      {theme}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["PLAIN", "MESH", "DOTS"] as const).map((bg) => (
+                    <button
+                      key={bg}
+                      type="button"
+                      onClick={() => setBackgroundTheme(bg)}
+                      className={`text-[10px] rounded-lg border px-1.5 py-1.5 ${backgroundTheme === bg ? "border-rose-300 bg-rose-50 text-rose-600" : "border-slate-200 text-slate-600"}`}
+                    >
+                      {bg}
+                    </button>
+                  ))}
+                </div>
+                <div className={`rounded-xl border border-slate-200 p-2 ${bodyBgClassName}`}>
+                  <div className="text-[10px] mb-1 text-slate-500">Preview</div>
+                  <div className="flex justify-start mb-1">
+                    <div className="text-[10px] px-2 py-1 rounded-xl bg-slate-100 border border-slate-200">Xin chao</div>
+                  </div>
+                  <div className="flex justify-end">
+                    <div className={`text-[10px] px-2 py-1 rounded-xl text-white ${ownBubbleClassName}`}>Giao dien moi</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={appearanceSaving}
+                  onClick={() => void saveAppearance()}
+                  className="cursor-pointer w-full text-xs rounded-xl bg-rose-500 text-white py-2 disabled:opacity-60"
+                >
+                  {appearanceSaving ? "Đang lưu..." : "Lưu thay đổi"}
+                </button>
+              </div>
+            </div>
+          ) : (
+          <div ref={listRef} onScroll={onScroll} className={`h-80 overflow-y-auto px-2 py-3 space-y-1.5 ${bodyBgClassName}`}>
             {loadingOlder && (
               <div className="flex justify-center py-1">
                 <div className="w-4 h-4 border-2 border-rose-300 border-t-rose-500 rounded-full animate-spin" />
@@ -512,6 +647,8 @@ export default function FloatingChatWindow({
                             }}
                             onEdit={isOwn ? handleEdit : undefined}
                             onDelete={isOwn ? handleDelete : undefined}
+                            ownBubbleClassName={ownBubbleClassName}
+                            peerBubbleClassName={peerBubbleClassName}
                           />
                         </div>
                       );
@@ -535,6 +672,7 @@ export default function FloatingChatWindow({
             )}
             <div ref={bottomRef} />
           </div>
+          )}
           {showJumpBottom && (
             <button
               type="button"

@@ -21,7 +21,6 @@ function parseUserIdFromToken(token: string): number | null {
 
 export default function MessagesPage() {
   const router = useRouter();
-
   const currentUserId = useSyncExternalStore<number | null | undefined>(
     () => () => {},
     () => {
@@ -29,7 +28,7 @@ export default function MessagesPage() {
       if (!tokens?.accessToken) return null;
       return parseUserIdFromToken(tokens.accessToken);
     },
-    () => undefined // snapshot khi SSR
+    () => undefined
   );
   const [conversations, setConversations] = useState<ConversationResponse[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(true);
@@ -112,19 +111,27 @@ export default function MessagesPage() {
       .filter((id) => Number.isFinite(id) && id > 0);
     const unsubs = ids.map((conversationId) =>
       subscribeConversation(conversationId, (ev) => {
-        if (ev.eventName !== "chat.message.sent") return;
         setConversations((prev) =>
           prev.map((c) =>
-            c.id === ev.conversationId
-              ? {
-                  ...c,
-                  unreadCount: ev.senderId === currentUserId || activeIdRef.current === ev.conversationId
-                    ? c.unreadCount
-                    : c.unreadCount + 1,
-                  lastMessageContent: ev.content,
-                  lastMessageAt: ev.createdAt,
-                }
-              : c
+            c.id !== ev.conversationId
+              ? c
+              : ev.eventName === "chat.message.sent"
+                ? {
+                    ...c,
+                    unreadCount: ev.senderId === currentUserId || activeIdRef.current === ev.conversationId
+                      ? c.unreadCount
+                      : c.unreadCount + 1,
+                    lastMessageContent: ev.content || c.lastMessageContent,
+                    lastMessageAt: ev.createdAt || c.lastMessageAt,
+                  }
+                : ev.eventName === "chat.conversation.appearance.updated"
+                  ? {
+                      ...c,
+                      nickname: ev.nickname ?? c.nickname,
+                      bubbleTheme: ev.bubbleTheme ?? c.bubbleTheme,
+                      backgroundTheme: ev.backgroundTheme ?? c.backgroundTheme,
+                    }
+                  : c
           )
         );
       })
@@ -148,6 +155,11 @@ export default function MessagesPage() {
     });
   }, []);
 
+  const applyConversationAppearance = useCallback((updated: ConversationResponse) => {
+    setConversations((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+    setActive((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+  }, []);
+
   const handleSelect = async (conv: ConversationResponse) => {
     setActive(conv);
     setMobileView("chat");
@@ -169,8 +181,8 @@ export default function MessagesPage() {
       if (activeIdRef.current === conversationId) return;
       const conv = conversations.find((c) => c.id === conversationId);
       setIncomingBanner(
-        conv?.name
-          ? `Tin nhắn mới từ ${conv.name}`
+        conv?.nickname || conv?.name
+          ? `Tin nhắn mới từ ${conv?.nickname || conv?.name}`
           : `Bạn có tin nhắn mới ở cuộc trò chuyện #${conversationId}`
       );
       promoteConversation(conversationId, 1);
@@ -217,8 +229,8 @@ export default function MessagesPage() {
   const listPanel = (
     <div
       className={`
-      w-full sm:w-72 md:w-80 flex-shrink-0 bg-white border-slate-200 h-full flex flex-col
-      border-l md:border-l border-t md:border-t-0
+      w-full sm:w-72 md:w-80 flex-shrink-0 border-slate-200 h-full flex flex-col
+      border-l md:border-l border-t md:border-t-0 bg-white
       ${mobileView === "chat" ? "hidden md:flex" : "flex"}
     `}
     >
@@ -248,6 +260,7 @@ export default function MessagesPage() {
           onBack={() => setMobileView("list")}
           onNewMessage={handleNewMessage}
           onOwnMessage={handleOwnMessage}
+          onConversationAppearanceUpdated={applyConversationAppearance}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-5 bg-slate-50">

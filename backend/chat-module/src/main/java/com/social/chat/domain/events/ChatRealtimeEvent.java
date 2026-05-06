@@ -16,6 +16,10 @@ public class ChatRealtimeEvent implements Serializable {
     private Long replyToMessageId;
     private Boolean starred;
     private Boolean typing;
+    private String nickname;
+    private String bubbleTheme;
+    private String backgroundTheme;
+    private String notice;
     private LocalDateTime occurredAt;
 
     public ChatRealtimeEvent() {
@@ -123,5 +127,37 @@ public class ChatRealtimeEvent implements Serializable {
 
     public void setTyping(Boolean typing) {
         this.typing = typing;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public void setNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public String getBubbleTheme() {
+        return bubbleTheme;
+    }
+
+    public void setBubbleTheme(String bubbleTheme) {
+        this.bubbleTheme = bubbleTheme;
+    }
+
+    public String getBackgroundTheme() {
+        return backgroundTheme;
+    }
+
+    public void setBackgroundTheme(String backgroundTheme) {
+        this.backgroundTheme = backgroundTheme;
+    }
+
+    public String getNotice() {
+        return notice;
+    }
+
+    public void setNotice(String notice) {
+        this.notice = notice;
     }
 }

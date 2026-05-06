@@ -119,8 +119,10 @@ export default function ConversationList({
   };
 
   const filtered = conversations.filter((c) => {
-    const name =
-      c.type === "GROUP"
+    const preferredName = c.nickname?.trim();
+    const name = preferredName
+      ? preferredName
+      : c.type === "GROUP"
         ? c.name ?? ""
         : userNames[c.memberIds.find((id) => id !== currentUserId) ?? -1] ||
           `Người dùng #${c.memberIds.find((id) => id !== currentUserId) ?? ""}`;
@@ -245,7 +247,7 @@ export default function ConversationList({
                 conversation={c}
                 isActive={c.id === activeId}
                 currentUserId={currentUserId}
-                resolvedName={resolvedName}
+                resolvedName={c.nickname?.trim() || resolvedName}
                 preview={preview}
                 timeLabel={formatTime(time)}
                 onClick={() => onSelect(c)}

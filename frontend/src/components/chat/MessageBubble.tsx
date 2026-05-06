@@ -285,8 +285,16 @@ export default function MessageBubble({
                       {file.kind === "video" && (
                         <video src={file.url} controls className="mb-2 max-h-56 w-full rounded-md bg-black/80" />
                       )}
-                      {file.kind === "audio" && <audio src={file.url} controls className="mb-2 w-full" />}
-                      {(file.kind === "file" || file.kind === "audio") && (
+                      {file.kind === "audio" && (
+                        <div
+                          className={`rounded-full px-2 py-1 ${
+                            isFileOnly ? "bg-slate-50" : isOwn ? "bg-white/20" : "bg-slate-50"
+                          }`}
+                        >
+                          <audio src={file.url} controls className="h-7 w-[180px] max-w-[68vw]" />
+                        </div>
+                      )}
+                      {file.kind === "file" && (
                         <div className="mb-1 flex items-center gap-2">
                           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">📄</span>
                           <div className="min-w-0">
@@ -296,35 +304,37 @@ export default function MessageBubble({
                         </div>
                       )}
 
-                      <div className="mt-1 flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={() => void handleDownload(file.url, file.name)}
-                          className={`cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-full ${
-                            isFileOnly
-                              ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                              : isOwn
-                                ? "bg-white/20 hover:bg-white/30 text-white"
-                                : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                          }`}
-                          title="Tải xuống"
-                          disabled={downloadingUrl === file.url}
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            className="w-4 h-4"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                      {file.kind !== "audio" && (
+                        <div className="mt-1 flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={() => void handleDownload(file.url, file.name)}
+                            className={`cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                              isFileOnly
+                                ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                                : isOwn
+                                  ? "bg-white/20 hover:bg-white/30 text-white"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                            }`}
+                            title="Tải xuống"
+                            disabled={downloadingUrl === file.url}
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M7 10l5 5 5-5" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15V3" />
-                          </svg>
-                        </button>
-                      </div>
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              className="w-4 h-4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M7 10l5 5 5-5" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15V3" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {textContent && <div>{renderHighlightedContent()}</div>}

@@ -113,13 +113,16 @@ export default function ChatWindow({
   const programmaticScrollRef = useRef(false);
 
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
+  const isSelfConversation =
+    conversation.type === "PRIVATE" &&
+    (conversation.memberIds.length === 1 || otherId == null);
   const bubbleTheme: ChatTheme = conversation.bubbleTheme || "ROSE";
   const background: ChatBackground = conversation.backgroundTheme || "PLAIN";
   const displayName =
     conversation.nickname?.trim() ||
     (conversation.type === "GROUP"
       ? conversation.name || "Nhóm chat"
-      : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`);
+      : (otherId ? userNames[otherId] : undefined) || "Bản thân");
   const otherPresence = otherId ? presenceMap[otherId] : undefined;
 
   const gradient = avatarGradient(displayName);
@@ -673,38 +676,40 @@ export default function ChatWindow({
 
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm leading-tight truncate text-slate-900">{displayName}</p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                conversation.type === "PRIVATE" && otherPresence
+          {!isSelfConversation && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  conversation.type === "PRIVATE" && otherPresence
+                    ? otherPresence.online
+                      ? "bg-green-400"
+                      : "bg-slate-400"
+                    : socketReady
+                      ? "bg-green-400"
+                      : "bg-amber-400"
+                }`}
+              />
+              <span
+                className={`text-[11px] font-medium ${
+                  conversation.type === "PRIVATE" && otherPresence
+                    ? otherPresence.online
+                      ? "text-green-500"
+                      : "text-slate-500"
+                    : socketReady
+                      ? "text-green-500"
+                      : "text-amber-500"
+                }`}
+              >
+                {conversation.type === "PRIVATE" && otherPresence
                   ? otherPresence.online
-                    ? "bg-green-400"
-                    : "bg-slate-400"
+                    ? "Đang hoạt động"
+                    : formatLastActiveSubtitle(otherPresence.lastSeenAt)
                   : socketReady
-                    ? "bg-green-400"
-                    : "bg-amber-400"
-              }`}
-            />
-            <span
-              className={`text-[11px] font-medium ${
-                conversation.type === "PRIVATE" && otherPresence
-                  ? otherPresence.online
-                    ? "text-green-500"
-                    : "text-slate-500"
-                  : socketReady
-                    ? "text-green-500"
-                    : "text-amber-500"
-              }`}
-            >
-              {conversation.type === "PRIVATE" && otherPresence
-                ? otherPresence.online
-                  ? "Đang hoạt động"
-                  : formatLastActiveSubtitle(otherPresence.lastSeenAt)
-                : socketReady
-                  ? "Đang hoạt động"
-                  : "Đang kết nối..."}
-            </span>
-          </div>
+                    ? "Đang hoạt động"
+                    : "Đang kết nối..."}
+              </span>
+            </div>
+          )}
         </div>
         <div className="w-64 hidden sm:flex items-center gap-1">
           {viewMode === "CHAT" && (

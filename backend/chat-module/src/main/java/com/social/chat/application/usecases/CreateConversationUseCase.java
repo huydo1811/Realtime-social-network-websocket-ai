@@ -46,6 +46,10 @@ public class CreateConversationUseCase {
         normalized.remove(actorId);
 
         if (type == ConversationType.PRIVATE) {
+            if (normalized.isEmpty()) {
+                return conversationRepository.findSelfConversation(actorId)
+                        .orElseGet(() -> conversationRepository.save(ChatConversation.selfConversation(actorId)));
+            }
             if (normalized.size() != 1) {
                 throw new InvalidConversationException("PRIVATE conversation yêu cầu đúng 1 participant");
             }

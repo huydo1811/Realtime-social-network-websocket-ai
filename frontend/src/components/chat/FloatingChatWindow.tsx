@@ -15,6 +15,8 @@ import { getAuthTokens } from "@/lib/api/authToken";
 import { dispatchRead } from "@/lib/event/chatEvents";
 import { getUserById } from "@/lib/api/userApi";
 import MessageBubble from "./MessageBubble";
+import ChatInput from "./ChatInput";
+import { decodeMessageContent, encodeMessageContent } from "@/lib/chat/messageAttachment";
 type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
 type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
@@ -59,7 +61,6 @@ export default function FloatingChatWindow({
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
-  const [inputVal, setInputVal] = useState("");
   const [sending, setSending] = useState(false);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
   const [showJumpBottom, setShowJumpBottom] = useState(false);
@@ -92,12 +93,15 @@ export default function FloatingChatWindow({
 
   const currentUserId = parseUserId(getAuthTokens()?.accessToken ?? "") ?? -1;
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
+  const isSelfConversation =
+    conversation.type === "PRIVATE" &&
+    (conversation.memberIds.length === 1 || otherId == null);
 
   const displayName =
     nickname.trim() ||
     (conversation.type === "GROUP"
       ? conversation.name || "Nhóm"
-      : (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? ""}`);
+      : (otherId ? userNames[otherId] : undefined) || "Bản thân");
 
   const otherPresence = otherId != null ? presenceMap[otherId] : undefined;
 
@@ -429,14 +433,26 @@ export default function FloatingChatWindow({
     };
   }, [conversation.id]);
 
-  const handleSend = async () => {
-    if (!inputVal.trim() || sending) return;
-    const content = inputVal.trim();
-    setInputVal("");
+  const handleSend = async ({ text, files }: { text: string; files: File[] }) => {
+    if ((!text.trim() && files.length === 0) || sending) return;
     setSending(true);
 
     try {
-      const sent = await chatApi.sendMessage(conversation.id, content, `${Date.now()}`, replyTo?.id ?? null);
+      const idempotencyKey = `${Date.now()}`;
+      const sent =
+        files.length > 0
+          ? await chatApi.sendMessageWithFiles(conversation.id, {
+              content: text,
+              files,
+              idempotencyKey,
+              replyToMessageId: replyTo?.id ?? null,
+            })
+          : await chatApi.sendMessage(
+              conversation.id,
+              encodeMessageContent(text, []),
+              idempotencyKey,
+              replyTo?.id ?? null
+            );
       addOrUpdate(sent);
       setReplyTo(null);
       typingStateRef.current = false;
@@ -502,10 +518,13 @@ export default function FloatingChatWindow({
   const grouped = useMemo(() => {
     const g: { dateLabel: string; msgs: MessageResponse[] }[] = [];
     const withFilter = messages.filter((msg) => {
-      const content = msg.content.toLowerCase();
+      const parsed = decodeMessageContent(msg.content);
+      const content = parsed.text.toLowerCase();
+      const hasMediaAttachment = parsed.attachments.some((item) => item.kind === "image" || item.kind === "video");
+      const hasFileAttachment = parsed.attachments.some((item) => item.kind === "file" || item.kind === "audio");
       if (filterMode === "STARRED") return Boolean(msg.starred);
-      if (filterMode === "MEDIA") return /(https?:\/\/\S+\.(png|jpg|jpeg|gif|webp|svg|mp4|mov))/i.test(content);
-      if (filterMode === "FILES") return /(https?:\/\/\S+\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|txt))/i.test(content);
+      if (filterMode === "MEDIA") return hasMediaAttachment || /(https?:\/\/\S+\.(png|jpg|jpeg|gif|webp|svg|mp4|mov))/i.test(content);
+      if (filterMode === "FILES") return hasFileAttachment || /(https?:\/\/\S+\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|txt))/i.test(content);
       if (filterMode === "LINKS") return /https?:\/\/\S+/i.test(content);
       return true;
     });
@@ -591,7 +610,7 @@ export default function FloatingChatWindow({
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm text-slate-900 truncate">{displayName}</p>
-          {conversation.type === "PRIVATE" && otherId != null && (
+          {!isSelfConversation && conversation.type === "PRIVATE" && otherId != null && (
             <div className="flex items-center gap-1 mt-0.5">
               <span
                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -772,7 +791,7 @@ export default function FloatingChatWindow({
                             isStarred={Boolean(msg.starred)}
                             replyPreview={
                               msg.replyToMessageId
-                                ? messages.find((m) => m.id === msg.replyToMessageId)?.content.slice(0, 80) || "Tin nhắn gốc"
+                                ? decodeMessageContent(messages.find((m) => m.id === msg.replyToMessageId)?.content || "").text.slice(0, 80) || "Tin nhắn gốc"
                                 : undefined
                             }
                             replyToMessageId={msg.replyToMessageId ?? null}
@@ -832,7 +851,7 @@ export default function FloatingChatWindow({
             </button>
           )}
 
-          <div className="px-3 py-2 bg-white border-t border-slate-100 flex items-center gap-2">
+          <div className="bg-white border-t border-slate-100">
             <div className="flex-1">
               {footerStatus && (footerStatus.statusLabel || footerStatus.readByLabel) && (
                 <div className="mb-1 text-[10px] text-slate-400 text-right">
@@ -840,48 +859,13 @@ export default function FloatingChatWindow({
                   {footerStatus.readByLabel ? ` · ${footerStatus.readByLabel}` : ""}
                 </div>
               )}
-              {replyTo && (
-                <div className="mb-1.5 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1 flex items-start gap-2">
-                  <div className="w-1 self-stretch rounded-full bg-rose-300" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-rose-500 font-semibold">Đang trả lời</p>
-                    <p className="text-[11px] text-slate-600 truncate">{replyTo.content}</p>
-                  </div>
-                  <button type="button" onClick={() => setReplyTo(null)} className="text-slate-400 hover:text-slate-700">×</button>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <input
-                  value={inputVal}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setInputVal(v);
-                    handleTypingChange(v.trim().length > 0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSend();
-                    }
-                  }}
-                  placeholder="Nhập tin nhắn..."
-                  className="flex-1 text-sm bg-slate-100 rounded-full px-4 py-2 outline-none focus:bg-slate-200 transition placeholder-slate-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={!inputVal.trim() || sending}
-                  className="cursor-pointer w-8 h-8 flex items-center justify-center rounded-full bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-40 active:scale-95 transition flex-shrink-0"
-                >
-                  {sending ? (
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                    </svg>
-                  )}
-                </button>
-              </div>
+              <ChatInput
+                onSend={handleSend}
+                sending={sending}
+                replyPreview={decodeMessageContent(replyTo?.content || "").text.slice(0, 100)}
+                onCancelReply={() => setReplyTo(null)}
+                onTypingChange={handleTypingChange}
+              />
             </div>
           </div>
         </>

@@ -121,6 +121,23 @@ export default function ConversationList({
     }
   };
 
+  const handleOpenSavedMessages = async () => {
+    setCreating(true);
+    try {
+      const created = await chatApi.createConversation({
+        type: "PRIVATE",
+        participantIds: [],
+        idempotencyKey: `saved-${Date.now()}`,
+      });
+      onConversationCreated?.(created);
+      onSelect(created);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const filtered = conversations.filter((c) => {
     const preferredName = c.nickname?.trim();
     const name = preferredName
@@ -185,16 +202,26 @@ export default function ConversationList({
       <div className="px-4 pt-5 pb-4">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-slate-900">Tin nhắn</h1>
-          <button
-            onClick={() => setOpenCreate(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-full
-              bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-500 transition"
-            title="Tạo cuộc trò chuyện mới"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleOpenSavedMessages()}
+              disabled={creating}
+              className="h-9 px-3 inline-flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-600 transition text-xs font-medium disabled:opacity-60"
+              title="Bản thân"
+            >
+              Bản thân
+            </button>
+            <button
+              onClick={() => setOpenCreate(true)}
+              className="w-9 h-9 flex items-center justify-center rounded-full
+                bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-500 transition"
+              title="Tạo cuộc trò chuyện mới"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="relative">
@@ -245,7 +272,7 @@ export default function ConversationList({
           filtered.map((c) => {
             const otherId = c.memberIds.find((id) => id !== currentUserId);
             const resolvedName =
-              c.type === "GROUP" ? c.name || "Nhóm chat" : otherId ? userNames[otherId] : undefined;
+              c.type === "GROUP" ? c.name || "Nhóm chat" : otherId ? userNames[otherId] : "Bản thân";
             const { preview, time, hasImageAttachment } = getConversationPreview(c);
 
             return (

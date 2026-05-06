@@ -12,7 +12,6 @@ import org.mockito.Mockito;
 import com.social.chat.domain.entities.ConversationType;
 import com.social.chat.domain.exceptions.InvalidConversationException;
 import com.social.chat.domain.repositories.ChatConversationRepository;
-import com.social.user.domain.entities.User;
 import com.social.user.domain.repositories.UserRepository;
 
 class CreateConversationUseCaseTest {

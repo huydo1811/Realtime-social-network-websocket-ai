@@ -38,6 +38,11 @@ public class ChatConversationRepositoryImpl implements ChatConversationRepositor
     }
 
     @Override
+    public Optional<ChatConversation> findSelfConversation(Long userId) {
+        return jpaRepository.findSelfConversation(userId);
+    }
+
+    @Override
     public List<ChatConversation> findByMemberId(Long memberId) {
         return jpaRepository.findByMemberId(memberId);
     }

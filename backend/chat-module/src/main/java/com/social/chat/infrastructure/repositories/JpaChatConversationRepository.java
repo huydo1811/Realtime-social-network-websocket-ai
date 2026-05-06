@@ -46,6 +46,17 @@ public interface JpaChatConversationRepository extends JpaRepository<ChatConvers
     Optional<ChatConversation> findPrivateConversation(@Param("userA") Long userA,
                                                        @Param("userB") Long userB);
 
+    @Query(value = """
+            SELECT cr.*
+            FROM chat_rooms cr
+            JOIN chat_room_members m ON m.room_id = cr.id
+            WHERE cr.type = 'PRIVATE'
+              AND m.user_id = :userId
+              AND (SELECT COUNT(*) FROM chat_room_members allm WHERE allm.room_id = cr.id) = 1
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<ChatConversation> findSelfConversation(@Param("userId") Long userId);
+
     @Query("select c from ChatConversation c join c.memberIds m where m = :creatorId and c.idempotencyKey = :idempotencyKey")
     Optional<ChatConversation> findByIdempotencyKey(@Param("creatorId") Long creatorId,
                                                     @Param("idempotencyKey") String idempotencyKey);

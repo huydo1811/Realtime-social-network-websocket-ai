@@ -14,6 +14,8 @@ public interface ChatConversationRepository {
 
     Optional<ChatConversation> findPrivateConversation(Long userA, Long userB);
 
+    Optional<ChatConversation> findSelfConversation(Long userId);
+
     List<ChatConversation> findByMemberId(Long memberId);
 
     Optional<ChatConversation> findByIdempotencyKey(Long creatorId, String idempotencyKey);

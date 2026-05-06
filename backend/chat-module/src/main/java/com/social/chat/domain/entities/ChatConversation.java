@@ -79,6 +79,17 @@ public class ChatConversation {
         return c;
     }
 
+    public static ChatConversation selfConversation(Long userId) {
+        if (userId == null) {
+            throw new InvalidConversationException("SELF conversation yêu cầu user hợp lệ");
+        }
+        ChatConversation c = new ChatConversation();
+        c.type = ConversationType.PRIVATE;
+        c.memberIds.add(userId);
+        c.name = "Saved messages";
+        return c;
+    }
+
     public static ChatConversation groupConversation(Long creatorId, String name, Set<Long> participantIds) {
         if (creatorId == null) {
             throw new InvalidConversationException("Creator không hợp lệ");

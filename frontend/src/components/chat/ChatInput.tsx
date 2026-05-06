@@ -28,7 +28,12 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
   const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentsRef = useRef<PendingAttachment[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
 
   const handleSend = async () => {
     const trimmed = value.trim();
@@ -74,7 +79,20 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
   }, [pickerError]);
 
   useEffect(() => {
+    if (!recordError) return;
+    const t = window.setTimeout(() => setRecordError(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [recordError]);
+
+  useEffect(() => {
     return () => clearLocalPreviews(attachmentsRef.current);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stop();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   const validatePickedFile = (file: File): { ok: boolean; error?: string; previewUrl: boolean } => {
@@ -82,6 +100,7 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
     const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
     const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
     const isVideo = file.type.startsWith("video/") || ["mp4", "mov", "webm", "mkv", "m4v"].includes(ext);
+    const isAudio = file.type.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a", "aac", "webm"].includes(ext);
     const isPdf = file.type === "application/pdf" || ext === "pdf";
     const isTxt = file.type.startsWith("text/") || ext === "txt";
 
@@ -90,8 +109,9 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
       if (file.size > MAX_VIDEO_BYTES) return { ok: false, error: `${name}: video phải nhỏ hơn 100MB.`, previewUrl: false };
       return { ok: true, previewUrl: true };
     }
+    if (isAudio) return { ok: true, previewUrl: false };
     if (isPdf || isTxt) return { ok: true, previewUrl: false };
-    return { ok: false, error: `${name}: chỉ hỗ trợ ảnh, video, PDF hoặc TXT.`, previewUrl: false };
+    return { ok: false, error: `${name}: chỉ hỗ trợ ảnh, video, audio, PDF hoặc TXT.`, previewUrl: false };
   };
 
   const addFiles = (files: FileList | File[]) => {
@@ -142,6 +162,46 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
     });
   };
 
+  const startRecording = async () => {
+    try {
+      setRecordError(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setRecordError("Thiết bị không hỗ trợ ghi âm.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size > 0) {
+          const ext = recorder.mimeType.includes("ogg") ? "ogg" : recorder.mimeType.includes("mp4") ? "m4a" : "webm";
+          const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: recorder.mimeType || "audio/webm" });
+          addFiles([file]);
+        }
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      setRecordError("Không thể bắt đầu ghi âm. Vui lòng cấp quyền micro.");
+    }
+  };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    if (recorder.state !== "inactive") recorder.stop();
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  };
+
   return (
     <div className="bg-white/95 backdrop-blur-sm p-3">
       {replyPreview && (
@@ -151,6 +211,7 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
         </div>
       )}
       {pickerError && <div className="mb-2 text-[12px] text-rose-600">{pickerError}</div>}
+      {recordError && <div className="mb-2 text-[12px] text-rose-600">{recordError}</div>}
       {attachments.length > 0 && (
         <div className="mb-2 rounded-2xl border border-slate-200 p-2">
           <p className="text-xs font-semibold text-slate-500 mb-2">Xem trước tệp đính kèm</p>
@@ -181,7 +242,7 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
         </div>
       )}
       <div
-        className={`flex items-end gap-2 rounded-2xl border px-3 py-2 transition ${dragging ? "border-rose-300 bg-rose-50/40" : "border-slate-200 bg-white"}`}
+        className={`flex items-center gap-2 rounded-2xl border px-3 py-2 transition ${dragging ? "border-rose-300 bg-rose-50/40" : "border-slate-200 bg-white"}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);
@@ -204,6 +265,18 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
           <input ref={videoInputRef} type="file" multiple className="hidden" accept="video/*" onChange={onPickerChange} />
           <input ref={fileInputRef} type="file" multiple className="hidden" accept=".pdf,.txt,text/plain,application/pdf" onChange={onPickerChange} />
         </div>
+        <button
+          type="button"
+          onClick={() => (isRecording ? stopRecording() : void startRecording())}
+          className={`cursor-pointer mb-1 w-9 h-9 rounded-xl border flex items-center justify-center transition ${
+            isRecording
+              ? "border-rose-300 bg-rose-50 text-rose-600"
+              : "border-slate-200 text-slate-500 hover:bg-slate-50"
+          }`}
+          title={isRecording ? "Dừng ghi âm" : "Ghi âm"}
+        >
+          {isRecording ? "■" : "🎙️"}
+        </button>
         <textarea
           ref={ref}
           value={value}
@@ -214,9 +287,9 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
           }}
           onKeyDown={handleKeyDown}
           onPaste={onPaste}
-          placeholder="Nhập tin nhắn... (Enter để gửi)"
+          placeholder="Nhập tin nhắn..."
           rows={1}
-          className="chat-input-textarea flex-1 resize-none overflow-hidden outline-none text-sm leading-5 max-h-40 bg-transparent placeholder:text-slate-400 [scrollbar-width:none] [-ms-overflow-style:none] appearance-none"
+          className="chat-input-textarea flex-1 resize-none overflow-hidden outline-none text-sm leading-5 min-h-[24px] max-h-40 bg-transparent placeholder:text-slate-400 [scrollbar-width:none] [-ms-overflow-style:none] appearance-none pt-[2px]"
           disabled={disabled || sending}
         />
         <button

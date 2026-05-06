@@ -257,8 +257,9 @@ export default function RightSidebar() {
             ) : (
               contacts.slice(0, 8).map((c) => {
                 const otherId = c.memberIds.find((id) => id !== currentUserId);
+                const isSelfConversation = c.type === "PRIVATE" && otherId == null;
                 const fallbackName =
-                  (otherId ? userNames[otherId] : undefined) || `Người dùng #${otherId ?? c.id}`;
+                  (otherId ? userNames[otherId] : undefined) || "Bản thân";
                 const displayName = c.nickname?.trim() || fallbackName;
                 const presence = otherId != null ? presenceMap[otherId] : undefined;
                 const online = Boolean(presence?.online);
@@ -279,11 +280,13 @@ export default function RightSidebar() {
                       >
                         {displayName.charAt(0).toUpperCase()}
                       </div>
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                          online ? "bg-green-400" : "bg-slate-400"
-                        }`}
-                      />
+                      {!isSelfConversation && (
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                            online ? "bg-green-400" : "bg-slate-400"
+                          }`}
+                        />
+                      )}
                       {c.unreadCount > 0 && (
                         <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none shadow">
                           {c.unreadCount > 9 ? "9+" : c.unreadCount}
@@ -299,13 +302,15 @@ export default function RightSidebar() {
                       >
                         {displayName}
                       </p>
-                      <p
-                        className={`text-[11px] truncate ${
-                          online ? "text-green-600 font-medium" : "text-slate-500"
-                        }`}
-                      >
-                        {online ? "Đang hoạt động" : formatLastActiveSubtitle(presence?.lastSeenAt)}
-                      </p>
+                      {!isSelfConversation && (
+                        <p
+                          className={`text-[11px] truncate ${
+                            online ? "text-green-600 font-medium" : "text-slate-500"
+                          }`}
+                        >
+                          {online ? "Đang hoạt động" : formatLastActiveSubtitle(presence?.lastSeenAt)}
+                        </p>
+                      )}
                     </div>
                   </button>
                 );

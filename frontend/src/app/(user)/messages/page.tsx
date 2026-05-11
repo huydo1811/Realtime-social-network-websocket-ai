@@ -319,9 +319,9 @@ export default function MessagesPage() {
   const listPanel = (
     <div
       className={`
-      w-full sm:w-72 md:w-80 flex-shrink-0 border-slate-200 h-full flex flex-col
-      border-l md:border-l border-t md:border-t-0 bg-white
-      ${mobileView === "chat" ? "hidden md:flex" : "flex"}
+      w-full lg:w-80 flex-shrink-0 border-slate-200 h-full flex flex-col
+      border-t lg:border-l lg:border-t-0 bg-white
+      ${mobileView === "chat" ? "hidden lg:flex" : "flex"}
     `}
     >
       <ConversationList
@@ -340,7 +340,7 @@ export default function MessagesPage() {
     <div
       className={`
       flex-1 min-w-0 h-full flex flex-col bg-slate-50
-      ${mobileView === "list" ? "hidden md:flex" : "flex"}
+      ${mobileView === "list" ? "hidden lg:flex" : "flex"}
     `}
     >
       {active ? (
@@ -384,7 +384,7 @@ export default function MessagesPage() {
         onSelect={handleSelect}
       />
       <LeftSidebar />
-      <div className="md:ml-64 lg:ml-72 h-screen pb-16 md:pb-0 flex overflow-hidden">
+      <div className="lg:ml-64 xl:ml-72 h-screen pb-16 lg:pb-0 flex overflow-hidden">
         {incomingBanner && (
           <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-3 py-2 rounded-full shadow-lg flex items-center gap-2">
             <span>{incomingBanner}</span>

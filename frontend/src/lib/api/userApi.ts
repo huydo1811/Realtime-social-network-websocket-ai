@@ -1,7 +1,31 @@
 import { clearAuthTokens, getAuthTokens, saveAuthTokens } from "./authToken";
 import type { ProfileInfo } from "@/components/user/profile/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+function resolveApiBaseUrl(): string {
+  const candidate = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (candidate) {
+    try {
+      const parsed = new URL(candidate);
+      if (
+        typeof window !== "undefined" &&
+        (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") &&
+        window.location.hostname !== "localhost" &&
+        window.location.hostname !== "127.0.0.1"
+      ) {
+        parsed.hostname = window.location.hostname;
+      }
+      return parsed.toString().replace(/\/$/, "");
+    } catch {
+      return candidate;
+    }
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  return "http://localhost:8080";
+}
+
+const API_URL = resolveApiBaseUrl();
 
 async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const tokens = getAuthTokens();

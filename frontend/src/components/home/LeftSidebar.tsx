@@ -124,7 +124,7 @@ export default function LeftSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex flex-col w-64 lg:w-72 fixed inset-y-0 left-0 bg-white border-r border-slate-200 px-6 py-8 shadow-sm z-10">
+    <aside className="hidden lg:flex flex-col w-64 xl:w-72 fixed inset-y-0 left-0 bg-white border-r border-slate-200 px-6 py-8 shadow-sm z-10">
       <Link href="/" className="flex items-center gap-3 mb-10 pl-2">
         <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500 to-rose-300 p-0.5 shadow-md">
           <Image src="/hype.png" alt="Hype logo" width={40} height={40} className="h-full w-full rounded-[10px] object-cover bg-white" />

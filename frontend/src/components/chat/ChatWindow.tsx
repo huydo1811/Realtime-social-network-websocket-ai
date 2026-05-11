@@ -750,7 +750,7 @@ export default function ChatWindow({
         {onBack && (
           <button
             onClick={onBack}
-            className="md:hidden -ml-1 p-2 rounded-full transition hover:bg-slate-100 text-slate-500"
+            className="lg:hidden -ml-1 p-2 rounded-full transition hover:bg-slate-100 text-slate-500"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -808,7 +808,7 @@ export default function ChatWindow({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Tìm..."
-              className="hidden md:block w-52 lg:w-64 px-3 py-1.5 text-xs rounded-full border outline-none bg-slate-100 border-slate-200 focus:ring-2 focus:ring-rose-100"
+              className="hidden lg:block w-52 xl:w-64 px-3 py-1.5 text-xs rounded-full border outline-none bg-slate-100 border-slate-200 focus:ring-2 focus:ring-rose-100"
             />
           )}
           {viewMode === "CHAT" && searchTerm.trim() && (

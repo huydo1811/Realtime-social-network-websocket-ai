@@ -44,9 +44,17 @@ export default function RightSidebar() {
   const [openChats, setOpenChats] = useState<ConversationResponse[]>([]);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
   const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const openIds = useMemo(() => openChats.map((c) => c.id), [openChats]);
   const openIdsRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    const syncViewport = () => setIsDesktop(window.innerWidth >= 1024);
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    return () => window.removeEventListener("resize", syncViewport);
+  }, []);
 
   useEffect(() => {
     openIdsRef.current = openIds;
@@ -320,7 +328,7 @@ export default function RightSidebar() {
         </section>
       </aside>
 
-      {openChats.map((conv, idx) => (
+      {isDesktop && openChats.map((conv, idx) => (
         <FloatingChatWindow
           key={conv.id}
           conversation={conv}

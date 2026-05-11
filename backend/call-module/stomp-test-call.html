@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Call module — STOMP test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .log-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 320px;
+            overflow-y: scroll;
+            background: #f9f9f9;
+            font-size: 13px;
+        }
+
+        .log-entry {
+            border-bottom: 1px solid #eee;
+            padding: 5px 0;
+        }
+
+        .controls {
+            margin-bottom: 14px;
+            background: #eef;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        label {
+            display: inline-block;
+            min-width: 120px;
+        }
+
+        input,
+        button {
+            padding: 6px;
+            margin: 3px 2px;
+        }
+
+        button {
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .warn {
+            background: #fff3cd;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Call module — STOMP tester</h2>
+    <div class="warn">
+        <b>Cách dùng:</b> Mở file này bằng trình duyệt (hoặc qua static server). Lấy JWT từ Postman
+        <code>POST /auth/login</code>. <code>myUserId</code> phải trùng <code>sub</code> trong JWT.
+        Mở <b>hai tab</b> với hai user khác nhau để test invite / accept.<br />
+        <b>callId:</b> không có trong lệnh gửi (TX). Server tạo và trả trong <b>RX</b> (vd. <code>CALL_INVITE</code>, <code>USER_RINGING</code>).
+    </div>
+
+    <div class="controls">
+        <label>SockJS URL</label>
+        <input type="text" id="serverUrl" value="http://localhost:8080/ws" size="48" /><br />
+        <label>Bearer JWT</label>
+        <input type="password" id="jwt" placeholder="eyJ..." size="64" /><br />
+        <label>myUserId (sub)</label>
+        <input type="number" id="myUserId" value="1" min="1" /><br />
+        <button type="button" onclick="connect()">Connect STOMP</button>
+        <button type="button" onclick="disconnect()" style="background:#dc3545;">Disconnect</button>
+        <button type="button" onclick="subscribe()" style="background:#28a745;">Subscribe topic của tôi</button>
+    </div>
+
+    <div class="controls">
+        <label>targetUserId</label>
+        <input type="number" id="targetUserId" value="2" min="1" /><br />
+        <label>callId (sau invite)</label>
+        <input type="text" id="callId" placeholder="dán callId từ log" size="40" /><br />
+        <label>deviceId</label>
+        <input type="text" id="deviceId" value="test-browser-1" size="24" /><br />
+        <button type="button" onclick="sendInvite()">CALL_INVITE (voice)</button>
+        <button type="button" onclick="sendInviteVideo()">CALL_INVITE (video)</button>
+        <button type="button" onclick="sendAccept()">CALL_ACCEPT</button>
+        <button type="button" onclick="sendReject()">CALL_REJECT</button>
+        <button type="button" onclick="sendEnd()">CALL_END</button>
+        <button type="button" onclick="sendCancel()">CALL_CANCEL</button>
+        <button type="button" onclick="sendOffer()">WEBRTC_OFFER (payload mẫu)</button>
+    </div>
+
+    <h3>Log</h3>
+    <div id="logBox" class="log-box"></div>
+
+    <script>
+        var stompClient = null;
+        /** Gửi kèm header Authorization trên SUBSCRIBE/SEND vì stomp.js không luôn giữ user từ CONNECT. */
+        var currentJwt = '';
+
+        function authHeaders() {
+            if (!currentJwt) return {};
+            return { Authorization: 'Bearer ' + currentJwt };
+        }
+
+        function logMessage(msg) {
+            var logBox = document.getElementById('logBox');
+            logBox.innerHTML += '<div class="log-entry">' + new Date().toLocaleTimeString() + ' — ' + msg + '</div>';
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function connect() {
+            var url = document.getElementById('serverUrl').value.trim();
+            var token = document.getElementById('jwt').value.trim();
+            if (!token) {
+                alert('Nhập JWT');
+                return;
+            }
+            currentJwt = token;
+            var socket = new SockJS(url);
+            stompClient = Stomp.over(socket);
+            stompClient.debug = null;
+
+            var headers = { Authorization: 'Bearer ' + token };
+            logMessage('Đang kết nối…');
+            stompClient.connect(headers, function () {
+                logMessage('<b style="color:green">STOMP connected</b>');
+            }, function (err) {
+                logMessage('<b style="color:red">Lỗi:</b> ' + err);
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+                stompClient = null;
+            }
+            logMessage('Disconnected');
+        }
+
+        function subscribe() {
+            if (!stompClient || !stompClient.connected) {
+                alert('Connect trước');
+                return;
+            }
+            var uid = document.getElementById('myUserId').value;
+            var topic = '/topic/call/users/' + uid;
+            stompClient.subscribe(topic, function (message) {
+                try {
+                    var o = JSON.parse(message.body);
+                    logMessage('<b>RX</b> <pre>' + JSON.stringify(o, null, 2) + '</pre>');
+                    if (o.callId && (
+                        o.eventType === 'CALL_INVITE' ||
+                        o.eventType === 'USER_RINGING' ||
+                        o.eventType === 'CALL_CONNECTED' ||
+                        o.eventType === 'CALL_ACCEPT' ||
+                        o.eventType === 'CALL_BUSY' ||
+                        o.eventType === 'CALL_TIMEOUT' ||
+                        o.eventType === 'CALL_ERROR'
+                    )) {
+                        document.getElementById('callId').value = o.callId;
+                    }
+                } catch (e) {
+                    logMessage('RX raw: ' + message.body);
+                }
+            }, authHeaders());
+            logMessage('Subscribed: ' + topic);
+        }
+
+        function sendJson(body) {
+            if (!stompClient || !stompClient.connected) {
+                alert('Connect + Subscribe trước');
+                return;
+            }
+            stompClient.send('/app/call.signal', authHeaders(), JSON.stringify(body));
+            logMessage('<b>TX</b> ' + JSON.stringify(body));
+            if (body.eventType === 'CALL_INVITE') {
+                logMessage('<i>Chờ RX trên topic của bạn — callId trong CALL_INVITE / USER_RINGING.</i>');
+            }
+        }
+
+        function sendInvite() {
+            var tid = parseInt(document.getElementById('targetUserId').value, 10);
+            var dev = document.getElementById('deviceId').value || 'test';
+            sendJson({
+                eventType: 'CALL_INVITE',
+                targetUserId: tid,
+                mediaType: 'voice',
+                deviceId: dev,
+                payload: {}
+            });
+        }
+
+        function sendInviteVideo() {
+            var tid = parseInt(document.getElementById('targetUserId').value, 10);
+            var dev = document.getElementById('deviceId').value || 'test';
+            sendJson({
+                eventType: 'CALL_INVITE',
+                targetUserId: tid,
+                mediaType: 'video',
+                deviceId: dev,
+                payload: {}
+            });
+        }
+
+        function sendAccept() {
+            var cid = document.getElementById('callId').value.trim();
+            var dev = document.getElementById('deviceId').value || 'test';
+            sendJson({ eventType: 'CALL_ACCEPT', callId: cid, deviceId: dev });
+        }
+
+        function sendReject() {
+            var cid = document.getElementById('callId').value.trim();
+            sendJson({ eventType: 'CALL_REJECT', callId: cid });
+        }
+
+        function sendEnd() {
+            var cid = document.getElementById('callId').value.trim();
+            sendJson({ eventType: 'CALL_END', callId: cid });
+        }
+
+        function sendCancel() {
+            var cid = document.getElementById('callId').value.trim();
+            sendJson({ eventType: 'CALL_CANCEL', callId: cid });
+        }
+
+        function sendOffer() {
+            var cid = document.getElementById('callId').value.trim();
+            sendJson({
+                eventType: 'WEBRTC_OFFER',
+                callId: cid,
+                payload: { sdp: 'v=0 (mock — thay bằng SDP thật từ RTCPeerConnection)' }
+            });
+        }
+    </script>
+</body>
+
+</html>

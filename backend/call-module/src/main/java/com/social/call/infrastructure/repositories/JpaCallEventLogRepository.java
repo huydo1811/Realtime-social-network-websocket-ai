@@ -1,0 +1,8 @@
+package com.social.call.infrastructure.repositories;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.social.call.domain.entities.CallEventLog;
+
+public interface JpaCallEventLogRepository extends JpaRepository<CallEventLog, Long> {
+}

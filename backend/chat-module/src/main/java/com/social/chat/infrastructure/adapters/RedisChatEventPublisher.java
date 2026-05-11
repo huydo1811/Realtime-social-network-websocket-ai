@@ -1,5 +1,6 @@
 package com.social.chat.infrastructure.adapters;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.stereotype.Component;
@@ -14,7 +15,7 @@ public class RedisChatEventPublisher implements ChatEventPublisher {
     private final ChannelTopic channelTopic;
 
     public RedisChatEventPublisher(RedisTemplate<String, ChatRealtimeEvent> redisTemplate,
-                                   ChannelTopic channelTopic) {
+                                   @Qualifier("chatEventsTopic") ChannelTopic channelTopic) {
         this.redisTemplate = redisTemplate;
         this.channelTopic = channelTopic;
     }

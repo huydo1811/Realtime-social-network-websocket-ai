@@ -8,6 +8,7 @@ import ConversationList from "@/components/chat/ConversationList";
 import ChatWindow from "@/components/chat/ChatWindow";
 import ChatCommandPalette from "@/components/chat/ChatCommandPalette";
 import LeftSidebar from "@/components/home/LeftSidebar";
+import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import { dispatchRead } from "@/lib/event/chatEvents";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 
@@ -383,7 +384,7 @@ export default function MessagesPage() {
         onSelect={handleSelect}
       />
       <LeftSidebar />
-      <div className="md:ml-64 lg:ml-72 h-screen flex overflow-hidden">
+      <div className="md:ml-64 lg:ml-72 h-screen pb-16 md:pb-0 flex overflow-hidden">
         {incomingBanner && (
           <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-3 py-2 rounded-full shadow-lg flex items-center gap-2">
             <span>{incomingBanner}</span>
@@ -399,6 +400,7 @@ export default function MessagesPage() {
         {chatPanel}
         {listPanel}
       </div>
+      <MobileBottomNav />
     </div>
   );
 }

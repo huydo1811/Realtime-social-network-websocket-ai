@@ -18,6 +18,7 @@ import { getUserById } from "@/lib/api/userApi";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
 import { decodeMessageContent, encodeMessageContent } from "@/lib/chat/messageAttachment";
+import { useCall } from "@/components/call/CallProvider";
 type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
 type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
@@ -102,6 +103,7 @@ export default function FloatingChatWindow({
   const shouldStickBottomRef = useRef(true);
   const programmaticScrollRef = useRef(false);
 
+  const { callInfo, startCall } = useCall();
   const currentUserId = parseUserId(getAuthTokens()?.accessToken ?? "") ?? -1;
   const otherId = conversation.memberIds.find((id) => id !== currentUserId);
   const isSelfConversation =
@@ -552,6 +554,15 @@ export default function FloatingChatWindow({
     [conversation.id]
   );
 
+  const handleRecallCall = useCallback(
+    (mediaType: "voice" | "video") => {
+      if (conversation.type !== "PRIVATE" || otherId == null || isSelfConversation) return;
+      if (callInfo.status !== "IDLE") return;
+      startCall(otherId, mediaType, displayName, conversation.id);
+    },
+    [callInfo.status, conversation.id, conversation.type, displayName, isSelfConversation, otherId, startCall]
+  );
+
   const saveAppearance = async () => {
     setAppearanceSaving(true);
     try {
@@ -722,6 +733,41 @@ export default function FloatingChatWindow({
           )}
         </div>
 
+        {/* Call buttons — only for private conversations */}
+        {conversation.type === "PRIVATE" && otherId != null && !isSelfConversation && (
+          <>
+            <button
+              type="button"
+              title="Gọi thoại"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (callInfo.status !== "IDLE") return;
+                startCall(otherId, "voice", displayName, conversation.id);
+              }}
+              disabled={callInfo.status !== "IDLE"}
+              className="cursor-pointer p-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition active:scale-90"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 7V5z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              title="Gọi video"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (callInfo.status !== "IDLE") return;
+                startCall(otherId, "video", displayName, conversation.id);
+              }}
+              disabled={callInfo.status !== "IDLE"}
+              className="cursor-pointer p-1.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition active:scale-90"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8h8a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2z" />
+              </svg>
+            </button>
+          </>
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -963,6 +1009,7 @@ export default function FloatingChatWindow({
                             }}
                             onEdit={isOwn ? handleEdit : undefined}
                             onDelete={isOwn ? handleDelete : undefined}
+                            onRecallCall={handleRecallCall}
                             ownBubbleClassName={ownBubbleClassName}
                             peerBubbleClassName={peerBubbleClassName}
                           />

@@ -17,6 +17,7 @@ import MessageBubble from "./MessageBubble";
 import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
 import { computeDeliveryFooterForMessage } from "@/lib/chat/deliveryFooterStatus";
 import { decodeMessageContent, encodeMessageContent } from "@/lib/chat/messageAttachment";
+import { useCall } from "@/components/call/CallProvider";
 type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
 type ChatBackground = "PLAIN" | "MESH" | "DOTS";
 
@@ -75,6 +76,7 @@ export default function ChatWindow({
   onOwnMessage,
   onConversationAppearanceUpdated,
 }: Props) {
+  const { callInfo, startCall } = useCall();
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -668,6 +670,15 @@ export default function ChatWindow({
     [conversation.id]
   );
 
+  const handleRecallCall = useCallback(
+    (mediaType: "voice" | "video") => {
+      if (conversation.type !== "PRIVATE" || otherId == null || isSelfConversation) return;
+      if (callInfo.status !== "IDLE") return;
+      startCall(otherId, mediaType, displayName, conversation.id);
+    },
+    [callInfo.status, conversation.id, conversation.type, displayName, isSelfConversation, otherId, startCall]
+  );
+
   const saveAppearance = async (patch: { nickname?: string | null; bubbleTheme?: ChatTheme; backgroundTheme?: ChatBackground; backgroundImageUrl?: string | null }) => {
     setAppearanceSaving(true);
     try {
@@ -791,18 +802,18 @@ export default function ChatWindow({
             </div>
           )}
         </div>
-        <div className="w-64 hidden sm:flex items-center gap-1">
+        <div className="flex items-center gap-1">
           {viewMode === "CHAT" && (
             <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm trong cuộc trò chuyện..."
-            className="flex-1 px-3 py-1.5 text-xs rounded-full border outline-none bg-slate-100 border-slate-200 focus:ring-2 focus:ring-rose-100"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm..."
+              className="hidden md:block w-52 lg:w-64 px-3 py-1.5 text-xs rounded-full border outline-none bg-slate-100 border-slate-200 focus:ring-2 focus:ring-rose-100"
             />
           )}
           {viewMode === "CHAT" && searchTerm.trim() && (
             <>
-              <span className="text-[10px] text-slate-500 px-1">
+              <span className="hidden md:inline text-[10px] text-slate-500 px-1">
                 {matchedMessageIds.length ? `${activeMatchIdx + 1}/${matchedMessageIds.length}` : "0/0"}
               </span>
               <button
@@ -812,7 +823,7 @@ export default function ChatWindow({
                     matchedMessageIds.length ? (idx - 1 + matchedMessageIds.length) % matchedMessageIds.length : 0
                   )
                 }
-                className="cursor-pointer text-slate-500 hover:text-slate-700 text-xs px-1"
+                className="hidden md:inline cursor-pointer text-slate-500 hover:text-slate-700 text-xs px-1"
               >
                 ↑
               </button>
@@ -823,9 +834,42 @@ export default function ChatWindow({
                     matchedMessageIds.length ? (idx + 1) % matchedMessageIds.length : 0
                   )
                 }
-                className="cursor-pointer text-slate-500 hover:text-slate-700 text-xs px-1"
+                className="hidden md:inline cursor-pointer text-slate-500 hover:text-slate-700 text-xs px-1"
               >
                 ↓
+              </button>
+            </>
+          )}
+          {/* Call buttons — only for private conversations */}
+          {conversation.type === "PRIVATE" && otherId != null && !isSelfConversation && (
+            <>
+              <button
+                type="button"
+                title="Gọi thoại"
+                onClick={() => {
+                  if (callInfo.status !== "IDLE") return;
+                  startCall(otherId, "voice", displayName, conversation.id);
+                }}
+                disabled={callInfo.status !== "IDLE"}
+                className="cursor-pointer p-2 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition active:scale-90"
+              >
+                <svg className="w-4.5 h-4.5" style={{ width: "1.125rem", height: "1.125rem" }} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 7V5z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                title="Gọi video"
+                onClick={() => {
+                  if (callInfo.status !== "IDLE") return;
+                  startCall(otherId, "video", displayName, conversation.id);
+                }}
+                disabled={callInfo.status !== "IDLE"}
+                className="cursor-pointer p-2 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition active:scale-90"
+              >
+                <svg className="w-4.5 h-4.5" style={{ width: "1.125rem", height: "1.125rem" }} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8h8a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2z" />
+                </svg>
               </button>
             </>
           )}
@@ -1128,6 +1172,7 @@ export default function ChatWindow({
                         }}
                         onEdit={isOwn ? handleEdit : undefined}
                         onDelete={isOwn ? handleDelete : undefined}
+                        onRecallCall={handleRecallCall}
                         ownBubbleClassName={ownBubbleClassName}
                         peerBubbleClassName={peerBubbleClassName}
                       />

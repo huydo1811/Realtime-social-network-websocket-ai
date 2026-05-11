@@ -49,20 +49,41 @@ public class UpdateConversationAppearanceUseCase {
         setting.updateAppearance(nickname, bubbleTheme, backgroundTheme, backgroundImageUrl);
         ChatRoomUserSetting saved = roomUserSettingRepository.save(setting);
 
+        // Sync shared background for all members so both sides see the same background.
+        for (Long memberId : conversation.getMemberIds()) {
+            if (memberId == null || memberId.equals(actorId)) {
+                continue;
+            }
+            ChatRoomUserSetting memberSetting = roomUserSettingRepository
+                    .findByConversationIdAndUserId(conversationId, memberId)
+                    .orElseGet(() -> ChatRoomUserSetting.create(conversationId, memberId));
+            memberSetting.updateAppearance(
+                    memberSetting.getNickname(),
+                    memberSetting.getBubbleTheme(),
+                    saved.getBackgroundTheme(),
+                    saved.getBackgroundImageUrl());
+            ChatRoomUserSetting memberSaved = roomUserSettingRepository.save(memberSetting);
+            publishAppearanceEvent(conversationId, actorId, memberSaved, buildNoticeForOthers(saved));
+        }
+
+        publishAppearanceEvent(conversationId, actorId, saved, buildNotice(saved));
+        return conversation;
+    }
+
+    private void publishAppearanceEvent(Long conversationId, Long actorId, ChatRoomUserSetting setting, String notice) {
         ChatRealtimeEvent event = new ChatRealtimeEvent();
         event.setEventId(UUID.randomUUID().toString());
         event.setEventName("chat.conversation.appearance.updated");
         event.setConversationId(conversationId);
         event.setSenderId(actorId);
-        event.setTargetUserId(actorId);
-        event.setNickname(saved.getNickname());
-        event.setBubbleTheme(saved.getBubbleTheme());
-        event.setBackgroundTheme(saved.getBackgroundTheme());
-        event.setBackgroundImageUrl(saved.getBackgroundImageUrl());
-        event.setNotice(buildNotice(saved));
+        event.setTargetUserId(setting.getUserId());
+        event.setNickname(setting.getNickname());
+        event.setBubbleTheme(setting.getBubbleTheme());
+        event.setBackgroundTheme(setting.getBackgroundTheme());
+        event.setBackgroundImageUrl(setting.getBackgroundImageUrl());
+        event.setNotice(notice);
         event.setOccurredAt(LocalDateTime.now());
         springEventPublisher.publishEvent(event);
-        return conversation;
     }
 
     private String buildNotice(ChatRoomUserSetting setting) {
@@ -70,5 +91,10 @@ public class UpdateConversationAppearanceUseCase {
         return "Bạn đã cập nhật biệt danh " + nickname + ", màu bong bóng " + setting.getBubbleTheme()
             + ", nền " + setting.getBackgroundTheme()
             + (setting.getBackgroundImageUrl() == null ? "." : " và background ảnh.");
+    }
+
+    private String buildNoticeForOthers(ChatRoomUserSetting actorSetting) {
+        return "Nền cuộc trò chuyện đã được đồng bộ: " + actorSetting.getBackgroundTheme()
+                + (actorSetting.getBackgroundImageUrl() == null ? "." : " và background ảnh.");
     }
 }

@@ -22,6 +22,7 @@ interface Props {
   onToggleStar?: (messageId: number) => void;
   onEdit?: (id: number, content: string) => void;
   onDelete?: (id: number) => void;
+  onRecallCall?: (mediaType: "voice" | "video") => void;
   ownBubbleClassName?: string;
   peerBubbleClassName?: string;
 }
@@ -50,6 +51,7 @@ export default function MessageBubble({
   onToggleStar,
   onEdit,
   onDelete,
+  onRecallCall,
   ownBubbleClassName,
   peerBubbleClassName,
 }: Props) {
@@ -87,6 +89,20 @@ export default function MessageBubble({
   const parsed = decodeMessageContent(message.content);
   const textContent = parsed.text;
   const attachments = parsed.attachments;
+  const normalizedText = textContent.trim().toLowerCase();
+  const isCallLogCard = attachments.length === 0 && normalizedText.startsWith("📞");
+  const canRecall = isCallLogCard && normalizedText.includes("gọi lại") && Boolean(onRecallCall);
+  const recallMediaType: "voice" | "video" = normalizedText.includes("video") ? "video" : "voice";
+  const callStatusLabel = normalizedText.includes("nhỡ")
+    ? "Cuộc gọi nhỡ"
+    : normalizedText.includes("đang bận")
+      ? "Máy bận"
+      : normalizedText.includes("kết thúc")
+        ? "Cuộc gọi kết thúc"
+        : "Nhật ký cuộc gọi";
+  const callStatusTone = isOwn
+    ? "bg-white/20 text-white/90"
+    : "bg-slate-100 text-slate-600";
   const isMediaOnly = attachments.length > 0 && !textContent.trim();
   const isFileOnly =
     attachments.length > 0 &&
@@ -133,6 +149,78 @@ export default function MessageBubble({
       setDownloadingUrl(null);
     }
   };
+
+  if (isCallLogCard && !editing) {
+    return (
+      <div className={`flex items-end ${isOwn ? "justify-end" : "justify-start"} px-3 py-1.5 group`}>
+        {!isOwn && (
+          <div className="w-8 mr-2 flex-shrink-0">
+            {showAvatar && (
+              <div
+                className={`w-8 h-8 rounded-full bg-gradient-to-br ${senderGradient}
+                flex items-center justify-center text-white text-xs font-bold shadow-sm`}
+              >
+                {(senderName?.trim()?.charAt(0) || message.senderId.toString().charAt(0)).toUpperCase()}
+              </div>
+            )}
+          </div>
+        )}
+        <div className={`flex flex-col ${isOwn ? "items-end ml-10" : "items-start"} max-w-[82%]`}>
+          <div
+            className={`rounded-2xl border shadow-sm px-3.5 py-3 ${
+              isOwn
+                ? `${ownBubbleClassName || "bg-rose-500 text-white"} border-transparent rounded-br-sm`
+                : `${peerBubbleClassName || "bg-slate-100 text-slate-800"} border-slate-200 rounded-bl-sm`
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                  isOwn ? "bg-white/15 text-white" : "bg-indigo-50 text-indigo-600"
+                }`}
+              >
+                <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 7V5z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className={`text-[11px] font-semibold uppercase tracking-wide ${isOwn ? "text-white/70" : "text-slate-500"}`}>
+                  Cuộc gọi
+                </p>
+                <p className={`text-sm leading-snug ${isOwn ? "text-white/95" : "text-slate-700"}`}>
+                  {textContent.replace(/^📞\s*/, "")}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${callStatusTone}`}>
+                {callStatusLabel}
+              </span>
+            </div>
+          </div>
+          <div className={`mt-1 w-full flex items-center ${isOwn ? "justify-end gap-2" : "justify-between gap-2"}`}>
+            <span className="text-[11px] text-slate-400 px-1">{fmtTime(message.createdAt)}</span>
+            {canRecall ? (
+              <button
+                type="button"
+                onClick={() => onRecallCall?.(recallMediaType)}
+                className={`cursor-pointer inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  isOwn
+                    ? "bg-white/15 hover:bg-white/25 text-white"
+                    : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Gọi lại
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

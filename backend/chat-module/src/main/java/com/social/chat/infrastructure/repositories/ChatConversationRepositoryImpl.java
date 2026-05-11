@@ -51,4 +51,9 @@ public class ChatConversationRepositoryImpl implements ChatConversationRepositor
     public Optional<ChatConversation> findByIdempotencyKey(Long creatorId, String idempotencyKey) {
         return jpaRepository.findByIdempotencyKey(creatorId, idempotencyKey);
     }
+
+    @Override
+    public List<ChatConversation> findAllOrderByRecentActivity() {
+        return jpaRepository.findAllOrderByRecentActivity();
+    }
 }

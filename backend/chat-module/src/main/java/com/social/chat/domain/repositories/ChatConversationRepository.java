@@ -19,4 +19,6 @@ public interface ChatConversationRepository {
     List<ChatConversation> findByMemberId(Long memberId);
 
     Optional<ChatConversation> findByIdempotencyKey(Long creatorId, String idempotencyKey);
+
+    List<ChatConversation> findAllOrderByRecentActivity();
 }

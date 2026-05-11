@@ -7,6 +7,7 @@ export interface ConversationResponse {
   nickname?: string | null;
   bubbleTheme?: "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
   backgroundTheme?: "PLAIN" | "MESH" | "DOTS";
+  backgroundImageUrl?: string | null;
   memberIds: number[];
   createdAt: string;
   unreadCount: number;
@@ -39,6 +40,70 @@ export interface UserPresenceResponse {
   lastSeenAt: string;
 }
 
+export interface BlockStatusResponse {
+  blockedByMe: boolean;
+  blockedMe: boolean;
+}
+
+export interface AdminChatConversationResponse {
+  id: number;
+  type: ConversationType;
+  name: string | null;
+  memberIds: number[];
+  createdAt: string;
+  bubbleTheme?: "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
+  backgroundTheme?: "PLAIN" | "MESH" | "DOTS";
+  messageCount: number;
+  lastMessageAt?: string | null;
+  lastMessagePreview?: string | null;
+}
+
+export interface AdminChatAuditLogResponse {
+  id: number;
+  adminUserId: number;
+  action: string;
+  reason?: string | null;
+  conversationId?: number | null;
+  messageId?: number | null;
+  detail?: string | null;
+  createdAt: string;
+}
+
+export interface AdminUpdateConversationAppearanceRequest {
+  nickname?: string | null;
+  bubbleTheme?: "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
+  backgroundTheme?: "PLAIN" | "MESH" | "DOTS";
+  backgroundImageUrl?: string | null;
+  targetUserId?: number | null;
+}
+
+export interface ChatBackgroundPresetResponse {
+  id: number;
+  name: string;
+  imageUrl: string;
+  active: boolean;
+  createdBy?: number | null;
+  origin?: "ADMIN" | "USER";
+  createdAt: string;
+}
+
+export interface AdminRoomMemberAppearanceResponse {
+  userId: number;
+  hasSavedSettings?: boolean;
+  nickname?: string | null;
+  bubbleTheme?: string | null;
+  backgroundTheme?: string | null;
+  backgroundImageUrl?: string | null;
+}
+
+export interface AdminRoomAppearanceDetailResponse {
+  conversationId: number;
+  roomNickname?: string | null;
+  roomBubbleTheme?: string | null;
+  roomBackgroundTheme?: string | null;
+  members: AdminRoomMemberAppearanceResponse[];
+}
+
 // Realtime event nhận từ STOMP
 export interface ChatRealtimeEvent {
   eventId: string;
@@ -64,6 +129,7 @@ export interface ChatRealtimeEvent {
   nickname?: string | null;
   bubbleTheme?: "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
   backgroundTheme?: "PLAIN" | "MESH" | "DOTS";
+  backgroundImageUrl?: string | null;
   notice?: string | null;
   readerId?: number | null;
   lastReadMessageId?: number | null;

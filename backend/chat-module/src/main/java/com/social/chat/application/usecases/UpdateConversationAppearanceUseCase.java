@@ -38,14 +38,15 @@ public class UpdateConversationAppearanceUseCase {
                                     Long conversationId,
                                     String nickname,
                                     String bubbleTheme,
-                                    String backgroundTheme) {
+                                    String backgroundTheme,
+                                    String backgroundImageUrl) {
         ChatConversation conversation = conversationRepository.findById(conversationId)
             .orElseThrow(() -> new ConversationNotFoundException(conversationId));
         permissionService.ensureConversationMember(conversation, actorId);
 
         ChatRoomUserSetting setting = roomUserSettingRepository.findByConversationIdAndUserId(conversationId, actorId)
             .orElseGet(() -> ChatRoomUserSetting.create(conversationId, actorId));
-        setting.updateAppearance(nickname, bubbleTheme, backgroundTheme);
+        setting.updateAppearance(nickname, bubbleTheme, backgroundTheme, backgroundImageUrl);
         ChatRoomUserSetting saved = roomUserSettingRepository.save(setting);
 
         ChatRealtimeEvent event = new ChatRealtimeEvent();
@@ -57,6 +58,7 @@ public class UpdateConversationAppearanceUseCase {
         event.setNickname(saved.getNickname());
         event.setBubbleTheme(saved.getBubbleTheme());
         event.setBackgroundTheme(saved.getBackgroundTheme());
+        event.setBackgroundImageUrl(saved.getBackgroundImageUrl());
         event.setNotice(buildNotice(saved));
         event.setOccurredAt(LocalDateTime.now());
         springEventPublisher.publishEvent(event);
@@ -66,6 +68,7 @@ public class UpdateConversationAppearanceUseCase {
     private String buildNotice(ChatRoomUserSetting setting) {
         String nickname = setting.getNickname() == null ? "mặc định" : "\"" + setting.getNickname() + "\"";
         return "Bạn đã cập nhật biệt danh " + nickname + ", màu bong bóng " + setting.getBubbleTheme()
-            + " và nền " + setting.getBackgroundTheme() + ".";
+            + ", nền " + setting.getBackgroundTheme()
+            + (setting.getBackgroundImageUrl() == null ? "." : " và background ảnh.");
     }
 }

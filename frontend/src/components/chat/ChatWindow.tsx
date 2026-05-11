@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { chatApi } from "@/lib/api/chatApi";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 import {
+  ChatBackgroundPresetResponse,
   ChatRealtimeEvent,
   ConversationReadStatusResponse,
   ConversationResponse,
@@ -96,6 +97,16 @@ export default function ChatWindow({
   const [draftNickname, setDraftNickname] = useState(conversation.nickname || "");
   const [draftTheme, setDraftTheme] = useState<ChatTheme>(conversation.bubbleTheme || "ROSE");
   const [draftBackground, setDraftBackground] = useState<ChatBackground>(conversation.backgroundTheme || "PLAIN");
+  const [draftBackgroundImageUrl, setDraftBackgroundImageUrl] = useState(conversation.backgroundImageUrl || "");
+  const [backgroundPresets, setBackgroundPresets] = useState<ChatBackgroundPresetResponse[]>([]);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<{ blockedByMe: boolean; blockedMe: boolean }>({
+    blockedByMe: false,
+    blockedMe: false,
+  });
+  const [updatingBlock, setUpdatingBlock] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [forwardPayload, setForwardPayload] = useState<{ tick: number; text: string }>({ tick: 0, text: "" });
   const typingTimerRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const typingStateRef = useRef<boolean>(false);
@@ -147,6 +158,13 @@ export default function ChatWindow({
       : background === "DOTS"
         ? "bg-[radial-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:12px_12px] bg-white"
         : "bg-white";
+  const bodyBackgroundStyle = conversation.backgroundImageUrl
+    ? {
+        backgroundImage: `linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)), url(${conversation.backgroundImageUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }
+    : undefined;
 
   const isNearBottom = useCallback(() => {
     const el = listRef.current;
@@ -217,6 +235,18 @@ export default function ChatWindow({
       })
       .catch(() => undefined);
   }, [conversation.memberIds, currentUserId]);
+
+  useEffect(() => {
+    chatApi.listBackgroundPresets().then(setBackgroundPresets).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (conversation.type !== "PRIVATE" || !otherId) return;
+    chatApi
+      .getBlockStatus(otherId)
+      .then((status) => setBlockStatus(status))
+      .catch(() => undefined);
+  }, [conversation.type, otherId]);
 
   const loadOlder = useCallback(async () => {
     if (loadingOlderRef.current || restoringScrollRef.current || !hasOlder || messages.length === 0) return;
@@ -388,9 +418,11 @@ export default function ChatWindow({
         if (event.targetUserId && event.targetUserId !== currentUserId) return;
         onConversationAppearanceUpdated?.({
           ...conversation,
-          nickname: event.nickname ?? conversation.nickname,
+          nickname: event.nickname !== undefined ? event.nickname : conversation.nickname,
           bubbleTheme: event.bubbleTheme ?? conversation.bubbleTheme,
           backgroundTheme: event.backgroundTheme ?? conversation.backgroundTheme,
+          backgroundImageUrl:
+            event.backgroundImageUrl !== undefined ? event.backgroundImageUrl : conversation.backgroundImageUrl,
         });
         if (event.notice) {
           addOrUpdateMessage({
@@ -501,8 +533,21 @@ export default function ChatWindow({
     return () => window.clearTimeout(t);
   }, [footerStatus, loading, messages.length, scrollChatToBottom, viewMode]);
 
+  const handleForwardFromMessage = useCallback(
+    (message: MessageResponse) => {
+      const parsed = decodeMessageContent(message.content);
+      const who = userNames[message.senderId] || `Người gửi #${message.senderId}`;
+      const body =
+        `──────── Chuyển tiếp từ ${who} ────────\n` +
+        (parsed.text.trim() || (parsed.attachments.length ? "[Tin có đính kèm — xem trong lịch sử]" : ""));
+      setForwardPayload((p) => ({ tick: p.tick + 1, text: body }));
+    },
+    [userNames]
+  );
+
   const handleSend = async ({ text, files }: { text: string; files: File[] }) => {
     setSending(true);
+    setSendError(null);
     try {
       const idempotencyKey = `${Date.now()}`;
       const sent =
@@ -526,6 +571,7 @@ export default function ChatWindow({
       onOwnMessage?.(conversation.id);
     } catch (e) {
       console.error(e);
+      setSendError(e instanceof Error ? e.message : "Không thể gửi tin nhắn. Kiểm tra kết nối và thử lại.");
     } finally {
       setSending(false);
     }
@@ -622,13 +668,14 @@ export default function ChatWindow({
     [conversation.id]
   );
 
-  const saveAppearance = async (patch: { nickname?: string | null; bubbleTheme?: ChatTheme; backgroundTheme?: ChatBackground }) => {
+  const saveAppearance = async (patch: { nickname?: string | null; bubbleTheme?: ChatTheme; backgroundTheme?: ChatBackground; backgroundImageUrl?: string | null }) => {
     setAppearanceSaving(true);
     try {
       const updated = await chatApi.updateConversationAppearance(conversation.id, {
         nickname: patch.nickname ?? conversation.nickname ?? null,
         bubbleTheme: patch.bubbleTheme ?? bubbleTheme,
         backgroundTheme: patch.backgroundTheme ?? background,
+        backgroundImageUrl: patch.backgroundImageUrl ?? conversation.backgroundImageUrl ?? null,
       });
       onConversationAppearanceUpdated?.(updated);
       setViewMode("CHAT");
@@ -644,14 +691,47 @@ export default function ChatWindow({
       nickname: draftNickname.trim() || null,
       bubbleTheme: draftTheme,
       backgroundTheme: draftBackground,
+      backgroundImageUrl: draftBackgroundImageUrl.trim() || null,
     });
+  };
+
+  const toggleBlock = async () => {
+    if (!otherId || updatingBlock) return;
+    setUpdatingBlock(true);
+    try {
+      if (blockStatus.blockedByMe) {
+        await chatApi.unblockUser(otherId);
+        setBlockStatus((prev) => ({ ...prev, blockedByMe: false }));
+      } else {
+        await chatApi.blockUser(otherId);
+        setBlockStatus((prev) => ({ ...prev, blockedByMe: true }));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdatingBlock(false);
+    }
+  };
+
+  const handleUploadBackground = async (file: File | null) => {
+    if (!file) return;
+    setUploadingBackground(true);
+    try {
+      const uploaded = await chatApi.uploadAttachment(file);
+      setDraftBackgroundImageUrl(uploaded.url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUploadingBackground(false);
+    }
   };
 
   useEffect(() => {
     setDraftNickname(conversation.nickname || "");
     setDraftTheme(conversation.bubbleTheme || "ROSE");
     setDraftBackground(conversation.backgroundTheme || "PLAIN");
-  }, [conversation.backgroundTheme, conversation.bubbleTheme, conversation.id, conversation.nickname]);
+    setDraftBackgroundImageUrl(conversation.backgroundImageUrl || "");
+  }, [conversation.backgroundImageUrl, conversation.backgroundTheme, conversation.bubbleTheme, conversation.id, conversation.nickname]);
 
   return (
     <div className="relative flex flex-col h-full bg-white">
@@ -759,6 +839,13 @@ export default function ChatWindow({
           </button>
         </div>
       </div>
+      {conversation.type === "PRIVATE" && (blockStatus.blockedByMe || blockStatus.blockedMe) && (
+        <div className="border-b border-slate-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+          {blockStatus.blockedByMe
+            ? "Bạn đã chặn người dùng này. Bỏ chặn để tiếp tục nhắn tin."
+            : "Bạn không thể gửi tin nhắn vì đã bị người dùng này chặn."}
+        </div>
+      )}
       {viewMode === "CHAT" && (
       <div className="px-4 py-2 border-b flex items-center gap-1 overflow-x-auto border-slate-100 bg-white">
         {(["ALL", "MEDIA", "FILES", "LINKS", "STARRED"] as const).map((mode) => (
@@ -839,11 +926,78 @@ export default function ChatWindow({
                     ))}
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Background ảnh (tùy chọn)</label>
+                  <input
+                    value={draftBackgroundImageUrl}
+                    onChange={(e) => setDraftBackgroundImageUrl(e.target.value)}
+                    placeholder="https://... hoặc chọn preset bên dưới"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <label className="cursor-pointer text-[11px] px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+                      {uploadingBackground ? "Đang tải..." : "Tải ảnh nền"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingBackground}
+                        onChange={(e) => void handleUploadBackground(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                    {draftBackgroundImageUrl.trim() ? (
+                      <button
+                        type="button"
+                        onClick={() => setDraftBackgroundImageUrl("")}
+                        className="cursor-pointer text-[11px] px-2.5 py-1 rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      >
+                        Gỡ ảnh nền
+                      </button>
+                    ) : null}
+                  </div>
+                  {backgroundPresets.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-[11px] font-semibold text-slate-600 mb-2">Preset ảnh nền</p>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {backgroundPresets.slice(0, 12).map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setDraftBackgroundImageUrl(preset.imageUrl)}
+                            title={preset.name}
+                            className={`relative aspect-square rounded-xl overflow-hidden border-2 transition ${
+                              draftBackgroundImageUrl.trim() === preset.imageUrl.trim()
+                                ? "border-rose-400 ring-2 ring-rose-100"
+                                : "border-slate-200 hover:border-rose-200"
+                            }`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={preset.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                            <span className="absolute bottom-0 inset-x-0 bg-black/45 text-[10px] text-white px-1 py-0.5 truncate">
+                              {preset.name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                 <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Xem trước</p>
-                <div className={`rounded-2xl border border-slate-200 p-3 space-y-2 min-h-44 ${draftBackground === "MESH" ? "bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.10),transparent_35%),#ffffff]" : draftBackground === "DOTS" ? "bg-[radial-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:12px_12px] bg-white" : "bg-white"}`}>
+                <div
+                  className={`rounded-2xl border border-slate-200 p-3 space-y-2 min-h-44 ${draftBackground === "MESH" ? "bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.10),transparent_35%),#ffffff]" : draftBackground === "DOTS" ? "bg-[radial-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:12px_12px] bg-white" : "bg-white"}`}
+                  style={
+                    draftBackgroundImageUrl.trim()
+                      ? {
+                          backgroundImage: `linear-gradient(rgba(255,255,255,0.84), rgba(255,255,255,0.84)), url(${draftBackgroundImageUrl.trim()})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                      : undefined
+                  }
+                >
                   <div className="flex justify-start">
                     <div className="rounded-2xl rounded-bl-sm px-3 py-2 text-xs border border-slate-200 bg-slate-100 text-slate-700">Xin chao, day la preview.</div>
                   </div>
@@ -856,6 +1010,27 @@ export default function ChatWindow({
                 </p>
               </div>
             </div>
+
+            {conversation.type === "PRIVATE" && otherId && (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+                <p className="text-sm font-semibold text-slate-800">Quyền riêng tư</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Chặn người này để không gửi hoặc nhận tin nhắn cho đến khi bạn bỏ chặn.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void toggleBlock()}
+                  disabled={updatingBlock}
+                  className={`cursor-pointer mt-3 rounded-xl px-4 py-2 text-xs font-semibold border ${
+                    blockStatus.blockedByMe
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-rose-200 bg-rose-50 text-rose-600"
+                  } disabled:opacity-60`}
+                >
+                  {updatingBlock ? "Đang xử lý..." : blockStatus.blockedByMe ? "Bỏ chặn" : "Chặn người này"}
+                </button>
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end gap-2">
               <button className="cursor-pointer px-4 py-2.5 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 transition" onClick={() => setViewMode("CHAT")}>Hủy</button>
@@ -870,7 +1045,7 @@ export default function ChatWindow({
           </div>
         </div>
       ) : (
-      <div ref={listRef} onScroll={onScroll} className={`flex-1 overflow-y-auto px-2 py-4 ${bodyBgClassName}`}>
+      <div ref={listRef} onScroll={onScroll} className={`flex-1 overflow-y-auto px-2 py-4 ${bodyBgClassName}`} style={bodyBackgroundStyle}>
         {loadingOlder && (
           <div className="flex justify-center pb-2">
             <div className="w-5 h-5 border-2 border-rose-300 border-t-rose-500 rounded-full animate-spin" />
@@ -938,6 +1113,7 @@ export default function ChatWindow({
                         replyToMessageId={msg.replyToMessageId ?? null}
                         onJumpToReplyTarget={jumpToMessage}
                         onReply={(message) => setReplyTo(message)}
+                        onForward={handleForwardFromMessage}
                         onToggleStar={async (messageId) => {
                           if (starPendingIds.includes(messageId)) return;
                           setStarPendingIds((prev) => [...prev, messageId]);
@@ -1002,7 +1178,10 @@ export default function ChatWindow({
 
       <ChatInput
         onSend={handleSend}
+        disabled={blockStatus.blockedByMe || blockStatus.blockedMe}
         sending={sending}
+        sendError={sendError}
+        forwardPayload={forwardPayload}
         replyPreview={decodeMessageContent(replyTo?.content || "").text.slice(0, 100)}
         onCancelReply={() => setReplyTo(null)}
         onTypingChange={handleTypingChange}

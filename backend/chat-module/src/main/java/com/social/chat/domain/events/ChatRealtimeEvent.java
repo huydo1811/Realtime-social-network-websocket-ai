@@ -19,6 +19,7 @@ public class ChatRealtimeEvent implements Serializable {
     private String nickname;
     private String bubbleTheme;
     private String backgroundTheme;
+    private String backgroundImageUrl;
     private String notice;
     private LocalDateTime occurredAt;
     private Long readerId;
@@ -156,6 +157,14 @@ public class ChatRealtimeEvent implements Serializable {
 
     public void setBackgroundTheme(String backgroundTheme) {
         this.backgroundTheme = backgroundTheme;
+    }
+
+    public String getBackgroundImageUrl() {
+        return backgroundImageUrl;
+    }
+
+    public void setBackgroundImageUrl(String backgroundImageUrl) {
+        this.backgroundImageUrl = backgroundImageUrl;
     }
 
     public String getNotice() {

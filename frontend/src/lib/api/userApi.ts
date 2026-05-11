@@ -1,13 +1,50 @@
-import { getAuthTokens } from "./authToken";
+import { clearAuthTokens, getAuthTokens, saveAuthTokens } from "./authToken";
 import type { ProfileInfo } from "@/components/user/profile/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
+async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const tokens = getAuthTokens();
+  if (!tokens?.accessToken) throw new Error("Chưa đăng nhập");
+
+  const withToken = (token: string) =>
+    fetch(url, {
+      ...init,
+      headers: {
+        ...(init.headers as Record<string, string> | undefined),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+  let res = await withToken(tokens.accessToken);
+  if ((res.status === 401 || res.status === 403) && tokens.refreshToken) {
+    try {
+      const refreshRes = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+      });
+      if (!refreshRes.ok) {
+        clearAuthTokens();
+        return res;
+      }
+      const refreshed = (await refreshRes.json()) as {
+        accessToken: string;
+        refreshToken: string;
+        expiresIn: number;
+        tokenType?: string;
+      };
+      saveAuthTokens(refreshed);
+      res = await withToken(refreshed.accessToken);
+    } catch {
+      clearAuthTokens();
+    }
+  }
+  return res;
+}
+
 export const searchUsers = async (query: string = '', page: number = 0, size: number = 10) => {
-  const token = getAuthTokens()?.accessToken;
-  const res = await fetch(`${API_URL}/users?fullName=${encodeURIComponent(query)}&page=${page}&size=${size}`, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
+  const res = await authFetch(`${API_URL}/users?fullName=${encodeURIComponent(query)}&page=${page}&size=${size}`);
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
@@ -18,19 +55,13 @@ export const searchUsers = async (query: string = '', page: number = 0, size: nu
 };
 
 export const getUserById = async (userId: string): Promise<ProfileInfo> => {
-  const token = getAuthTokens()?.accessToken;
-  const res = await fetch(`${API_URL}/users/${userId}`, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
+  const res = await authFetch(`${API_URL}/users/${userId}`);
   if (!res.ok) throw new Error("Không tìm thấy người dùng");
   return (await res.json()) as ProfileInfo;
 };
 
 export const getMyProfile = async (): Promise<ProfileInfo> => {
-  const token = getAuthTokens()?.accessToken;
-  const res = await fetch(`${API_URL}/users/me`, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
+  const res = await authFetch(`${API_URL}/users/me`);
   if (!res.ok) throw new Error("Không thể lấy thông tin cá nhân");
   return await res.json() as ProfileInfo;
 };
@@ -45,14 +76,11 @@ export interface AdminUserDto {
 }
 
 export const adminGetUsers = async (page: number = 0, size: number = 10, fullName: string = "", isActive?: boolean) => {
-  const token = getAuthTokens()?.accessToken;
   let url = `${API_URL}/users?page=${page}&size=${size}`;
   if (fullName) url += `&fullName=${encodeURIComponent(fullName)}`;
   if (isActive !== undefined) url += `&isActive=${isActive}`; 
   
-  const res = await fetch(url, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
+  const res = await authFetch(url);
   if (!res.ok) throw new Error("Gặp lỗi khi lấy danh sách user");
   return await res.json();
 };
@@ -89,17 +117,15 @@ const parseApiError = async (res: Response, defaultMessage: string) => {
     }
     
     return new Error(defaultMessage);
-  } catch (e) {
+  } catch {
     return new Error(defaultMessage); 
   }
 };
 
 export const adminCreateUser = async (data: AdminUserDto) => {
-  const token = getAuthTokens()?.accessToken;
-  const res = await fetch(`${API_URL}/users`, {
+  const res = await authFetch(`${API_URL}/users`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(cleanEmptyFields(data))
@@ -112,11 +138,9 @@ export const adminCreateUser = async (data: AdminUserDto) => {
 };
 
 export const adminUpdateUser = async (id: number, data: AdminUserDto) => {
-  const token = getAuthTokens()?.accessToken;
-  const res = await fetch(`${API_URL}/users/${id}`, {
+  const res = await authFetch(`${API_URL}/users/${id}`, {
     method: "PUT",
     headers: {
-      "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(cleanEmptyFields(data)) 
@@ -129,11 +153,7 @@ export const adminUpdateUser = async (id: number, data: AdminUserDto) => {
 };
 
 export const adminDeleteUser = async (id: number) => {
-  const token = getAuthTokens()?.accessToken;
-  const res = await fetch(`${API_URL}/users/${id}`, {
-    method: "DELETE",
-    headers: { "Authorization": `Bearer ${token}` }
-  });
+  const res = await authFetch(`${API_URL}/users/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Xoá người dùng thất bại!");
   return true;
 };

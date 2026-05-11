@@ -24,6 +24,11 @@ public class ChatRoomUserSettingRepositoryImpl implements ChatRoomUserSettingRep
     }
 
     @Override
+    public List<ChatRoomUserSetting> findByConversationId(Long conversationId) {
+        return jpaRepository.findByConversationIdOrderByUserIdAsc(conversationId);
+    }
+
+    @Override
     public List<ChatRoomUserSetting> findByConversationIdsAndUserId(Collection<Long> conversationIds, Long userId) {
         if (conversationIds == null || conversationIds.isEmpty()) {
             return List.of();

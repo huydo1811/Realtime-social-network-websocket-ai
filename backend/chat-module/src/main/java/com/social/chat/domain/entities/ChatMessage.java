@@ -105,6 +105,14 @@ public class ChatMessage {
         this.content = "[deleted]";
     }
 
+    public void deleteByAdmin() {
+        if (isDeleted()) {
+            return;
+        }
+        this.deletedAt = LocalDateTime.now();
+        this.content = "[deleted by admin]";
+    }
+
     public boolean isDeleted() {
         return deletedAt != null;
     }

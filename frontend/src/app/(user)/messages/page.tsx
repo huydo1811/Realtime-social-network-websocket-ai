@@ -6,6 +6,7 @@ import { chatApi } from "@/lib/api/chatApi";
 import { ConversationResponse, UserPresenceResponse } from "@/types/chat";
 import ConversationList from "@/components/chat/ConversationList";
 import ChatWindow from "@/components/chat/ChatWindow";
+import ChatCommandPalette from "@/components/chat/ChatCommandPalette";
 import LeftSidebar from "@/components/home/LeftSidebar";
 import { dispatchRead } from "@/lib/event/chatEvents";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
@@ -36,6 +37,8 @@ export default function MessagesPage() {
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [incomingBanner, setIncomingBanner] = useState<string | null>(null);
   const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteNameMap, setPaletteNameMap] = useState<Record<number, string>>({});
   const activeIdRef = useRef<number | null>(null);
   const conversationIdsKey = useMemo(
     () => conversations.map((c) => c.id).sort((a, b) => a - b).join(","),
@@ -104,6 +107,54 @@ export default function MessagesPage() {
   }, [currentUserId, router]);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (currentUserId == null) return;
+    const ids = new Set<number>();
+    conversations.forEach((c) => c.memberIds.forEach((id) => ids.add(id)));
+    ids.delete(currentUserId);
+    const missing = [...ids].filter((id) => !paletteNameMap[id]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    import("@/lib/api/userApi")
+      .then(({ getUserById }) =>
+        Promise.all(
+          missing.map(async (id) => {
+            try {
+              const u = await getUserById(String(id));
+              return [id, u.fullName || `Người dùng #${id}`] as const;
+            } catch {
+              return [id, `Người dùng #${id}`] as const;
+            }
+          })
+        )
+      )
+      .then((pairs) => {
+        if (cancelled) return;
+        setPaletteNameMap((prev) => {
+          const next = { ...prev };
+          pairs.forEach(([id, name]) => {
+            next[id] = name;
+          });
+          return next;
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationIdsKey, conversations, currentUserId, paletteNameMap]);
+
+  useEffect(() => {
     if (currentUserId == null || !conversationIdsKey) return;
     initChatSocket();
     const ids = conversationIdsKey
@@ -130,9 +181,11 @@ export default function MessagesPage() {
                     ? c
                     : {
                         ...c,
-                        nickname: ev.nickname ?? c.nickname,
+                        nickname: ev.nickname !== undefined ? ev.nickname : c.nickname,
                         bubbleTheme: ev.bubbleTheme ?? c.bubbleTheme,
                         backgroundTheme: ev.backgroundTheme ?? c.backgroundTheme,
+                        backgroundImageUrl:
+                          ev.backgroundImageUrl !== undefined ? ev.backgroundImageUrl : c.backgroundImageUrl,
                       }
                   : c
           )
@@ -321,6 +374,14 @@ export default function MessagesPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <ChatCommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        conversations={conversations}
+        currentUserId={currentUserId}
+        userNames={paletteNameMap}
+        onSelect={handleSelect}
+      />
       <LeftSidebar />
       <div className="md:ml-64 lg:ml-72 h-screen flex overflow-hidden">
         {incomingBanner && (

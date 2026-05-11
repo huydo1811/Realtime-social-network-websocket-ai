@@ -1,20 +1,28 @@
 package com.social.chat.presentation.dto;
 
-import jakarta.validation.constraints.Size;
-
-public class UpdateConversationAppearanceRequest {
-
-    @Size(max = 120)
+public class AdminRoomMemberAppearanceResponse {
+    private Long userId;
+    private Boolean hasSavedSettings;
     private String nickname;
-
-    @Size(max = 20)
     private String bubbleTheme;
-
-    @Size(max = 20)
     private String backgroundTheme;
-
-    @Size(max = 1000)
     private String backgroundImageUrl;
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public Boolean getHasSavedSettings() {
+        return hasSavedSettings;
+    }
+
+    public void setHasSavedSettings(Boolean hasSavedSettings) {
+        this.hasSavedSettings = hasSavedSettings;
+    }
 
     public String getNickname() {
         return nickname;

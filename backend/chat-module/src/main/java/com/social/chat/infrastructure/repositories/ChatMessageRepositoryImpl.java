@@ -67,4 +67,14 @@ public class ChatMessageRepositoryImpl implements ChatMessageRepository {
     public Long findLatestMessageId(Long conversationId) {
         return jpaRepository.findLatestMessageId(conversationId);
     }
+
+    @Override
+    public Optional<ChatMessage> findLatestByConversationId(Long conversationId) {
+        return jpaRepository.findTopByConversation_IdOrderByCreatedAtDesc(conversationId);
+    }
+
+    @Override
+    public long countByConversationId(Long conversationId) {
+        return jpaRepository.countByConversation_Id(conversationId);
+    }
 }

@@ -42,6 +42,22 @@ export default function AdminSidebar() {
         >
           Người dùng
         </Link>
+        <Link
+          href="/admin/chat"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname === "/admin/chat" ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Nội dung chat
+        </Link>
+        <Link
+          href="/admin/chat-appearance"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/chat-appearance") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Giao diện chat
+        </Link>
         <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Bài viết</button>
         <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Moderation</button>
         <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Báo cáo</button>

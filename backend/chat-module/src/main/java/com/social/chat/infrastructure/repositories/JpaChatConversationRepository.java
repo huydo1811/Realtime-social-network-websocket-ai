@@ -19,6 +19,18 @@ public interface JpaChatConversationRepository extends JpaRepository<ChatConvers
     @Query(value = """
             SELECT cr.*
             FROM chat_rooms cr
+            LEFT JOIN (
+                SELECT room_id, MAX(created_at) AS last_message_at
+                FROM chat_messages
+                GROUP BY room_id
+            ) lm ON lm.room_id = cr.id
+            ORDER BY COALESCE(lm.last_message_at, cr.created_at) DESC
+            """, nativeQuery = true)
+    List<ChatConversation> findAllOrderByRecentActivity();
+
+    @Query(value = """
+            SELECT cr.*
+            FROM chat_rooms cr
             JOIN chat_room_members m ON m.room_id = cr.id AND m.user_id = :memberId
             LEFT JOIN (
                 SELECT room_id, MAX(created_at) AS last_message_at

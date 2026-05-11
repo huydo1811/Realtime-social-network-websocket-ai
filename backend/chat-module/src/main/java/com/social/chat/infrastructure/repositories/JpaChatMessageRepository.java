@@ -33,4 +33,8 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessage, Lon
 
     @Query("select max(m.id) from ChatMessage m where m.conversation.id = :conversationId")
     Long findLatestMessageId(@Param("conversationId") Long conversationId);
+
+    Optional<ChatMessage> findTopByConversation_IdOrderByCreatedAtDesc(Long conversationId);
+
+    long countByConversation_Id(Long conversationId);
 }

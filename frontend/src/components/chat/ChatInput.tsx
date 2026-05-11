@@ -11,12 +11,24 @@ interface Props {
   onSend: (payload: { text: string; files: File[] }) => Promise<void> | void;
   disabled?: boolean;
   sending?: boolean;
+  sendError?: string | null;
   replyPreview?: string;
   onCancelReply?: () => void;
   onTypingChange?: (typing: boolean) => void;
+  /** Khi tick tăng, nội dung forwardText được chèn vào ô nhập */
+  forwardPayload?: { tick: number; text: string };
 }
 
-export default function ChatInput({ onSend, disabled, sending, replyPreview, onCancelReply, onTypingChange }: Props) {
+export default function ChatInput({
+  onSend,
+  disabled,
+  sending,
+  sendError,
+  replyPreview,
+  onCancelReply,
+  onTypingChange,
+  forwardPayload,
+}: Props) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -57,6 +69,23 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
   useEffect(() => {
     onTypingChange?.(value.trim().length > 0);
   }, [onTypingChange, value]);
+
+  useEffect(() => {
+    if (!forwardPayload?.tick) return;
+    const piece = forwardPayload.text?.trim();
+    if (!piece) return;
+    const id = requestAnimationFrame(() => {
+      setValue((v) => (v.trim() ? `${v.trim()}\n\n${piece}` : piece));
+      requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+        el.focus();
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [forwardPayload?.tick, forwardPayload?.text]);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -208,6 +237,11 @@ export default function ChatInput({ onSend, disabled, sending, replyPreview, onC
         <div className="mb-2 rounded-xl border border-rose-100 bg-rose-50/70 px-3 py-2 text-xs text-rose-700 flex items-center justify-between">
           <span className="truncate pr-3">Đang trả lời: {replyPreview}</span>
           <button type="button" onClick={onCancelReply} className="text-rose-500 hover:text-rose-700">Hủy</button>
+        </div>
+      )}
+      {sendError && (
+        <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+          {sendError}
         </div>
       )}
       {pickerError && <div className="mb-2 text-[12px] text-rose-600">{pickerError}</div>}

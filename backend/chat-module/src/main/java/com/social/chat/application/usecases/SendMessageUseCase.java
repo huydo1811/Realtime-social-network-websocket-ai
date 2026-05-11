@@ -18,6 +18,7 @@ import com.social.chat.domain.exceptions.InvalidMessageException;
 import com.social.chat.domain.exceptions.MessageNotFoundException;
 import com.social.chat.domain.repositories.ChatConversationRepository;
 import com.social.chat.domain.repositories.ChatMessageRepository;
+import com.social.chat.domain.repositories.ChatUserBlockRepository;
 
 @Service
 public class SendMessageUseCase {
@@ -28,15 +29,18 @@ public class SendMessageUseCase {
     private final ChatMessageRepository messageRepository;
     private final ChatPermissionService permissionService;
     private final ApplicationEventPublisher springEventPublisher;
+    private final ChatUserBlockRepository chatUserBlockRepository;
 
     public SendMessageUseCase(ChatConversationRepository conversationRepository,
                               ChatMessageRepository messageRepository,
                               ChatPermissionService permissionService,
-                              ApplicationEventPublisher springEventPublisher) {
+                              ApplicationEventPublisher springEventPublisher,
+                              ChatUserBlockRepository chatUserBlockRepository) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.permissionService = permissionService;
         this.springEventPublisher = springEventPublisher;
+        this.chatUserBlockRepository = chatUserBlockRepository;
     }
 
     @Transactional
@@ -45,6 +49,21 @@ public class SendMessageUseCase {
             .orElseThrow(() -> new ConversationNotFoundException(conversationId));
 
         permissionService.ensureConversationMember(conversation, actorId);
+        if (conversation.getType() == com.social.chat.domain.entities.ConversationType.PRIVATE
+                && conversation.getMemberIds().size() >= 2) {
+            Long peerId = conversation.getMemberIds().stream()
+                    .filter(memberId -> !memberId.equals(actorId))
+                    .findFirst()
+                    .orElse(null);
+            if (peerId != null) {
+                if (chatUserBlockRepository.exists(actorId, peerId)) {
+                    throw new InvalidMessageException("Bạn đã chặn người dùng này. Hãy bỏ chặn để nhắn tin.");
+                }
+                if (chatUserBlockRepository.exists(peerId, actorId)) {
+                    throw new InvalidMessageException("Bạn không thể gửi tin nhắn vì đã bị chặn.");
+                }
+            }
+        }
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var existing = messageRepository.findByIdempotencyKey(conversationId, actorId, idempotencyKey.trim());

@@ -33,6 +33,9 @@ public class ChatRoomUserSetting {
     @Column(name = "background_theme", nullable = false)
     private String backgroundTheme = "PLAIN";
 
+    @Column(name = "background_image_url")
+    private String backgroundImageUrl;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -43,10 +46,16 @@ public class ChatRoomUserSetting {
         return setting;
     }
 
-    public void updateAppearance(String nextNickname, String nextBubbleTheme, String nextBackgroundTheme) {
+    public void updateAppearance(String nextNickname, String nextBubbleTheme, String nextBackgroundTheme, String nextBackgroundImageUrl) {
         this.nickname = nextNickname == null || nextNickname.isBlank() ? null : nextNickname.trim();
         this.bubbleTheme = nextBubbleTheme == null || nextBubbleTheme.isBlank() ? "ROSE" : nextBubbleTheme.trim();
         this.backgroundTheme = nextBackgroundTheme == null || nextBackgroundTheme.isBlank() ? "PLAIN" : nextBackgroundTheme.trim();
+        this.backgroundImageUrl =
+                nextBackgroundImageUrl == null || nextBackgroundImageUrl.isBlank() ? null : nextBackgroundImageUrl.trim();
+    }
+
+    public void updateAppearance(String nextNickname, String nextBubbleTheme, String nextBackgroundTheme) {
+        updateAppearance(nextNickname, nextBubbleTheme, nextBackgroundTheme, null);
     }
 
     @PrePersist
@@ -79,6 +88,10 @@ public class ChatRoomUserSetting {
 
     public String getBackgroundTheme() {
         return backgroundTheme;
+    }
+
+    public String getBackgroundImageUrl() {
+        return backgroundImageUrl;
     }
 
     public static class ChatRoomUserSettingId implements Serializable {

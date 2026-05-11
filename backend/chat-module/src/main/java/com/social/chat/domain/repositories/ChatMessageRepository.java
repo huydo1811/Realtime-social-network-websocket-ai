@@ -23,4 +23,8 @@ public interface ChatMessageRepository {
     void markAllAsRead(Long conversationId, Long actorId);
 
     Long findLatestMessageId(Long conversationId);
+
+    Optional<ChatMessage> findLatestByConversationId(Long conversationId);
+
+    long countByConversationId(Long conversationId);
 }

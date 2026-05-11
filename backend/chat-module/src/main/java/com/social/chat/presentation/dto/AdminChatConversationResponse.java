@@ -5,25 +5,17 @@ import java.util.Set;
 
 import com.social.chat.domain.entities.ConversationType;
 
-public class ConversationResponse {
+public class AdminChatConversationResponse {
     private Long id;
     private ConversationType type;
     private String name;
     private Set<Long> memberIds;
     private LocalDateTime createdAt;
-    private int unreadCount;
-    private String nickname;
     private String bubbleTheme;
     private String backgroundTheme;
-    private String backgroundImageUrl;
-
-    public int getUnreadCount() {
-        return unreadCount;
-    }
-
-    public void setUnreadCount(int unreadCount) {
-        this.unreadCount = unreadCount;
-    }
+    private Long messageCount;
+    private LocalDateTime lastMessageAt;
+    private String lastMessagePreview;
 
     public Long getId() {
         return id;
@@ -65,14 +57,6 @@ public class ConversationResponse {
         this.createdAt = createdAt;
     }
 
-    public String getNickname() {
-        return nickname;
-    }
-
-    public void setNickname(String nickname) {
-        this.nickname = nickname;
-    }
-
     public String getBubbleTheme() {
         return bubbleTheme;
     }
@@ -89,11 +73,27 @@ public class ConversationResponse {
         this.backgroundTheme = backgroundTheme;
     }
 
-    public String getBackgroundImageUrl() {
-        return backgroundImageUrl;
+    public Long getMessageCount() {
+        return messageCount;
     }
 
-    public void setBackgroundImageUrl(String backgroundImageUrl) {
-        this.backgroundImageUrl = backgroundImageUrl;
+    public void setMessageCount(Long messageCount) {
+        this.messageCount = messageCount;
+    }
+
+    public LocalDateTime getLastMessageAt() {
+        return lastMessageAt;
+    }
+
+    public void setLastMessageAt(LocalDateTime lastMessageAt) {
+        this.lastMessageAt = lastMessageAt;
+    }
+
+    public String getLastMessagePreview() {
+        return lastMessagePreview;
+    }
+
+    public void setLastMessagePreview(String lastMessagePreview) {
+        this.lastMessagePreview = lastMessagePreview;
     }
 }

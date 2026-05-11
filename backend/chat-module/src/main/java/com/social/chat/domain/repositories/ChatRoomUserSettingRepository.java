@@ -9,6 +9,8 @@ import com.social.chat.domain.entities.ChatRoomUserSetting;
 public interface ChatRoomUserSettingRepository {
     Optional<ChatRoomUserSetting> findByConversationIdAndUserId(Long conversationId, Long userId);
 
+    List<ChatRoomUserSetting> findByConversationId(Long conversationId);
+
     List<ChatRoomUserSetting> findByConversationIdsAndUserId(Collection<Long> conversationIds, Long userId);
 
     ChatRoomUserSetting save(ChatRoomUserSetting setting);

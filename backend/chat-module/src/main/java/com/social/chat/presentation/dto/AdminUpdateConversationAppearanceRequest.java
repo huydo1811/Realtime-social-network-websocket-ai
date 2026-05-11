@@ -1,20 +1,19 @@
 package com.social.chat.presentation.dto;
 
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 
-public class UpdateConversationAppearanceRequest {
-
-    @Size(max = 120)
+public class AdminUpdateConversationAppearanceRequest {
     private String nickname;
 
-    @Size(max = 20)
+    @Pattern(regexp = "^(ROSE|OCEAN|FOREST|SUNSET)$", message = "bubbleTheme không hợp lệ")
     private String bubbleTheme;
 
-    @Size(max = 20)
+    @Pattern(regexp = "^(PLAIN|MESH|DOTS)$", message = "backgroundTheme không hợp lệ")
     private String backgroundTheme;
 
-    @Size(max = 1000)
     private String backgroundImageUrl;
+
+    private Long targetUserId;
 
     public String getNickname() {
         return nickname;
@@ -38,6 +37,14 @@ public class UpdateConversationAppearanceRequest {
 
     public void setBackgroundTheme(String backgroundTheme) {
         this.backgroundTheme = backgroundTheme;
+    }
+
+    public Long getTargetUserId() {
+        return targetUserId;
+    }
+
+    public void setTargetUserId(Long targetUserId) {
+        this.targetUserId = targetUserId;
     }
 
     public String getBackgroundImageUrl() {

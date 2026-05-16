@@ -9,7 +9,8 @@ import ChatWindow from "@/components/chat/ChatWindow";
 import ChatCommandPalette from "@/components/chat/ChatCommandPalette";
 import LeftSidebar from "@/components/home/LeftSidebar";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
-import { dispatchRead } from "@/lib/event/chatEvents";
+import { dispatchPrivateThreadsSync, dispatchRead } from "@/lib/event/chatEvents";
+import { shouldShowInThreadList } from "@/lib/chat/conversationVisibility";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 
 function parseUserIdFromToken(token: string): number | null {
@@ -45,6 +46,8 @@ export default function MessagesPage() {
     () => conversations.map((c) => c.id).sort((a, b) => a - b).join(","),
     [conversations]
   );
+
+  const sidebarConversations = useMemo(() => conversations.filter(shouldShowInThreadList), [conversations]);
 
 
   useEffect(() => {
@@ -298,6 +301,7 @@ export default function MessagesPage() {
     });
     setActive(conv);
     setMobileView("chat");
+    dispatchPrivateThreadsSync();
   }, []);
 
   if (currentUserId === undefined) {
@@ -325,7 +329,7 @@ export default function MessagesPage() {
     `}
     >
       <ConversationList
-        conversations={conversations}
+        conversations={sidebarConversations}
         loading={loadingConvs}
         activeId={active?.id ?? null}
         currentUserId={currentUserId}
@@ -378,7 +382,7 @@ export default function MessagesPage() {
       <ChatCommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        conversations={conversations}
+        conversations={sidebarConversations}
         currentUserId={currentUserId}
         userNames={paletteNameMap}
         onSelect={handleSelect}

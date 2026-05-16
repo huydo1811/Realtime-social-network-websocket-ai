@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { chatApi } from "@/lib/api/chatApi";
 import { ConversationResponse, ChatRealtimeEvent } from "@/types/chat";
 import { getAuthTokens } from "@/lib/api/authToken";
-import { onRead } from "@/lib/event/chatEvents";
+import { onRead, onPrivateThreadsSync } from "@/lib/event/chatEvents";
 import FloatingChatWindow from "@/components/chat/FloatingChatWindow";
 import { useRouter } from "next/navigation";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
@@ -40,6 +40,12 @@ export default function RightSidebar() {
   const currentUserId = parseUserId(getAuthTokens()?.accessToken ?? "");
 
   const [contacts, setContacts] = useState<ConversationResponse[]>([]);
+  const [privateThreads, setPrivateThreads] = useState<ConversationResponse[]>([]);
+  const privateThreadsRef = useRef(privateThreads);
+
+  useEffect(() => {
+    privateThreadsRef.current = privateThreads;
+  }, [privateThreads]);
   const [loading, setLoading] = useState(true);
   const [openChats, setOpenChats] = useState<ConversationResponse[]>([]);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
@@ -69,17 +75,56 @@ export default function RightSidebar() {
     [contacts]
   );
 
-  useEffect(() => {
+  const privateIdsKey = useMemo(
+    () => privateThreads.map((c) => c.id).sort((a, b) => a - b).join(","),
+    [privateThreads]
+  );
+
+  const fetchSidebarData = useCallback(async () => {
     const tokens = getAuthTokens();
     if (!tokens?.accessToken) return;
-    chatApi
-      .listConversations()
-      .then((data) => {
-        setContacts(data.filter((c) => c.type === "PRIVATE"));
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    try {
+      const data = await chatApi.listConversations();
+      const privates = data.filter((c) => c.type === "PRIVATE");
+      setPrivateThreads(privates);
+      const enriched = await Promise.all(
+        privates.map(async (c) => {
+          try {
+            const msgs = await chatApi.getMessages(c.id, undefined, 1);
+            if (msgs.length === 0) return null;
+            const msg = msgs[0];
+            return {
+              ...c,
+              lastMessageContent: msg?.deleted ? "Tin nhắn đã bị xóa" : msg?.content,
+              lastMessageAt: msg?.createdAt,
+            } as ConversationResponse;
+          } catch {
+            return null;
+          }
+        })
+      );
+      setContacts(enriched.filter((x): x is ConversationResponse => x != null));
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchSidebarData().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSidebarData]);
+
+  useEffect(() => {
+    return onPrivateThreadsSync(() => {
+      void fetchSidebarData();
+    });
+  }, [fetchSidebarData]);
 
   useEffect(() => {
     const ids = contacts
@@ -165,22 +210,44 @@ export default function RightSidebar() {
   }, []);
 
   useEffect(() => {
-    if (currentUserId == null || contacts.length === 0) return;
+    if (currentUserId == null || privateThreads.length === 0) return;
     initChatSocket();
 
-    const unsubs = contacts.map((c) =>
+    const unsubs = privateThreads.map((c) =>
       subscribeConversation(c.id, (ev: ChatRealtimeEvent) => {
         if (ev.eventName !== "chat.message.sent") return;
-        if (ev.senderId === currentUserId) return;
-
         if (openIdsRef.current.includes(ev.conversationId)) return;
+
+        const fromPeer = ev.senderId !== currentUserId;
 
         setContacts((prev) => {
           const idx = prev.findIndex((x) => x.id === ev.conversationId);
-          if (idx < 0) return prev;
-          const updated = { ...prev[idx], unreadCount: prev[idx].unreadCount + 1 };
-          const rest = prev.filter((x) => x.id !== ev.conversationId);
-          return [updated, ...rest];
+          const base = privateThreadsRef.current.find((x) => x.id === ev.conversationId);
+          if (!base) return prev;
+
+          const bumpUnread = fromPeer ? 1 : 0;
+
+          if (idx >= 0) {
+            const cur = prev[idx];
+            const updated = {
+              ...cur,
+              unreadCount: cur.unreadCount + bumpUnread,
+              lastMessageContent: ev.content ?? cur.lastMessageContent,
+              lastMessageAt: ev.createdAt ?? cur.lastMessageAt,
+            };
+            const rest = prev.filter((x) => x.id !== ev.conversationId);
+            return [updated, ...rest];
+          }
+
+          return [
+            {
+              ...base,
+              unreadCount: (base.unreadCount ?? 0) + bumpUnread,
+              lastMessageContent: ev.content || "",
+              lastMessageAt: ev.createdAt || new Date().toISOString(),
+            },
+            ...prev,
+          ];
         });
       })
     );
@@ -188,7 +255,7 @@ export default function RightSidebar() {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [contactIdsKey, contacts, currentUserId]);
+  }, [privateIdsKey, currentUserId]);
 
   const totalUnread = useMemo(() => contacts.reduce((s, c) => s + c.unreadCount, 0), [contacts]);
 
@@ -270,7 +337,12 @@ export default function RightSidebar() {
                   (otherId ? userNames[otherId] : undefined) || "Bản thân";
                 const displayName = c.nickname?.trim() || fallbackName;
                 const presence = otherId != null ? presenceMap[otherId] : undefined;
-                const online = Boolean(presence?.online);
+                const online = presence ? Boolean(presence.online) : false;
+                const presenceSubtitle = presence
+                  ? online
+                    ? "Đang hoạt động"
+                    : formatLastActiveSubtitle(presence.lastSeenAt)
+                  : "Đang tải...";
                 const isOpen = openChats.some((o) => o.id === c.id);
 
                 return (
@@ -291,7 +363,7 @@ export default function RightSidebar() {
                       {!isSelfConversation && (
                         <span
                           className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                            online ? "bg-green-400" : "bg-slate-400"
+                            presence ? (online ? "bg-green-400" : "bg-slate-400") : "bg-slate-300"
                           }`}
                         />
                       )}
@@ -313,10 +385,10 @@ export default function RightSidebar() {
                       {!isSelfConversation && (
                         <p
                           className={`text-[11px] truncate ${
-                            online ? "text-green-600 font-medium" : "text-slate-500"
+                            presence ? (online ? "text-green-600 font-medium" : "text-slate-500") : "text-slate-400"
                           }`}
                         >
-                          {online ? "Đang hoạt động" : formatLastActiveSubtitle(presence?.lastSeenAt)}
+                          {presenceSubtitle}
                         </p>
                       )}
                     </div>

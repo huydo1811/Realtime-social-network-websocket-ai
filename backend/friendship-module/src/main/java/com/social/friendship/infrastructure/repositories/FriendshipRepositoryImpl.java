@@ -29,7 +29,17 @@ public class FriendshipRepositoryImpl implements FriendshipRepository {
 
     @Override
     public Optional<Friendship> findByUsers(Long userA, Long userB) {
-        return jpaFriendshipRepository.findByUsers(userA, userB);
+        long lo = Math.min(userA, userB);
+        long hi = Math.max(userA, userB);
+        Optional<Friendship> normalized = jpaFriendshipRepository.findByUserId1AndUserId2(lo, hi);
+        if (normalized.isPresent()) {
+            return normalized;
+        }
+        Optional<Friendship> legacy = jpaFriendshipRepository.findByUserId1AndUserId2(hi, lo);
+        if (legacy.isPresent()) {
+            return legacy;
+        }
+        return jpaFriendshipRepository.findByUsersEitherOrder(userA, userB);
     }
 
     @Override

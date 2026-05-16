@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { ConversationResponse } from "@/types/chat";
 import { getUserById } from "@/lib/api/userApi";
 import { chatApi } from "@/lib/api/chatApi";
-import { getAuthTokens } from "@/lib/api/authToken";
-import { getMyProfile } from "@/lib/api/authApi";
+import { listFriends } from "@/lib/api/friendshipApi";
+import { loadProfilesByIds } from "@/lib/friendship/loadProfiles";
+import { peerUserId } from "@/lib/friendship/peerUserId";
 import ConversationItem from "./ConversationItem";
 import { decodeMessageContent } from "@/lib/chat/messageAttachment";
 
@@ -34,7 +35,7 @@ export default function ConversationList({
   const [createType, setCreateType] = useState<"PRIVATE" | "GROUP">("PRIVATE");
   const [createName, setCreateName] = useState("");
   const [createQuery, setCreateQuery] = useState("");
-  const [followedUsers, setFollowedUsers] = useState<Array<{ id: number; fullName: string; username?: string }>>([]);
+  const [friendPickUsers, setFriendPickUsers] = useState<Array<{ id: number; fullName: string; username?: string }>>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -75,27 +76,31 @@ export default function ConversationList({
   }, [conversations, currentUserId, userNames]);
 
   useEffect(() => {
-    if (!openCreate || followedUsers.length > 0) return;
-    const tokens = getAuthTokens();
-    if (!tokens?.accessToken) return;
+    if (!openCreate) return;
     let cancelled = false;
-    getMyProfile(tokens.accessToken)
-      .then((profile) => {
-        if (cancelled) return;
-        const list = ((profile as { followingList?: Array<{ id: string | number; name?: string; username?: string }> }).followingList || [])
-          .map((u) => ({
-            id: Number(u.id),
-            fullName: u.name || `Người dùng #${u.id}`,
-            username: u.username,
-          }))
-          .filter((u) => Number.isFinite(u.id) && u.id !== currentUserId);
-        setFollowedUsers(list);
-      })
-      .catch(console.error);
+    (async () => {
+      try {
+        const rows = await listFriends();
+        const peerIds = rows.map((r) => peerUserId(r, currentUserId));
+        const map = await loadProfilesByIds(peerIds);
+        const list = peerIds.map((id) => {
+          const p = map.get(id);
+          return {
+            id,
+            fullName: p?.fullName ?? `Người dùng #${id}`,
+            username: p?.username,
+          };
+        });
+        if (!cancelled) setFriendPickUsers(list);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setFriendPickUsers([]);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, followedUsers.length, openCreate]);
+  }, [currentUserId, openCreate]);
 
   const handleCreateConversation = async () => {
     if (selectedIds.length === 0) return;
@@ -149,7 +154,7 @@ export default function ConversationList({
 
     return name.toLowerCase().includes(search.toLowerCase());
   });
-  const filteredFollowedUsers = followedUsers.filter((u) => {
+  const filteredFriendPickUsers = friendPickUsers.filter((u) => {
     const q = createQuery.toLowerCase();
     if (!q) return true;
     return u.fullName.toLowerCase().includes(q) || (u.username || "").toLowerCase().includes(q);
@@ -337,7 +342,7 @@ export default function ConversationList({
               />
 
               <div className="max-h-44 overflow-y-auto space-y-1">
-                {filteredFollowedUsers.map((u) => {
+                {filteredFriendPickUsers.map((u) => {
                   const selected = selectedIds.includes(u.id);
                   return (
                     <button
@@ -359,9 +364,9 @@ export default function ConversationList({
                     </button>
                   );
                 })}
-                {filteredFollowedUsers.length === 0 && (
+                {filteredFriendPickUsers.length === 0 && (
                   <p className="text-xs text-slate-400 px-1 py-2">
-                    Không có người theo dõi phù hợp để tạo cuộc trò chuyện.
+                    Không có bạn bè phù hợp để tạo cuộc trò chuyện. Kết bạn trong Khám phá hoặc trang cá nhân.
                   </p>
                 )}
               </div>

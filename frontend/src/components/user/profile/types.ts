@@ -17,6 +17,7 @@ export type SocialPerson = {
 };
 
 export type ProfileInfo = {
+  id?: number;
   fullName: string;
   username: string;
   email: string;
@@ -31,13 +32,10 @@ export type ProfileInfo = {
   location?: string;
   website?: string;
   stats?: {
-    posts: number;
-    followers: number;
-    following: number;
+    posts?: number;
+    friendsCount?: number;
   };
   posts?: FeedPost[];
-  followersList?: SocialPerson[];
-  followingList?: SocialPerson[];
 };
 
 export const sampleFeedPosts = [

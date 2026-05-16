@@ -4,9 +4,10 @@ import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
 import { getMyProfile } from "@/lib/api/authApi";
-import { useEffect, useState } from "react";
+import { listIncomingRequests } from "@/lib/api/friendshipApi";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { onRead } from "@/lib/event/chatEvents";
-import { initChatSocket, subscribeConversation } from "@/lib/socket/chatSocket";
+import { initChatSocket, subscribeConversation, subscribeFriendshipUser } from "@/lib/socket/chatSocket";
 import { ChatRealtimeEvent } from "@/types/chat";
 
 type UserProfile = { fullName?: string; username?: string; avatarUrl?: string };
@@ -37,6 +38,18 @@ export default function LeftSidebar() {
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [friendIncomingCount, setFriendIncomingCount] = useState(0);
+  const [friendPush, setFriendPush] = useState<string | null>(null);
+  const friendPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refreshFriendIncoming = useCallback(async () => {
+    try {
+      const list = await listIncomingRequests();
+      setFriendIncomingCount(list.length);
+    } catch {
+      /* offline / 401 */
+    }
+  }, []);
 
   useEffect(() => {
     const tokens = getAuthTokens();
@@ -60,6 +73,43 @@ export default function LeftSidebar() {
       mounted = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    const tokens = getAuthTokens();
+    if (!tokens?.accessToken) return;
+    void refreshFriendIncoming();
+  }, [refreshFriendIncoming]);
+
+  useEffect(() => {
+    const h = () => void refreshFriendIncoming();
+    window.addEventListener("friendship-changed", h);
+    return () => window.removeEventListener("friendship-changed", h);
+  }, [refreshFriendIncoming]);
+
+  useEffect(() => {
+    const tokens = getAuthTokens();
+    if (!tokens?.accessToken) return;
+    const actorId = parseUserId(tokens.accessToken);
+    if (actorId == null) return;
+
+    initChatSocket();
+    const unsub = subscribeFriendshipUser(actorId, (ev) => {
+      void refreshFriendIncoming();
+      if (ev.eventName === "friendship.request.sent" && ev.targetUserId === actorId) {
+        if (friendPushTimerRef.current) clearTimeout(friendPushTimerRef.current);
+        setFriendPush("Bạn có lời mời kết bạn mới");
+        friendPushTimerRef.current = setTimeout(() => setFriendPush(null), 6500);
+      }
+    });
+
+    return () => {
+      unsub();
+      if (friendPushTimerRef.current) {
+        clearTimeout(friendPushTimerRef.current);
+        friendPushTimerRef.current = null;
+      }
+    };
+  }, [refreshFriendIncoming]);
 
   useEffect(() => {
     return onRead(({ amount }) => {
@@ -134,6 +184,29 @@ export default function LeftSidebar() {
         </span>
       </Link>
 
+      {friendPush && (
+        <div
+          role="status"
+          className="mb-4 flex items-start justify-between gap-2 rounded-xl border border-rose-100 bg-gradient-to-r from-rose-50 to-white px-3 py-2.5 text-xs font-semibold text-rose-800 shadow-sm"
+        >
+          <span className="leading-snug pt-0.5">{friendPush}</span>
+          <button
+            type="button"
+            className="cursor-pointer shrink-0 rounded-lg px-1.5 py-0.5 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
+            aria-label="Đóng"
+            onClick={() => {
+              if (friendPushTimerRef.current) {
+                clearTimeout(friendPushTimerRef.current);
+                friendPushTimerRef.current = null;
+              }
+              setFriendPush(null);
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <nav className="flex flex-col gap-2 flex-1">
         <Link href="/" className={`${base} ${isActive("/") ? active : inactive}`}>
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -160,7 +233,12 @@ export default function LeftSidebar() {
           <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
-          Bạn bè
+          <span className="flex-1">Bạn bè</span>
+          {friendIncomingCount > 0 && (
+            <span className="bg-rose-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+              {friendIncomingCount > 99 ? "99+" : friendIncomingCount}
+            </span>
+          )}
         </Link>
 
         <Link href="/profile" className={`${base} ${isActive("/profile") ? active : inactive}`}>

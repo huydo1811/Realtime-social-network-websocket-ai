@@ -1,35 +1,20 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
-import { ProfileInfo, SocialPerson } from "./types";
+import FriendActionButton from "@/components/friendship/FriendActionButton";
+import { OpenDmBubbleButton } from "@/components/chat/FloatingDmProvider";
 import ProfileFeedSection from "./ProfileFeedSection";
-import FollowListModal from "./FollowListModal";
+import { ProfileInfo } from "./types";
 
 type Props = {
   profile: ProfileInfo;
 };
 
-const defaultFollowers: SocialPerson[] = [
-  { id: "u1", name: "Linh Trần", username: "linhtran", avatarUrl: "/hype.png" },
-  { id: "u2", name: "Minh Quân", username: "minhquan", avatarUrl: "/hype.png" },
-];
-
-const defaultFollowing: SocialPerson[] = [
-  { id: "u4", name: "Hà Phạm", username: "hapham", avatarUrl: "/hype.png" },
-  { id: "u5", name: "Tuấn Võ", username: "tuanvo", avatarUrl: "/hype.png" },
-  { id: "u6", name: "Mai Anh", username: "maianh", avatarUrl: "/hype.png" },
-];
-
 export default function OtherProfileInfoCard({ profile }: Props) {
-  const stats = profile.stats ?? { posts: 0, followers: 120, following: 45 };
+  const stats = profile.stats ?? { posts: 0 };
   const coverUrl = profile.coverUrl || "";
   const avatarUrl = profile.avatarUrl || "/hype.png";
-
-  const [followModal, setFollowModal] = useState<"followers" | "following" | null>(null);
-
-  const followerUsers = profile.followersList ?? defaultFollowers;
-  const followingUsers = profile.followingList ?? defaultFollowing;
+  const targetId = profile.id;
 
   return (
     <div className="space-y-6">
@@ -50,7 +35,6 @@ export default function OtherProfileInfoCard({ profile }: Props) {
 
           <div className="absolute -bottom-14 left-5 right-5 rounded-2xl border border-white/35 bg-white/80 p-4 shadow-lg backdrop-blur-md">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              
               <div className="flex items-end gap-4">
                 <div className="relative">
                   <Image
@@ -58,7 +42,7 @@ export default function OtherProfileInfoCard({ profile }: Props) {
                     alt="avatar"
                     width={96}
                     height={96}
-                    className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md bg-white"
+                    className="h-24 w-24 rounded-2xl border-4 border-white bg-white object-cover shadow-md"
                     unoptimized
                   />
                 </div>
@@ -68,60 +52,46 @@ export default function OtherProfileInfoCard({ profile }: Props) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-start gap-2 pb-1">
-                <button className="cursor-pointer flex items-center gap-2 rounded-xl bg-rose-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-rose-200 hover:bg-rose-600 transition-all active:scale-95">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                  Theo dõi
-                </button>
-                <button className="cursor-pointer flex items-center gap-2 rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all active:scale-95">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                  Nhắn tin
-                </button>
+              <div className="flex flex-col items-stretch gap-2 pb-1 sm:flex-row sm:items-center">
+                {targetId != null ? (
+                  <div className="min-w-0">
+                    <FriendActionButton targetUserId={targetId} />
+                  </div>
+                ) : (
+                  <span className="text-sm text-slate-500">Không xác định được người dùng.</span>
+                )}
+                {targetId != null ? (
+                  <OpenDmBubbleButton
+                    peerUserId={targetId}
+                    className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 transition-all hover:bg-slate-200 active:scale-95"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Nhắn tin
+                  </OpenDmBubbleButton>
+                ) : (
+                  <span className="rounded-xl bg-slate-50 px-5 py-2.5 text-sm text-slate-400">Nhắn tin</span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         <div className="px-5 pb-6 pt-20 md:px-7">
-          <p className="text-base leading-relaxed text-slate-700 font-medium">
+          <p className="text-base font-medium leading-relaxed text-slate-700">
             {profile.bio || "Người dùng này chưa có thông tin giới thiệu."}
           </p>
 
-          <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm">
-            <span className="flex items-center gap-1.5 cursor-default text-slate-600">
-              <b className="text-slate-900 text-lg">{stats.posts}</b> Bài viết
+          <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-slate-600">
+            <span className="flex cursor-default items-center gap-1.5">
+              <b className="text-lg text-slate-900">{stats.posts}</b> bài viết
             </span>
-            <button 
-              onClick={() => setFollowModal("followers")} 
-              className="flex items-center gap-1.5 text-slate-600 hover:text-rose-600 cursor-pointer transition-colors"
-            >
-              <b className="text-slate-900 text-lg">{stats.followers}</b> Người theo dõi
-            </button>
-            <button 
-              onClick={() => setFollowModal("following")} 
-              className="flex items-center gap-1.5 text-slate-600 hover:text-rose-600 cursor-pointer transition-colors"
-            >
-              <b className="text-slate-900 text-lg">{stats.following}</b> Đang theo dõi
-            </button>
           </div>
         </div>
       </section>
 
       <ProfileFeedSection avatarUrl={avatarUrl} initialPosts={[]} onPostsChanged={() => {}} readonly={true} />
-
-      {/* Hiển thị Modal list Followers/Following */}
-      <FollowListModal
-        open={followModal === "followers"}
-        title="Người theo dõi"
-        users={followerUsers}
-        onClose={() => setFollowModal(null)}
-      />
-      <FollowListModal
-        open={followModal === "following"}
-        title="Đang theo dõi"
-        users={followingUsers}
-        onClose={() => setFollowModal(null)}
-      />
     </div>
   );
 }

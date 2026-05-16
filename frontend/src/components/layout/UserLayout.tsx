@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import LeftSidebar from "@/components/home/LeftSidebar";
 import RightSidebar from "@/components/home/RightSidebar";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
+import FriendshipNotificationHost from "@/components/friendship/FriendshipNotificationHost";
 import { clearAuthTokens, getAuthTokens } from "@/lib/api/authToken";
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
@@ -44,6 +45,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex justify-center">
+      <FriendshipNotificationHost />
       <LeftSidebar />
 
       <main className="flex-1 flex flex-col items-center lg:ml-64 xl:ml-72 lg:mr-80 min-h-screen w-full overflow-hidden px-4 py-5 lg:py-8 pb-20 lg:pb-8">

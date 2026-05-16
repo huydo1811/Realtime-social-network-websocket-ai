@@ -13,7 +13,7 @@ import {
 import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
 import { computeDeliveryFooterForMessage } from "@/lib/chat/deliveryFooterStatus";
 import { getAuthTokens } from "@/lib/api/authToken";
-import { dispatchRead } from "@/lib/event/chatEvents";
+import { dispatchPrivateThreadsSync, dispatchRead } from "@/lib/event/chatEvents";
 import { getUserById } from "@/lib/api/userApi";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
@@ -515,6 +515,7 @@ export default function FloatingChatWindow({
       void chatApi.sendTyping(conversation.id, false).catch(() => undefined);
       shouldStickBottomRef.current = true;
       requestAnimationFrame(() => scrollChatToBottom());
+      dispatchPrivateThreadsSync();
     } catch (e) {
       console.error(e);
       setSendError(e instanceof Error ? e.message : "Không thể gửi tin nhắn.");

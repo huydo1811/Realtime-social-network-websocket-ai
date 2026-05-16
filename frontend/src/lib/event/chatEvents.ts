@@ -30,3 +30,16 @@ export function onRead(handler: (p: ReadPayload) => void): () => void {
   window.addEventListener(EVENT, h);
   return () => window.removeEventListener(EVENT, h);
 }
+
+const THREADS_SYNC = "chat:private-threads-sync";
+
+export function dispatchPrivateThreadsSync() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(THREADS_SYNC));
+}
+
+export function onPrivateThreadsSync(handler: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(THREADS_SYNC, handler);
+  return () => window.removeEventListener(THREADS_SYNC, handler);
+}

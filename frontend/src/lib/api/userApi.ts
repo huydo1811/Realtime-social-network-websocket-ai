@@ -25,9 +25,9 @@ function resolveApiBaseUrl(): string {
   return "http://localhost:8080";
 }
 
-const API_URL = resolveApiBaseUrl();
+export const API_URL = resolveApiBaseUrl();
 
-async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export async function apiAuthFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const tokens = getAuthTokens();
   if (!tokens?.accessToken) throw new Error("Chưa đăng nhập");
 
@@ -68,7 +68,7 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 }
 
 export const searchUsers = async (query: string = '', page: number = 0, size: number = 10) => {
-  const res = await authFetch(`${API_URL}/users?fullName=${encodeURIComponent(query)}&page=${page}&size=${size}`);
+  const res = await apiAuthFetch(`${API_URL}/users?fullName=${encodeURIComponent(query)}&page=${page}&size=${size}`);
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
@@ -79,13 +79,13 @@ export const searchUsers = async (query: string = '', page: number = 0, size: nu
 };
 
 export const getUserById = async (userId: string): Promise<ProfileInfo> => {
-  const res = await authFetch(`${API_URL}/users/${userId}`);
+  const res = await apiAuthFetch(`${API_URL}/users/${userId}`);
   if (!res.ok) throw new Error("Không tìm thấy người dùng");
   return (await res.json()) as ProfileInfo;
 };
 
 export const getMyProfile = async (): Promise<ProfileInfo> => {
-  const res = await authFetch(`${API_URL}/users/me`);
+  const res = await apiAuthFetch(`${API_URL}/users/me`);
   if (!res.ok) throw new Error("Không thể lấy thông tin cá nhân");
   return await res.json() as ProfileInfo;
 };
@@ -104,7 +104,7 @@ export const adminGetUsers = async (page: number = 0, size: number = 10, fullNam
   if (fullName) url += `&fullName=${encodeURIComponent(fullName)}`;
   if (isActive !== undefined) url += `&isActive=${isActive}`; 
   
-  const res = await authFetch(url);
+  const res = await apiAuthFetch(url);
   if (!res.ok) throw new Error("Gặp lỗi khi lấy danh sách user");
   return await res.json();
 };
@@ -147,7 +147,7 @@ const parseApiError = async (res: Response, defaultMessage: string) => {
 };
 
 export const adminCreateUser = async (data: AdminUserDto) => {
-  const res = await authFetch(`${API_URL}/users`, {
+  const res = await apiAuthFetch(`${API_URL}/users`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -162,7 +162,7 @@ export const adminCreateUser = async (data: AdminUserDto) => {
 };
 
 export const adminUpdateUser = async (id: number, data: AdminUserDto) => {
-  const res = await authFetch(`${API_URL}/users/${id}`, {
+  const res = await apiAuthFetch(`${API_URL}/users/${id}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json"
@@ -177,7 +177,7 @@ export const adminUpdateUser = async (id: number, data: AdminUserDto) => {
 };
 
 export const adminDeleteUser = async (id: number) => {
-  const res = await authFetch(`${API_URL}/users/${id}`, { method: "DELETE" });
+  const res = await apiAuthFetch(`${API_URL}/users/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Xoá người dùng thất bại!");
   return true;
 };

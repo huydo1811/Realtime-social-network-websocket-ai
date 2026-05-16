@@ -1,6 +1,7 @@
 import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { getAuthTokens } from "@/lib/api/authToken";
+import type { FriendshipRealtimeEvent } from "@/types/friendship";
 import { ChatRealtimeEvent } from "@/types/chat";
 
 function resolveApiBaseUrl(): string {
@@ -30,13 +31,37 @@ function resolveApiBaseUrl(): string {
 const API_BASE = resolveApiBaseUrl();
 
 type Listener = (event: ChatRealtimeEvent) => void;
+type FriendshipListener = (event: FriendshipRealtimeEvent) => void;
 
 let client: Client | null = null;
 const roomSubs = new Map<number, StompSubscription>();
 const roomListeners = new Map<number, Set<Listener>>();
 let presenceSub: StompSubscription | null = null;
 const presenceListeners = new Set<Listener>();
+const friendshipUserSubs = new Map<number, StompSubscription>();
+const friendshipUserListeners = new Map<number, Set<FriendshipListener>>();
 const connectCallbacks = new Set<() => void>();
+
+function ensureFriendshipUserSub(userId: number) {
+  if (!client?.connected || friendshipUserSubs.has(userId)) return;
+
+  const sub = client.subscribe(`/topic/friendships/users/${userId}`, (frame: IMessage) => {
+    try {
+      const event = JSON.parse(frame.body) as FriendshipRealtimeEvent;
+      friendshipUserListeners.get(userId)?.forEach((cb) => cb(event));
+    } catch {
+      console.error("[ChatSocket] Failed to parse friendship event:", frame.body);
+    }
+  });
+
+  friendshipUserSubs.set(userId, sub);
+}
+
+function rebindFriendshipSubs() {
+  for (const userId of friendshipUserListeners.keys()) {
+    ensureFriendshipUserSub(userId);
+  }
+}
 
 function ensureConversationSub(conversationId: number) {
   if (!client?.connected || roomSubs.has(conversationId)) return;
@@ -96,11 +121,13 @@ export function initChatSocket(
     onConnect: () => {
       rebindAllConversationSubs();
       ensurePresenceSub();
+      rebindFriendshipSubs();
       connectCallbacks.forEach((cb) => cb());
     },
     onDisconnect: () => {
       roomSubs.clear();
       presenceSub = null;
+      friendshipUserSubs.clear();
     },
     onStompError: (frame) => {
       console.error("[ChatSocket] STOMP error:", frame.headers["message"]);
@@ -156,6 +183,8 @@ export function disconnectChatSocket(): void {
   roomListeners.clear();
   presenceSub = null;
   presenceListeners.clear();
+  friendshipUserSubs.clear();
+  friendshipUserListeners.clear();
   connectCallbacks.clear();
   client = null;
 }
@@ -172,6 +201,33 @@ export function subscribePresence(onEvent: Listener): () => void {
     if (presenceListeners.size === 0) {
       presenceSub?.unsubscribe();
       presenceSub = null;
+    }
+  };
+}
+
+/**
+ * Nhận sự kiện kết bạn push qua STOMP (Redis → backend → /topic/friendships/users/{userId}).
+ */
+export function subscribeFriendshipUser(userId: number, onEvent: FriendshipListener): () => void {
+  initChatSocket();
+  let set = friendshipUserListeners.get(userId);
+  if (!set) {
+    set = new Set<FriendshipListener>();
+    friendshipUserListeners.set(userId, set);
+  }
+  set.add(onEvent);
+
+  ensureFriendshipUserSub(userId);
+
+  return () => {
+    const listeners = friendshipUserListeners.get(userId);
+    if (!listeners) return;
+
+    listeners.delete(onEvent);
+    if (listeners.size === 0) {
+      friendshipUserListeners.delete(userId);
+      friendshipUserSubs.get(userId)?.unsubscribe();
+      friendshipUserSubs.delete(userId);
     }
   };
 }

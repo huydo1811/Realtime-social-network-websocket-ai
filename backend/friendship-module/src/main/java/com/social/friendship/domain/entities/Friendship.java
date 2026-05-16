@@ -79,6 +79,20 @@ public class Friendship {
         status = FriendshipStatus.REJECTED;
     }
 
+    public void reopenAsPending(Long actorId, Long targetUserId) {
+        if (!containsUser(actorId) || !containsUser(targetUserId)) {
+            throw new IllegalStateException("Người dùng không thuộc quan hệ này");
+        }
+        if (status != FriendshipStatus.REJECTED) {
+            throw new IllegalStateException("Chỉ có thể gửi lại lời mời khi trước đó đã bị từ chối");
+        }
+        Pair pair = normalizePair(actorId, targetUserId);
+        userId1 = pair.left();
+        userId2 = pair.right();
+        requestedBy = actorId;
+        status = FriendshipStatus.PENDING;
+    }
+
     public void cancel(Long actorId) {
         ensureParticipant(actorId);
         if (status != FriendshipStatus.PENDING) {

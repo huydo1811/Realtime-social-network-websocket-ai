@@ -23,7 +23,7 @@ export default function DashboardHeader({ query = "", setQuery }: Props) {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard quản trị</h1>
-          <p className="text-sm text-slate-500">Theo dõi hoạt động, xử lý vi phạm, và vận hành hệ thống.</p>
+          <p className="text-sm text-slate-500">Giám sát hoạt động, xử lý vi phạm, và vận hành hệ thống.</p>
         </div>
 
         <div className="flex items-center gap-3">

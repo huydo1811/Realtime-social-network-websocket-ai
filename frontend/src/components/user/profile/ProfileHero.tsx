@@ -8,10 +8,10 @@ type Props = {
   avatarPreview: string;
   coverPreview: string;
   postCount: number;
+  friendsCount?: number;
   onPickAvatar: () => void;
   onPickCover: () => void;
-  onOpenFollowers: () => void;
-  onOpenFollowing: () => void;
+  onOpenFriends: () => void;
   onEdit: () => void;
 };
 
@@ -20,13 +20,13 @@ export default function ProfileHero({
   avatarPreview,
   coverPreview,
   postCount,
+  friendsCount,
   onPickAvatar,
   onPickCover,
-  onOpenFollowers,
-  onOpenFollowing,
+  onOpenFriends,
   onEdit,
 }: Props) {
-  const stats = profile.stats ?? { posts: 124, followers: 3890, following: 412 };
+  const friends = friendsCount ?? 0;
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -47,7 +47,7 @@ export default function ProfileHero({
         <button
           type="button"
           onClick={onPickCover}
-          className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow hover:bg-white cursor-pointer"
+          className="absolute right-4 top-4 cursor-pointer rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow hover:bg-white"
         >
           Đổi ảnh bìa
         </button>
@@ -55,7 +55,7 @@ export default function ProfileHero({
         <div className="absolute -bottom-14 left-5 right-5 rounded-2xl border border-white/35 bg-white/75 p-3 shadow-lg backdrop-blur-md">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex items-end gap-3">
-              <button type="button" onClick={onPickAvatar} className="relative rounded-2xl" aria-label="Đổi avatar">
+              <button type="button" onClick={onPickAvatar} className="relative cursor-pointer rounded-2xl" aria-label="Đổi avatar">
                 <Image
                   src={avatarPreview}
                   alt="avatar"
@@ -63,7 +63,7 @@ export default function ProfileHero({
                   height={96}
                   className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md"
                 />
-                <span className="absolute -bottom-1 right-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white cursor-pointer hover:bg-rose-600">
+                <span className="absolute -bottom-1 right-0 cursor-pointer rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-rose-600">
                   Đổi
                 </span>
               </button>
@@ -87,16 +87,13 @@ export default function ProfileHero({
         <p className="text-sm leading-relaxed text-slate-700">{profile.bio || "Chưa có mô tả."}</p>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <span><b className="text-slate-900">{postCount}</b> bài viết</span>
+          <span>
+            <b className="text-slate-900">{postCount}</b> bài viết
+          </span>
 
-          <button onClick={onOpenFollowers} className="text-left hover:text-rose-600 cursor-pointer">
-            <b className="text-slate-900 cursor-pointer">{stats.followers}</b> Người theo dõi
+          <button type="button" onClick={onOpenFriends} className="cursor-pointer text-left hover:text-rose-600">
+            <b className="text-slate-900">{friends}</b> bạn bè
           </button>
-
-          <button onClick={onOpenFollowing} className="text-left hover:text-rose-600 cursor-pointer">
-            <b className="text-slate-900 cursor-pointer">{stats.following}</b> Đang theo dõi
-          </button>
-
         </div>
       </div>
     </section>

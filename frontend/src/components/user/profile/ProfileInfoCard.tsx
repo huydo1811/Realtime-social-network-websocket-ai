@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import FollowListModal from "./FollowListModal";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import FriendListModal from "./FriendListModal";
 import ProfileFeedSection from "./ProfileFeedSection";
 import ProfileHero from "./ProfileHero";
 import EditProfileForm from "./EditProfileForm";
 import SecuritySettings from "./SecuritySettings";
 import { FeedPost, ProfileInfo, SocialPerson } from "./types";
+import { listFriends } from "@/lib/api/friendshipApi";
+import { getAuthTokens } from "@/lib/api/authToken";
+import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
+import { loadProfilesByIds } from "@/lib/friendship/loadProfiles";
+import { peerUserId } from "@/lib/friendship/peerUserId";
 
 type Props = {
   profile: ProfileInfo;
@@ -18,29 +23,20 @@ const defaultPosts: FeedPost[] = [
   { id: "p3", content: "Các điểm nghẽn phổ biến khi concurrent users tăng cao.", likes: 351, comments: 63, createdAt: "3 ngày trước" },
 ];
 
-const defaultFollowers: SocialPerson[] = [
-  { id: "u1", name: "Linh Trần", username: "linhtran", avatarUrl: "/hype.png" },
-  { id: "u2", name: "Minh Quân", username: "minhquan", avatarUrl: "/hype.png" },
-  { id: "u3", name: "An Nhiên", username: "annhien", avatarUrl: "/hype.png" },
-];
-
-const defaultFollowing: SocialPerson[] = [
-  { id: "u4", name: "Hà Phạm", username: "hapham", avatarUrl: "/hype.png" },
-  { id: "u5", name: "Tuấn Võ", username: "tuanvo", avatarUrl: "/hype.png" },
-  { id: "u6", name: "Mai Anh", username: "maianh", avatarUrl: "/hype.png" },
-];
-
 export default function ProfileInfoCard({ profile }: Props) {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
 
-  // localProfile allows instant UI updates when editing
   const [localProfile, setLocalProfile] = useState<ProfileInfo>(profile);
   const [avatarPreview, setAvatarPreview] = useState(localProfile.avatarUrl || "/hype.png");
   const [coverPreview, setCoverPreview] = useState(localProfile.coverUrl || "");
   const [posts, setPosts] = useState<FeedPost[]>(localProfile.posts ?? defaultPosts);
 
-  const [followModal, setFollowModal] = useState<"followers" | "following" | null>(null);
+  const [friendsModalOpen, setFriendsModalOpen] = useState(false);
+  const [friendModalUsers, setFriendModalUsers] = useState<SocialPerson[]>([]);
+  const [friendsModalLoading, setFriendsModalLoading] = useState(false);
+  const [friendsCount, setFriendsCount] = useState(0);
+
   const [editing, setEditing] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
 
@@ -48,6 +44,54 @@ export default function ProfileInfoCard({ profile }: Props) {
     const base = localProfile.stats?.posts ?? posts.length;
     return base + Math.max(0, posts.length - defaultPosts.length);
   }, [localProfile.stats?.posts, posts.length]);
+
+  const refreshFriendsCount = useCallback(async () => {
+    try {
+      const list = await listFriends();
+      setFriendsCount(list.length);
+    } catch {
+      setFriendsCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshFriendsCount();
+    const h = () => void refreshFriendsCount();
+    window.addEventListener("friendship-changed", h);
+    return () => window.removeEventListener("friendship-changed", h);
+  }, [refreshFriendsCount]);
+
+  async function handleOpenFriendsModal() {
+    if (editing || showSecurity) return;
+    setFriendsModalOpen(true);
+    setFriendsModalLoading(true);
+    try {
+      const token = getAuthTokens()?.accessToken;
+      const me = token ? getUserIdFromAccessToken(token) : null;
+      if (me == null) {
+        setFriendModalUsers([]);
+        return;
+      }
+      const rows = await listFriends();
+      const peers = rows.map((r) => peerUserId(r, me));
+      const map = await loadProfilesByIds(peers);
+      setFriendModalUsers(
+        peers.map((id) => {
+          const p = map.get(id);
+          return {
+            id: String(id),
+            name: p?.fullName ?? `Người dùng #${id}`,
+            username: p?.username ?? "user",
+            avatarUrl: p?.avatarUrl ?? "/hype.png",
+          };
+        })
+      );
+    } catch {
+      setFriendModalUsers([]);
+    } finally {
+      setFriendsModalLoading(false);
+    }
+  }
 
   function onPickImage(file: File | undefined, target: "avatar" | "cover") {
     if (!file) return;
@@ -61,18 +105,13 @@ export default function ProfileInfoCard({ profile }: Props) {
     }
   }
 
-  const followerUsers = localProfile.followersList ?? defaultFollowers;
-  const followingUsers = localProfile.followingList ?? defaultFollowing;
-
   function handleStartEdit() {
     setEditing(true);
-    // close follow modals if open
-    setFollowModal(null);
+    setFriendsModalOpen(false);
   }
 
   function handleCancelEdit() {
     setEditing(false);
-    // revert previews to current localProfile
     setAvatarPreview(localProfile.avatarUrl || "/hype.png");
     setCoverPreview(localProfile.coverUrl || "");
   }
@@ -88,7 +127,7 @@ export default function ProfileInfoCard({ profile }: Props) {
   function handleOpenSecurity() {
     setShowSecurity(true);
     setEditing(false);
-    setFollowModal(null);
+    setFriendsModalOpen(false);
   }
 
   function handleCloseSecurity() {
@@ -102,10 +141,10 @@ export default function ProfileInfoCard({ profile }: Props) {
         avatarPreview={avatarPreview}
         coverPreview={coverPreview}
         postCount={postCount}
+        friendsCount={friendsCount}
         onPickAvatar={() => avatarInputRef.current?.click()}
         onPickCover={() => coverInputRef.current?.click()}
-        onOpenFollowers={() => !editing && setFollowModal("followers")}
-        onOpenFollowing={() => !editing && setFollowModal("following")}
+        onOpenFriends={() => void handleOpenFriendsModal()}
         onEdit={handleStartEdit}
       />
 
@@ -158,20 +197,14 @@ export default function ProfileInfoCard({ profile }: Props) {
         </div>
       )}
 
-      {/* Hide feed and follow-modals while editing or showing security */}
       {!editing && !showSecurity && <ProfileFeedSection avatarUrl={avatarPreview} initialPosts={posts} onPostsChanged={setPosts} />}
 
-      <FollowListModal
-        open={!editing && !showSecurity && followModal === "followers"}
-        title="Followers"
-        users={followerUsers}
-        onClose={() => setFollowModal(null)}
-      />
-      <FollowListModal
-        open={!editing && !showSecurity && followModal === "following"}
-        title="Following"
-        users={followingUsers}
-        onClose={() => setFollowModal(null)}
+      <FriendListModal
+        open={!editing && !showSecurity && friendsModalOpen}
+        title="Bạn bè"
+        users={friendModalUsers}
+        loading={friendsModalLoading}
+        onClose={() => setFriendsModalOpen(false)}
       />
     </div>
   );

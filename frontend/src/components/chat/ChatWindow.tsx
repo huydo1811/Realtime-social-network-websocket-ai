@@ -17,6 +17,7 @@ import MessageBubble from "./MessageBubble";
 import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
 import { computeDeliveryFooterForMessage } from "@/lib/chat/deliveryFooterStatus";
 import { decodeMessageContent, encodeMessageContent } from "@/lib/chat/messageAttachment";
+import { dispatchPrivateThreadsSync } from "@/lib/event/chatEvents";
 import { useCall } from "@/components/call/CallProvider";
 type ChatTheme = "ROSE" | "OCEAN" | "FOREST" | "SUNSET";
 type ChatBackground = "PLAIN" | "MESH" | "DOTS";
@@ -82,7 +83,6 @@ export default function ChatWindow({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [sending, setSending] = useState(false);
-  const [socketReady, setSocketReady] = useState(false);
   const [userNames, setUserNames] = useState<Record<number, string>>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [showJumpBottom, setShowJumpBottom] = useState(false);
@@ -324,7 +324,7 @@ export default function ChatWindow({
   }, [loadLatest]);
 
   useEffect(() => {
-    initChatSocket(undefined, () => setSocketReady(true));
+    initChatSocket();
   }, []);
 
   useEffect(() => {
@@ -571,6 +571,7 @@ export default function ChatWindow({
       shouldStickBottomRef.current = true;
       requestAnimationFrame(() => scrollChatToBottom());
       onOwnMessage?.(conversation.id);
+      dispatchPrivateThreadsSync();
     } catch (e) {
       console.error(e);
       setSendError(e instanceof Error ? e.message : "Không thể gửi tin nhắn. Kiểm tra kết nối và thử lại.");
@@ -771,33 +772,27 @@ export default function ChatWindow({
             <div className="flex items-center gap-1.5 mt-0.5">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  conversation.type === "PRIVATE" && otherPresence
+                  otherPresence
                     ? otherPresence.online
                       ? "bg-green-400"
                       : "bg-slate-400"
-                    : socketReady
-                      ? "bg-green-400"
-                      : "bg-amber-400"
+                    : "bg-slate-300 animate-pulse"
                 }`}
               />
               <span
                 className={`text-[11px] font-medium ${
-                  conversation.type === "PRIVATE" && otherPresence
+                  otherPresence
                     ? otherPresence.online
                       ? "text-green-500"
                       : "text-slate-500"
-                    : socketReady
-                      ? "text-green-500"
-                      : "text-amber-500"
+                    : "text-slate-400"
                 }`}
               >
-                {conversation.type === "PRIVATE" && otherPresence
+                {otherPresence
                   ? otherPresence.online
                     ? "Đang hoạt động"
                     : formatLastActiveSubtitle(otherPresence.lastSeenAt)
-                  : socketReady
-                    ? "Đang hoạt động"
-                    : "Đang kết nối..."}
+                  : "Đang tải trạng thái..."}
               </span>
             </div>
           )}

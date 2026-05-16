@@ -27,4 +27,29 @@ class FriendshipTest {
         assertEquals(FriendshipStatus.BLOCKED, friendship.getStatus());
         friendship.unblock(2L);
     }
+
+    @Test
+    void shouldReopenRejectedAsPendingWithSameRequester() {
+        Friendship friendship = Friendship.createPending(1L, 2L);
+        friendship.reject(2L);
+        assertEquals(FriendshipStatus.REJECTED, friendship.getStatus());
+        friendship.reopenAsPending(1L, 2L);
+        assertEquals(FriendshipStatus.PENDING, friendship.getStatus());
+        assertEquals(1L, friendship.getRequestedBy());
+    }
+
+    @Test
+    void shouldReopenRejectedAllowingOtherUserToRequest() {
+        Friendship friendship = Friendship.createPending(1L, 2L);
+        friendship.reject(2L);
+        friendship.reopenAsPending(2L, 1L);
+        assertEquals(FriendshipStatus.PENDING, friendship.getStatus());
+        assertEquals(2L, friendship.getRequestedBy());
+    }
+
+    @Test
+    void shouldNotReopenWhenStillPending() {
+        Friendship friendship = Friendship.createPending(1L, 2L);
+        assertThrows(IllegalStateException.class, () -> friendship.reopenAsPending(1L, 2L));
+    }
 }

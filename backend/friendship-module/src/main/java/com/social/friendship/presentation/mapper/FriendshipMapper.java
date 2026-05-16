@@ -29,6 +29,16 @@ public class FriendshipMapper {
             response.setCanBlock(true);
             return response;
         }
+        if (friendship.getStatus() == FriendshipStatus.REJECTED) {
+            response.setStatus("NONE");
+            response.setFriendshipId(null);
+            response.setRequestedBy(null);
+            response.setCanAccept(false);
+            response.setCanCancel(false);
+            response.setCanBlock(true);
+            response.setCanUnblock(false);
+            return response;
+        }
         response.setStatus(friendship.getStatus().name());
         response.setFriendshipId(friendship.getId());
         response.setRequestedBy(friendship.getRequestedBy());

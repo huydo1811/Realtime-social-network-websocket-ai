@@ -13,12 +13,14 @@ import com.social.friendship.domain.entities.FriendshipStatus;
 
 public interface JpaFriendshipRepository extends JpaRepository<Friendship, Long> {
 
+    Optional<Friendship> findByUserId1AndUserId2(Long userId1, Long userId2);
+
     @Query("""
             SELECT f FROM Friendship f
             WHERE (f.userId1 = :userA AND f.userId2 = :userB)
                OR (f.userId1 = :userB AND f.userId2 = :userA)
             """)
-    Optional<Friendship> findByUsers(@Param("userA") Long userA, @Param("userB") Long userB);
+    Optional<Friendship> findByUsersEitherOrder(@Param("userA") Long userA, @Param("userB") Long userB);
 
     @Query("""
             SELECT f FROM Friendship f

@@ -1,6 +1,9 @@
 package com.social.friendship.application.usecases;
 
+import java.util.Optional;
+
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,27 +35,48 @@ public class SendFriendRequestUseCase {
     public Friendship execute(Long actorId, Long targetUserId) {
         validateUsers(actorId, targetUserId);
 
-        Friendship friendship = friendshipRepository.findByUsers(actorId, targetUserId)
-                .orElseGet(() -> Friendship.createPending(actorId, targetUserId));
-
-        if (friendship.getId() != null) {
-            FriendshipStatus current = friendship.getStatus();
-            if (current == FriendshipStatus.PENDING) {
-                throw new IllegalStateException("Lời mời kết bạn đang chờ xử lý");
-            }
-            if (current == FriendshipStatus.ACCEPTED) {
-                throw new IllegalStateException("Hai người dùng đã là bạn bè");
-            }
-            if (current == FriendshipStatus.BLOCKED) {
-                throw new IllegalStateException("Không thể gửi lời mời khi đang bị chặn");
-            }
-            friendship = Friendship.createPending(actorId, targetUserId);
+        Optional<Friendship> existing = friendshipRepository.findByUsers(actorId, targetUserId);
+        if (existing.isPresent()) {
+            return saveAndPublish(actorId, targetUserId, existing.get());
         }
 
+        try {
+            return saveAndPublish(actorId, targetUserId, Friendship.createPending(actorId, targetUserId));
+        } catch (DataIntegrityViolationException ex) {
+            Friendship row = friendshipRepository.findByUsers(actorId, targetUserId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Đã tồn tại quan hệ kết bạn giữa hai người dùng. Vui lòng tải lại trang và thử lại.",
+                            ex));
+            return saveAndPublish(actorId, targetUserId, row);
+        }
+    }
+
+    private Friendship saveAndPublish(Long actorId, Long targetUserId, Friendship friendship) {
+        if (friendship.getId() != null) {
+            applySendOnExisting(actorId, targetUserId, friendship);
+        }
         Friendship saved = friendshipRepository.save(friendship);
         springEventPublisher.publishEvent(
                 eventFactory.create("friendship.request.sent", actorId, targetUserId, saved));
         return saved;
+    }
+
+    private void applySendOnExisting(Long actorId, Long targetUserId, Friendship friendship) {
+        FriendshipStatus current = friendship.getStatus();
+        if (current == FriendshipStatus.PENDING) {
+            throw new IllegalStateException("Lời mời kết bạn đang chờ xử lý");
+        }
+        if (current == FriendshipStatus.ACCEPTED) {
+            throw new IllegalStateException("Hai người dùng đã là bạn bè");
+        }
+        if (current == FriendshipStatus.BLOCKED) {
+            throw new IllegalStateException("Không thể gửi lời mời khi đang bị chặn");
+        }
+        if (current == FriendshipStatus.REJECTED) {
+            friendship.reopenAsPending(actorId, targetUserId);
+            return;
+        }
+        throw new IllegalStateException("Không thể gửi lời mời với trạng thái hiện tại");
     }
 
     private void validateUsers(Long actorId, Long targetUserId) {

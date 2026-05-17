@@ -17,7 +17,7 @@ export default function PostCard({ post, liked, onToggleLike, onOpen }: Props) {
       onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}
       role="button"
       tabIndex={0}
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
+      className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-slate-300"
     >
       {post.mediaUrl ? (
         <div className="mb-3 h-32 w-full overflow-hidden rounded-xl border border-slate-200">

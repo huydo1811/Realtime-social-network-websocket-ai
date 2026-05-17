@@ -46,12 +46,11 @@ export default function UserProfilePage() {
 
   return (
     <UserLayout>
-      <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-        
-        <div className="mb-4">
+      <div className="relative">
+        <div className="mb-5">
           <button 
             onClick={() => router.back()} 
-            className="cursor-pointer flex items-center gap-2 px-1 py-2 text-slate-500 hover:text-rose-600 font-bold transition-colors"
+            className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-600"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Quay lại

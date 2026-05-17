@@ -18,9 +18,9 @@ export default function OtherProfileInfoCard({ profile }: Props) {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
         <div
-          className="relative h-72 bg-gradient-to-br from-rose-500 via-pink-400 to-orange-300"
+          className="relative h-72 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-orange-400"
           style={
             coverUrl
               ? {
@@ -33,7 +33,7 @@ export default function OtherProfileInfoCard({ profile }: Props) {
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,rgba(255,255,255,.35),transparent_25%),radial-gradient(circle_at_15%_80%,rgba(255,255,255,.28),transparent_35%)]" />
 
-          <div className="absolute -bottom-14 left-5 right-5 rounded-2xl border border-white/35 bg-white/80 p-4 shadow-lg backdrop-blur-md">
+          <div className="absolute -bottom-14 left-5 right-5 rounded-2xl border border-white/45 bg-white/80 p-4 shadow-lg backdrop-blur-md">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div className="flex items-end gap-4">
                 <div className="relative">
@@ -47,7 +47,7 @@ export default function OtherProfileInfoCard({ profile }: Props) {
                   />
                 </div>
                 <div className="pb-1">
-                  <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">{profile.fullName}</h2>
+                  <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-[1.75rem]">{profile.fullName}</h2>
                   <p className="text-sm font-medium text-slate-500">@{profile.username || "hype_user"}</p>
                 </div>
               </div>
@@ -63,7 +63,7 @@ export default function OtherProfileInfoCard({ profile }: Props) {
                 {targetId != null ? (
                   <OpenDmBubbleButton
                     peerUserId={targetId}
-                    className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 transition-all hover:bg-slate-200 active:scale-95"
+                    className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200"
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />

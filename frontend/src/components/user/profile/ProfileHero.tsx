@@ -47,29 +47,29 @@ export default function ProfileHero({
         <button
           type="button"
           onClick={onPickCover}
-          className="absolute right-4 top-4 cursor-pointer rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow hover:bg-white"
+          className="absolute right-4 top-4 cursor-pointer rounded-full border border-white/50 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-white"
         >
           Đổi ảnh bìa
         </button>
 
         <div className="absolute -bottom-14 left-5 right-5 rounded-2xl border border-white/35 bg-white/75 p-3 shadow-lg backdrop-blur-md">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div className="flex items-end gap-3">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex items-end gap-4">
               <button type="button" onClick={onPickAvatar} className="relative cursor-pointer rounded-2xl" aria-label="Đổi avatar">
                 <Image
                   src={avatarPreview}
                   alt="avatar"
                   width={96}
                   height={96}
-                  className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md"
+                  className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md shadow-slate-300/50"
                 />
                 <span className="absolute -bottom-1 right-0 cursor-pointer rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-rose-600">
                   Đổi
                 </span>
               </button>
-              <div>
+                <div className="pb-1">
                 <h2 className="text-2xl font-bold tracking-tight text-slate-900">{profile.fullName}</h2>
-                <p className="text-sm font-medium text-slate-600">@{profile.username}</p>
+                <p className="mt-1 text-sm font-medium text-slate-500">@{profile.username}</p>
               </div>
             </div>
 
@@ -91,7 +91,11 @@ export default function ProfileHero({
             <b className="text-slate-900">{postCount}</b> bài viết
           </span>
 
-          <button type="button" onClick={onOpenFriends} className="cursor-pointer text-left hover:text-rose-600">
+          <button
+            type="button"
+            onClick={onOpenFriends}
+            className="cursor-pointer text-left hover:text-rose-600"
+          >
             <b className="text-slate-900">{friends}</b> bạn bè
           </button>
         </div>

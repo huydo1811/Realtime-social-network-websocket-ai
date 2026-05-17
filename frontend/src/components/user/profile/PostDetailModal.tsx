@@ -217,7 +217,7 @@ export default function PostDetailModal({
                         return (
                           <div
                             key={`${k}-${idx}`}
-                            className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                            className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-slate-300"
                           >
                             <div className="flex gap-3">
                               {c.authorAvatar ? (

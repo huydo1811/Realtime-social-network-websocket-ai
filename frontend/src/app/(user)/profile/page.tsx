@@ -50,7 +50,12 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <UserLayout>
-        <div className="flex h-64 items-center justify-center">Đang tải hồ sơ...</div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm">
+          <div className="flex flex-col items-center justify-center gap-4 py-12">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-rose-200 border-t-rose-500" />
+            <p className="text-sm font-medium text-slate-500">Đang tải hồ sơ...</p>
+          </div>
+        </div>
       </UserLayout>
     );
   }
@@ -58,7 +63,12 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <UserLayout>
-        <div className="flex h-64 items-center justify-center">Không thể lấy thông tin người dùng.</div>
+        <div className="rounded-3xl border border-rose-100 bg-white p-10 shadow-sm">
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <p className="text-lg font-bold text-slate-800">Không thể lấy thông tin người dùng</p>
+            <p className="text-sm text-slate-500">Vui lòng thử tải lại trang hoặc đăng nhập lại.</p>
+          </div>
+        </div>
       </UserLayout>
     );
   }

@@ -12,6 +12,10 @@ import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import { dispatchPrivateThreadsSync, dispatchRead } from "@/lib/event/chatEvents";
 import { shouldShowInThreadList } from "@/lib/chat/conversationVisibility";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
+import UserTopBar from "@/components/layout/UserTopBar";
+import { NotificationsProvider } from "@/lib/notifications/NotificationsContext";
+import { NavBadgesProvider } from "@/lib/nav/NavBadgesContext";
+import { clearAuthTokens } from "@/lib/api/authToken";
 
 function parseUserIdFromToken(token: string): number | null {
   try {
@@ -24,6 +28,11 @@ function parseUserIdFromToken(token: string): number | null {
 
 export default function MessagesPage() {
   const router = useRouter();
+  const handleLogout = useCallback(() => {
+    clearAuthTokens();
+    router.replace("/login");
+  }, [router]);
+
   const currentUserId = useSyncExternalStore<number | null | undefined>(
     () => () => {},
     () => {
@@ -378,33 +387,44 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <ChatCommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        conversations={sidebarConversations}
-        currentUserId={currentUserId}
-        userNames={paletteNameMap}
-        onSelect={handleSelect}
-      />
-      <LeftSidebar />
-      <div className="lg:ml-64 xl:ml-72 h-screen pb-16 lg:pb-0 flex overflow-hidden">
-        {incomingBanner && (
-          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-3 py-2 rounded-full shadow-lg flex items-center gap-2">
-            <span>{incomingBanner}</span>
-            <button
-              onClick={() => setIncomingBanner(null)}
-              className="text-slate-300 hover:text-white transition"
-              type="button"
-            >
-              ×
-            </button>
+    <NotificationsProvider>
+      <NavBadgesProvider>
+        <div className="min-h-screen bg-slate-50">
+          <ChatCommandPalette
+            open={paletteOpen}
+            onClose={() => setPaletteOpen(false)}
+            conversations={sidebarConversations}
+            currentUserId={currentUserId}
+            userNames={paletteNameMap}
+            onSelect={handleSelect}
+          />
+          <LeftSidebar />
+          <div className="lg:ml-64 xl:ml-72 h-screen pb-16 lg:pb-0 flex flex-col overflow-hidden">
+            <div className="px-4 pt-5 lg:px-4 lg:pt-6">
+              <div className="mx-auto w-full max-w-3xl">
+                <UserTopBar onLogout={handleLogout} />
+              </div>
+            </div>
+            <div className="relative flex-1 flex overflow-hidden">
+              {incomingBanner && (
+                <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-3 py-2 rounded-full shadow-lg flex items-center gap-2">
+                  <span>{incomingBanner}</span>
+                  <button
+                    onClick={() => setIncomingBanner(null)}
+                    className="text-slate-300 hover:text-white transition"
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {chatPanel}
+              {listPanel}
+            </div>
           </div>
-        )}
-        {chatPanel}
-        {listPanel}
-      </div>
-      <MobileBottomNav />
-    </div>
+          <MobileBottomNav />
+        </div>
+      </NavBadgesProvider>
+    </NotificationsProvider>
   );
 }

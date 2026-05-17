@@ -1,19 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import UserLayout from "@/components/layout/UserLayout";
 import DiscoverFriendshipPanels, { type DiscoverFriendshipTab } from "@/components/friendship/DiscoverFriendshipPanels";
+import { listIncomingRequests } from "@/lib/api/friendshipApi";
 
 const tabs: { id: DiscoverFriendshipTab; label: string }[] = [
+  { id: "friends", label: "Bạn bè" },
   { id: "incoming", label: "Lời mời đến" },
   { id: "outgoing", label: "Đã gửi" },
-  { id: "friends", label: "Bạn bè" },
   { id: "blocked", label: "Đã chặn" },
 ];
 
 export default function FriendsPage() {
-  const [tab, setTab] = useState<DiscoverFriendshipTab>("incoming");
+  const [tab, setTab] = useState<DiscoverFriendshipTab>("friends");
+  const [incomingCount, setIncomingCount] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadIncoming = async () => {
+      try {
+        const rows = await listIncomingRequests();
+        if (!mounted) return;
+        setIncomingCount(rows.length);
+      } catch {
+        if (!mounted) return;
+        setIncomingCount(0);
+      }
+    };
+    void loadIncoming();
+    const onChanged = () => void loadIncoming();
+    window.addEventListener("friendship-changed", onChanged);
+    return () => {
+      mounted = false;
+      window.removeEventListener("friendship-changed", onChanged);
+    };
+  }, []);
 
   return (
     <UserLayout>
@@ -42,7 +65,18 @@ export default function FriendsPage() {
                   : "border border-slate-200 bg-white text-slate-600 hover:border-rose-100 hover:text-rose-600"
               }`}
             >
-              {t.label}
+              <span className="inline-flex items-center gap-2">
+                {t.label}
+                {t.id === "incoming" && incomingCount > 0 && (
+                  <span
+                    className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      tab === t.id ? "bg-white/20 text-white" : "bg-rose-500 text-white"
+                    }`}
+                  >
+                    {incomingCount > 99 ? "99+" : incomingCount}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>

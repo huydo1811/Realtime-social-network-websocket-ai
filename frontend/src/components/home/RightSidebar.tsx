@@ -282,15 +282,6 @@ export default function RightSidebar() {
   return (
     <>
       <aside className="hidden lg:flex flex-col fixed inset-y-0 right-0 w-72 bg-white border-l border-slate-100 py-6 overflow-y-auto">
-        <section className="px-5 mb-6">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Thông báo</h3>
-          <div className="bg-slate-50 rounded-2xl px-4 py-3 border border-slate-100">
-            <p className="text-xs text-slate-400 text-center">Chưa có thông báo mới</p>
-          </div>
-        </section>
-
-        <div className="h-px bg-slate-100 mx-5 mb-5" />
-
         <section className="px-5 flex-1">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">

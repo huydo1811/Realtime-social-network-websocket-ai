@@ -119,7 +119,7 @@ export default function UserDirectory() {
                 </Link>
 
                 <div className="mt-auto flex w-full flex-col gap-2">
-                  <FriendActionButton targetUserId={uid} className="w-full" />
+                  <FriendActionButton targetUserId={uid} className="w-full" centered />
                   <OpenDmBubbleButton
                     peerUserId={uid}
                     className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-100 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-200 active:scale-[0.98]"

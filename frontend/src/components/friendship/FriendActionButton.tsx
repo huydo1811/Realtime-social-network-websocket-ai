@@ -18,6 +18,8 @@ type Props = {
   onMutate?: () => void;
   /** e.g. w-full on discover cards */
   className?: string;
+  /** Center Kết bạn / Chặn side-by-side (discover cards) */
+  centered?: boolean;
 };
 
 function normalizeRelationshipStatus(raw: RelationshipStatusResponse): RelationshipStatusResponse {
@@ -42,7 +44,12 @@ function dispatchFriendshipChanged() {
   }
 }
 
-export default function FriendActionButton({ targetUserId, onMutate, className = "" }: Props) {
+export default function FriendActionButton({
+  targetUserId,
+  onMutate,
+  className = "",
+  centered = false,
+}: Props) {
   const [status, setStatus] = useState<RelationshipStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -106,14 +113,26 @@ export default function FriendActionButton({ targetUserId, onMutate, className =
     <div className={`flex flex-col gap-2 ${className}`.trim()}>{node}</div>
   );
 
+  const rowClass = centered
+    ? "flex flex-row flex-wrap items-center justify-center gap-2 w-full"
+    : "flex flex-col gap-2 sm:flex-row sm:flex-wrap";
+
+  const primaryBtnClass = centered
+    ? `${btn} min-w-[7.5rem] flex-1 max-w-[9.5rem] bg-rose-500 text-white shadow-sm shadow-rose-200 hover:bg-rose-600`
+    : `${btn} w-full bg-rose-500 text-white shadow-sm shadow-rose-200 hover:bg-rose-600 sm:w-auto`;
+
+  const blockBtnClass = centered
+    ? `${btn} min-w-[7.5rem] flex-1 max-w-[9.5rem] bg-slate-100 text-slate-700 hover:bg-slate-200`
+    : `${btn} w-full bg-slate-100 text-slate-700 hover:bg-slate-200 sm:w-auto`;
+
   function renderNoneActions(canBlock = true) {
     return wrap(
       <>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <div className={rowClass}>
           <button
             type="button"
             disabled={busy || invalidTarget}
-            className={`${btn} w-full bg-rose-500 text-white shadow-sm shadow-rose-200 hover:bg-rose-600 sm:w-auto`}
+            className={primaryBtnClass}
             onClick={() => run(async () => sendFriendRequest(targetUserId))}
           >
             Kết bạn
@@ -122,7 +141,7 @@ export default function FriendActionButton({ targetUserId, onMutate, className =
             <button
               type="button"
               disabled={busy || invalidTarget}
-              className={`${btn} w-full bg-slate-100 text-slate-700 hover:bg-slate-200 sm:w-auto`}
+              className={blockBtnClass}
               onClick={() => run(async () => blockUser(targetUserId))}
             >
               Chặn

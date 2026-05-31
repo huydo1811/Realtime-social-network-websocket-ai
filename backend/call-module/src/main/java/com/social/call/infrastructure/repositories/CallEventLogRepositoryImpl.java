@@ -1,6 +1,7 @@
 package com.social.call.infrastructure.repositories;
 
 import org.springframework.stereotype.Repository;
+import java.util.List;
 
 import com.social.call.domain.entities.CallEventLog;
 import com.social.call.domain.repositories.CallEventLogRepository;
@@ -17,5 +18,10 @@ public class CallEventLogRepositoryImpl implements CallEventLogRepository {
     @Override
     public CallEventLog save(CallEventLog eventLog) {
         return jpaRepository.save(eventLog);
+    }
+
+    @Override
+    public List<CallEventLog> findByCallId(String callId) {
+        return jpaRepository.findByCallIdOrderByOccurredAtAsc(callId);
     }
 }

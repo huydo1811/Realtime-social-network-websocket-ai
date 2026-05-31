@@ -49,4 +49,28 @@ public class CallEventLog {
         row.occurredAt = LocalDateTime.now();
         return row;
     }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getCallId() {
+        return callId;
+    }
+
+    public String getEventType() {
+        return eventType;
+    }
+
+    public Long getActorId() {
+        return actorId;
+    }
+
+    public String getPayload() {
+        return payload;
+    }
+
+    public LocalDateTime getOccurredAt() {
+        return occurredAt;
+    }
 }

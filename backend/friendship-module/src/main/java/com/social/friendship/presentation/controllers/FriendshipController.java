@@ -3,6 +3,7 @@ package com.social.friendship.presentation.controllers;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.social.friendship.application.usecases.AcceptFriendRequestUseCase;
+import com.social.friendship.application.usecases.AdminForceBlockFriendshipUseCase;
+import com.social.friendship.application.usecases.AdminForceRemoveFriendshipUseCase;
+import com.social.friendship.application.usecases.AdminListUserFriendshipsUseCase;
 import com.social.friendship.application.usecases.BlockUserUseCase;
 import com.social.friendship.application.usecases.CancelFriendRequestUseCase;
 import com.social.friendship.application.usecases.GetRelationshipStatusUseCase;
@@ -29,6 +33,7 @@ import com.social.friendship.application.usecases.UnblockUserUseCase;
 import com.social.friendship.presentation.dto.FriendshipActionRequest;
 import com.social.friendship.presentation.dto.FriendshipResponse;
 import com.social.friendship.presentation.dto.RelationshipStatusResponse;
+import com.social.friendship.presentation.dto.AdminForceBlockRequest;
 import com.social.friendship.presentation.mapper.FriendshipMapper;
 
 import jakarta.validation.Valid;
@@ -37,6 +42,9 @@ import jakarta.validation.Valid;
 @RequestMapping("/friendships")
 public class FriendshipController {
     private final SendFriendRequestUseCase sendFriendRequestUseCase;
+    private final AdminListUserFriendshipsUseCase adminListUserFriendshipsUseCase;
+    private final AdminForceBlockFriendshipUseCase adminForceBlockFriendshipUseCase;
+    private final AdminForceRemoveFriendshipUseCase adminForceRemoveFriendshipUseCase;
     private final AcceptFriendRequestUseCase acceptFriendRequestUseCase;
     private final RejectFriendRequestUseCase rejectFriendRequestUseCase;
     private final CancelFriendRequestUseCase cancelFriendRequestUseCase;
@@ -51,6 +59,9 @@ public class FriendshipController {
     private final FriendshipMapper friendshipMapper;
 
     public FriendshipController(SendFriendRequestUseCase sendFriendRequestUseCase,
+                                AdminListUserFriendshipsUseCase adminListUserFriendshipsUseCase,
+                                AdminForceBlockFriendshipUseCase adminForceBlockFriendshipUseCase,
+                                AdminForceRemoveFriendshipUseCase adminForceRemoveFriendshipUseCase,
                                 AcceptFriendRequestUseCase acceptFriendRequestUseCase,
                                 RejectFriendRequestUseCase rejectFriendRequestUseCase,
                                 CancelFriendRequestUseCase cancelFriendRequestUseCase,
@@ -64,6 +75,9 @@ public class FriendshipController {
                                 GetRelationshipStatusUseCase getRelationshipStatusUseCase,
                                 FriendshipMapper friendshipMapper) {
         this.sendFriendRequestUseCase = sendFriendRequestUseCase;
+        this.adminListUserFriendshipsUseCase = adminListUserFriendshipsUseCase;
+        this.adminForceBlockFriendshipUseCase = adminForceBlockFriendshipUseCase;
+        this.adminForceRemoveFriendshipUseCase = adminForceRemoveFriendshipUseCase;
         this.acceptFriendRequestUseCase = acceptFriendRequestUseCase;
         this.rejectFriendRequestUseCase = rejectFriendRequestUseCase;
         this.cancelFriendRequestUseCase = cancelFriendRequestUseCase;
@@ -134,6 +148,31 @@ public class FriendshipController {
                 .map(friendshipMapper::toResponse)
                 .toList();
         return ResponseEntity.ok(response);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/admin/users/{userId}")
+    public ResponseEntity<List<FriendshipResponse>> adminListByUser(@PathVariable Long userId) {
+        List<FriendshipResponse> response = adminListUserFriendshipsUseCase.execute(userId).stream()
+                .map(friendshipMapper::toResponse)
+                .toList();
+        return ResponseEntity.ok(response);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/admin/{friendshipId}/force-block")
+    public ResponseEntity<FriendshipResponse> adminForceBlock(
+            @PathVariable Long friendshipId,
+            @Valid @RequestBody AdminForceBlockRequest request) {
+        var friendship = adminForceBlockFriendshipUseCase.execute(friendshipId, request.getBlockerUserId());
+        return ResponseEntity.ok(friendshipMapper.toResponse(friendship));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/admin/{friendshipId}")
+    public ResponseEntity<Void> adminForceRemove(@PathVariable Long friendshipId) {
+        adminForceRemoveFriendshipUseCase.execute(friendshipId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/blocks")

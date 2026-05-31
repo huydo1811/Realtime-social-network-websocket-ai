@@ -15,6 +15,8 @@ public interface FriendshipRepository {
 
     List<Friendship> findByUserIdAndStatuses(Long userId, List<FriendshipStatus> statuses);
 
+    List<Friendship> findByUserId(Long userId);
+
     List<Friendship> findPendingIncoming(Long userId);
 
     List<Friendship> findPendingOutgoing(Long userId);

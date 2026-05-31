@@ -129,4 +129,12 @@ public class CallSessionHistory {
     public String getEndReason() {
         return endReason;
     }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
 }

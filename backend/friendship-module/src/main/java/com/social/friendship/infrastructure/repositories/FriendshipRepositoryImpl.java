@@ -48,6 +48,11 @@ public class FriendshipRepositoryImpl implements FriendshipRepository {
     }
 
     @Override
+    public List<Friendship> findByUserId(Long userId) {
+        return jpaFriendshipRepository.findByUserId(userId);
+    }
+
+    @Override
     public List<Friendship> findPendingIncoming(Long userId) {
         return jpaFriendshipRepository.findPendingIncoming(userId);
     }

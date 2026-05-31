@@ -58,10 +58,24 @@ export default function AdminSidebar() {
         >
           Giao diện chat
         </Link>
-        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Bài viết</button>
-        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Moderation</button>
-        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Báo cáo</button>
-        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Cài đặt hệ thống</button>
+        <Link
+          href="/admin/friendship"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/friendship") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Quan hệ bạn bè
+        </Link>
+        <Link
+          href="/admin/call"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/call") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Cuộc gọi
+        </Link>
+        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Bài viết (sắp có)</button>
+        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Moderation (sắp có)</button>
       </nav>
 
       <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">

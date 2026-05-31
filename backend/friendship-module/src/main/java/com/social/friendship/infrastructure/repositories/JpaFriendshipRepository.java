@@ -33,6 +33,13 @@ public interface JpaFriendshipRepository extends JpaRepository<Friendship, Long>
 
     @Query("""
             SELECT f FROM Friendship f
+            WHERE (f.userId1 = :userId OR f.userId2 = :userId)
+            ORDER BY f.updatedAt DESC
+            """)
+    List<Friendship> findByUserId(@Param("userId") Long userId);
+
+    @Query("""
+            SELECT f FROM Friendship f
             WHERE f.status = com.social.friendship.domain.entities.FriendshipStatus.PENDING
               AND ((f.userId1 = :userId OR f.userId2 = :userId) AND f.requestedBy <> :userId)
             ORDER BY f.createdAt DESC

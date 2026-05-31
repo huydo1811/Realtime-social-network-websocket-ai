@@ -166,6 +166,14 @@ export const postApi = {
     return (await res.json()) as PostDto;
   },
 
+  async adminUnhide(postId: number): Promise<PostDto> {
+    const res = await apiAuthFetch(`${API_URL}/posts/admin/${postId}/unhide`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể bật lại bài viết");
+    return (await res.json()) as PostDto;
+  },
+
   async toggleLike(postId: number): Promise<{ likeCount: number }> {
     const res = await apiAuthFetch(`${API_URL}/posts/${postId}/like`, {
       method: "POST",

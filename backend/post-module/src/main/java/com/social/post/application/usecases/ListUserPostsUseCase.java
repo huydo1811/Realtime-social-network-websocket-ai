@@ -1,5 +1,7 @@
 package com.social.post.application.usecases;
 
+import java.util.Objects;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -31,10 +33,14 @@ public class ListUserPostsUseCase {
 
     @Transactional(readOnly = true)
     public Page<Post> execute(Long actorId, Long targetUserId, Pageable pageable) {
+        Pageable safePageable = Objects.requireNonNull(pageable, "pageable");
         userRepository.findById(targetUserId).orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
-        Page<Post> allTargetPosts = postRepository.findByAuthorId(targetUserId, pageable);
+        Page<Post> allTargetPosts = postRepository.findByAuthorId(targetUserId, safePageable);
         if (actorId.equals(targetUserId)) {
-            return allTargetPosts;
+            var ownerVisible = allTargetPosts.getContent().stream()
+                    .filter(post -> post.getStatus() != PostStatus.REJECTED)
+                    .toList();
+            return new PageImpl<>(ownerVisible, safePageable, ownerVisible.size());
         }
 
         boolean isFriend = friendshipRepository.findByUsers(actorId, targetUserId)
@@ -46,6 +52,6 @@ public class ListUserPostsUseCase {
             if (post.getVisibility() == PostVisibility.PUBLIC) return true;
             return post.getVisibility() == PostVisibility.FRIENDS && isFriend;
         }).toList();
-        return new PageImpl<>(visible, pageable, visible.size());
+        return new PageImpl<>(visible, safePageable, visible.size());
     }
 }

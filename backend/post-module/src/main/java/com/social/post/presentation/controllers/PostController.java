@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.social.post.application.usecases.AdminHidePostUseCase;
+import com.social.post.application.usecases.AdminUnhidePostUseCase;
 import com.social.post.application.usecases.CreatePostUseCase;
 import com.social.post.application.usecases.CreatePostCommentUseCase;
 import com.social.post.application.usecases.CreatePostReplyUseCase;
@@ -60,6 +61,7 @@ public class PostController {
     private final ListUserPostsUseCase listUserPostsUseCase;
     private final ListFeedPostsUseCase listFeedPostsUseCase;
     private final AdminHidePostUseCase adminHidePostUseCase;
+    private final AdminUnhidePostUseCase adminUnhidePostUseCase;
     private final TogglePostLikeUseCase togglePostLikeUseCase;
     private final CreatePostCommentUseCase createPostCommentUseCase;
     private final CreatePostReplyUseCase createPostReplyUseCase;
@@ -80,6 +82,7 @@ public class PostController {
             ListUserPostsUseCase listUserPostsUseCase,
             ListFeedPostsUseCase listFeedPostsUseCase,
             AdminHidePostUseCase adminHidePostUseCase,
+            AdminUnhidePostUseCase adminUnhidePostUseCase,
             TogglePostLikeUseCase togglePostLikeUseCase,
             CreatePostCommentUseCase createPostCommentUseCase,
             CreatePostReplyUseCase createPostReplyUseCase,
@@ -98,6 +101,7 @@ public class PostController {
         this.listUserPostsUseCase = listUserPostsUseCase;
         this.listFeedPostsUseCase = listFeedPostsUseCase;
         this.adminHidePostUseCase = adminHidePostUseCase;
+        this.adminUnhidePostUseCase = adminUnhidePostUseCase;
         this.togglePostLikeUseCase = togglePostLikeUseCase;
         this.createPostCommentUseCase = createPostCommentUseCase;
         this.createPostReplyUseCase = createPostReplyUseCase;
@@ -174,6 +178,13 @@ public class PostController {
     @PostMapping("/admin/{postId}/hide")
     public ResponseEntity<PostResponse> adminHidePost(@PathVariable Long postId) {
         var post = adminHidePostUseCase.execute(postId);
+        return ResponseEntity.ok(postMapper.toResponse(post));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/admin/{postId}/unhide")
+    public ResponseEntity<PostResponse> adminUnhidePost(@PathVariable Long postId) {
+        var post = adminUnhidePostUseCase.execute(postId);
         return ResponseEntity.ok(postMapper.toResponse(post));
     }
 

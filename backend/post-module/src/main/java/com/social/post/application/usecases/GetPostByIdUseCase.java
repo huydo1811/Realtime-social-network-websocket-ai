@@ -36,6 +36,9 @@ public class GetPostByIdUseCase {
         if (post.getStatus() == PostStatus.DELETED) {
             throw new PostDomainException("Bài viết đã bị xóa");
         }
+        if (post.getStatus() == PostStatus.REJECTED) {
+            throw new PostDomainException("Bài viết đã bị ẩn bởi quản trị viên");
+        }
         if (post.isVisibleToOwner(actorId)) {
             return post;
         }

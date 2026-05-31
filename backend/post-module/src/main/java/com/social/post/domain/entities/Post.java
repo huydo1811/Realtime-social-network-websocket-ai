@@ -101,6 +101,12 @@ public class Post {
         }
     }
 
+    public void unhideByAdmin() {
+        if (this.status == PostStatus.REJECTED) {
+            this.status = PostStatus.APPROVED;
+        }
+    }
+
     public boolean isVisibleToOwner(Long actorId) {
         return authorId.equals(actorId);
     }

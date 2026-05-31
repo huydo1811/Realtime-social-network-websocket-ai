@@ -74,7 +74,14 @@ export default function AdminSidebar() {
         >
           Cuộc gọi
         </Link>
-        <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Bài viết (sắp có)</button>
+        <Link
+          href="/admin/post"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/post") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Bài viết
+        </Link>
         <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Moderation (sắp có)</button>
       </nav>
 

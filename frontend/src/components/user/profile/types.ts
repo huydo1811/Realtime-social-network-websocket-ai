@@ -1,12 +1,33 @@
+import type { PostStatus, PostVisibility } from "@/types/post";
+
 export type FeedPost = {
   id: string;
+  postId?: number;
+  sharedPostId?: number;
+  authorId?: number;
   content: string;
   createdAt: string;
   likes: number;
   comments: number;
-  mediaUrl?: string;        
-  authorName?: string;     
-  authorAvatar?: string;    
+  shares?: number;
+  sharedPost?: {
+    id: string;
+    authorId: number;
+    content: string;
+    mediaUrl?: string;
+    authorName?: string;
+    authorAvatar?: string;
+    likes: number;
+    comments: number;
+    shares: number;
+    visibility?: PostVisibility;
+    createdAt: string;
+  };
+  mediaUrl?: string;
+  authorName?: string;
+  authorAvatar?: string;
+  visibility?: PostVisibility;
+  status?: PostStatus;
 };
 
 export type SocialPerson = {

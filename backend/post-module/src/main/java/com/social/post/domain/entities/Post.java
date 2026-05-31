@@ -43,16 +43,30 @@ public class Post {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "shared_post_id")
+    private Long sharedPostId;
+
     protected Post() {
     }
 
     public static Post create(Long authorId, String content, String mediaUrl, PostVisibility visibility) {
         Post post = new Post();
         post.authorId = authorId;
-        post.content = normalizeContent(content);
         post.mediaUrl = normalizeMediaUrl(mediaUrl);
+        post.content = normalizeContent(content, post.mediaUrl);
         post.visibility = visibility == null ? PostVisibility.PUBLIC : visibility;
         post.status = PostStatus.APPROVED;
+        return post;
+    }
+
+    public static Post createShared(Long authorId, Long sourcePostId, String content, PostVisibility visibility) {
+        Post post = new Post();
+        post.authorId = authorId;
+        post.content = normalizeShareContent(content);
+        post.mediaUrl = null;
+        post.visibility = visibility == null ? PostVisibility.PUBLIC : visibility;
+        post.status = PostStatus.APPROVED;
+        post.sharedPostId = sourcePostId;
         return post;
     }
 
@@ -61,9 +75,19 @@ public class Post {
         if (status == PostStatus.DELETED) {
             throw new IllegalStateException("Không thể cập nhật bài viết đã xóa");
         }
-        this.content = normalizeContent(content);
         this.mediaUrl = normalizeMediaUrl(mediaUrl);
+        this.content = normalizeContent(content, this.mediaUrl);
         this.visibility = visibility == null ? this.visibility : visibility;
+    }
+
+    public void updateVisibility(Long actorId, PostVisibility visibility) {
+        ensureOwner(actorId);
+        if (status == PostStatus.DELETED) {
+            throw new IllegalStateException("Không thể cập nhật bài viết đã xóa");
+        }
+        if (visibility != null) {
+            this.visibility = visibility;
+        }
     }
 
     public void delete(Long actorId) {
@@ -87,10 +111,11 @@ public class Post {
         }
     }
 
-    private static String normalizeContent(String input) {
+    private static String normalizeContent(String input, String mediaUrl) {
         String value = input == null ? "" : input.trim();
-        if (value.isBlank()) {
-            throw new IllegalArgumentException("Nội dung bài viết không được để trống");
+        String media = normalizeMediaUrl(mediaUrl);
+        if (value.isBlank() && media == null) {
+            throw new IllegalArgumentException("Phải có nội dung hoặc ảnh/video");
         }
         if (value.length() > 5000) {
             throw new IllegalArgumentException("Nội dung vượt quá 5000 ký tự");
@@ -101,6 +126,14 @@ public class Post {
     private static String normalizeMediaUrl(String input) {
         String value = input == null ? null : input.trim();
         return (value == null || value.isBlank()) ? null : value;
+    }
+
+    private static String normalizeShareContent(String input) {
+        String value = input == null ? "" : input.trim();
+        if (value.length() > 5000) {
+            throw new IllegalArgumentException("Nội dung vượt quá 5000 ký tự");
+        }
+        return value;
     }
 
     @PrePersist
@@ -149,5 +182,9 @@ public class Post {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Long getSharedPostId() {
+        return sharedPostId;
     }
 }

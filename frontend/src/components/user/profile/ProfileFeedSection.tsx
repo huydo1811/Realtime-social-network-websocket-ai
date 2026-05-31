@@ -1,16 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { postApi } from "@/lib/api/postApi";
+import { getAuthTokens } from "@/lib/api/authToken";
+import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
+import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
+import type {
+  PostCommentDto,
+  PostDto,
+  PostVisibility,
+} from "@/types/post";
+
 import PostCard from "./PostCard";
 import PostComposer from "./PostComposer";
 import PostDetailModal from "./PostDetailModal";
-import { FeedPost } from "./types";
+import SharePostModal from "./SharePostModal";
+import type { FeedPost } from "./types";
 
 type Props = {
   avatarUrl: string;
   initialPosts: FeedPost[];
   onPostsChanged?: (posts: FeedPost[]) => void;
-  readonly?: boolean; // THÊM PROPS NÀY ĐỂ XÁC ĐỊNH LÀ NHÀ NGƯỜI KHÁC
+  readonly?: boolean;
+  source: "feed" | "me" | "user";
+  userId?: number;
+  isAdmin?: boolean;
+  refreshKey?: number;
 };
 
 type CommentItem = {
@@ -19,142 +35,670 @@ type CommentItem = {
   authorAvatar?: string;
   text: string;
   createdAt: string;
+  parentCommentId?: string;
+  likeCount: number;
+  likedByMe: boolean;
 };
 
-export default function ProfileFeedSection({ avatarUrl, initialPosts, onPostsChanged, readonly = false }: Props) {
-  const [tab, setTab] = useState<"posts" | "media">("posts");
-  const [posts, setPosts] = useState<FeedPost[]>(initialPosts);
+function toRelativeDate(input: string): string {
+  const dt = new Date(input);
+  if (Number.isNaN(dt.getTime())) return "Vừa xong";
+  const diff = Date.now() - dt.getTime();
+  if (diff < 60_000) return "Vừa xong";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} phút trước`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} giờ trước`;
+  return `${Math.floor(diff / 86_400_000)} ngày trước`;
+}
+
+function mapComment(item: PostCommentDto): CommentItem {
+  return {
+    id: String(item.id),
+    authorName: `User #${item.userId}`,
+    text: item.content,
+    createdAt: toRelativeDate(item.createdAt),
+    parentCommentId: item.parentCommentId != null ? String(item.parentCommentId) : undefined,
+    likeCount: item.likeCount ?? 0,
+    likedByMe: Boolean(item.likedByMe),
+  };
+}
+
+function mapPostToFeed(post: PostDto): FeedPost {
+  return {
+    id: String(post.id),
+    postId: post.id,
+    sharedPostId: post.sharedPostId ?? undefined,
+    authorId: post.authorId,
+    authorName: post.authorName ?? undefined,
+    authorAvatar: post.authorAvatarUrl ?? undefined,
+    content: post.content,
+    mediaUrl: post.mediaUrl ?? undefined,
+    visibility: post.visibility,
+    status: post.status,
+    createdAt: toRelativeDate(post.createdAt),
+    likes: post.likeCount ?? 0,
+    comments: post.commentCount ?? 0,
+    shares: post.shareCount ?? 0,
+    sharedPost: post.sharedPost
+      ? {
+          id: String(post.sharedPost.id),
+          authorId: post.sharedPost.authorId,
+          content: post.sharedPost.content,
+          mediaUrl: post.sharedPost.mediaUrl ?? undefined,
+          authorName: post.sharedPost.authorName ?? undefined,
+          authorAvatar: post.sharedPost.authorAvatarUrl ?? undefined,
+          likes: post.sharedPost.likeCount ?? 0,
+          comments: post.sharedPost.commentCount ?? 0,
+          shares: post.sharedPost.shareCount ?? 0,
+          visibility: post.sharedPost.visibility,
+          createdAt: toRelativeDate(post.sharedPost.createdAt),
+        }
+      : undefined,
+  };
+}
+
+export default function ProfileFeedSection({
+  avatarUrl,
+  initialPosts,
+  onPostsChanged,
+  readonly = false,
+  source,
+  userId,
+  isAdmin = false,
+  refreshKey = 0,
+}: Props) {
+  const [posts, setPosts] = useState<FeedPost[]>(initialPosts ?? []);
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
-  const [commentsMap, setCommentsMap] = useState<Record<string, CommentItem[]>>({ });
+  const [commentsMap, setCommentsMap] = useState<Record<string, CommentItem[]>>({});
   const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [draftByPostId, setDraftByPostId] = useState<
+    Record<string, { content: string; mediaUrl?: string; visibility: PostVisibility }>
+  >({});
+  const [savingPostId, setSavingPostId] = useState<string | null>(null);
+  const [uploadingEditMediaPostId, setUploadingEditMediaPostId] = useState<string | null>(
+    null
+  );
+  const [openingPostId, setOpeningPostId] = useState<string | null>(null);
+  const [shareModalPostId, setShareModalPostId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
-  const activePost = useMemo(() => posts.find((p) => p.id === activePostId) || null, [posts, activePostId]);
+  const activePost = useMemo(
+    () => posts.find((p) => p.id === activePostId) || null,
+    [posts, activePostId]
+  );
 
-  function sync(next: FeedPost[]) {
+  function syncWith(next: FeedPost[]) {
     setPosts(next);
-    onPostsChanged?.(next);
   }
 
-  async function createPost(content: string) {
-    if (readonly) return; // Nếu là trang người khác thì chặn luôn việc gọi hàm tạo post
-    const nextPost: FeedPost = {
-      id: `local-${Date.now()}`,
-      content,
-      likes: 0,
-      comments: 0,
-      createdAt: "Vừa xong",
-    };
-    sync([nextPost, ...posts]);
+  function updatePosts(updater: (prev: FeedPost[]) => FeedPost[]) {
+    setPosts((prev) => updater(prev));
   }
 
-  function toggleLike(postId: string) {
-    const isLiked = Boolean(likedMap[postId]);
-    const delta = isLiked ? -1 : 1;
+  useEffect(() => {
+    onPostsChanged?.(posts);
+  }, [posts, onPostsChanged]);
 
-    setLikedMap((prev) => ({ ...prev, [postId]: !isLiked }));
-    sync(
-      posts.map((p) => (p.id === postId ? { ...p, likes: Math.max(0, p.likes + delta) } : p))
+  async function hydrateLikeState(items: FeedPost[]) {
+    if (!items.length) return;
+    const entries = await Promise.all(
+      items.map(async (p) => {
+        const postNum = Number(p.id);
+        if (!Number.isFinite(postNum)) return [p.id, false] as const;
+        try {
+          const res = await postApi.getLikeState(postNum);
+          return [p.id, res.liked] as const;
+        } catch {
+          return [p.id, false] as const;
+        }
+      })
     );
+    setLikedMap((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
   }
 
-  function addComment(postId: string, text: string) {
-    const hasCrypto = typeof globalThis.crypto !== "undefined";
-    const hasRandomUUID =
-      hasCrypto && typeof (globalThis.crypto as { randomUUID?: () => string }).randomUUID === "function";
+  async function load(page: number, append: boolean) {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      if (source !== "feed" && (userId == null || !Number.isFinite(userId))) {
+        syncWith([]);
+        setHasMore(false);
+        setError("Không xác định được người dùng để tải bài viết.");
+        return;
+      }
+      const result =
+        source === "feed"
+          ? await postApi.getFeed(page, 10)
+          : await postApi.listUserPosts(userId as number, page, 10);
+      const mapped = result.content.map(mapPostToFeed);
+      if (append) updatePosts((prev) => [...prev, ...mapped]);
+      else syncWith(mapped);
+      await hydrateLikeState(mapped);
+      setCurrentPage(result.page);
+      setHasMore(!result.last);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải bài viết");
+      if (!append) syncWith([]);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
 
-    const id = hasRandomUUID
-      ? (globalThis.crypto as { randomUUID: () => string }).randomUUID()
-      : `c-${Date.now()}`;
+  useEffect(() => {
+    void load(0, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, userId, refreshKey]);
 
-    const newComment: CommentItem = {
-      id,
-      authorName: "Bạn",
-      authorAvatar: avatarUrl, // Dùng avatar của người đang đăng nhập (TODO: fetch từ context sau)
-      text,
-      createdAt: "Vừa xong",
-    };
+  async function createPost(payload: {
+    content: string;
+    mediaUrl?: string;
+    visibility: PostVisibility;
+  }) {
+    if (readonly) return;
+    const created = await postApi.create(payload);
+    const mapped = mapPostToFeed(created);
+    updatePosts((prev) => [mapped, ...prev]);
+    const likeState = await postApi.getLikeState(created.id).catch(() => ({ liked: false }));
+    setLikedMap((prev) => ({ ...prev, [mapped.id]: likeState.liked }));
+  }
+
+  function openEdit(postId: string) {
+    const target = posts.find((p) => p.id === postId);
+    if (!target) return;
+    setDraftByPostId((prev) => ({
+      ...prev,
+      [postId]: {
+        content: target.content,
+        mediaUrl: target.mediaUrl,
+        visibility: target.visibility ?? "PUBLIC",
+      },
+    }));
+  }
+
+  function closeEdit(postId: string) {
+    setDraftByPostId((prev) => {
+      const next = { ...prev };
+      delete next[postId];
+      return next;
+    });
+  }
+
+  async function saveEdit(postId: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    const draft = draftByPostId[postId];
+    const hasMedia = Boolean(draft.mediaUrl?.trim());
+    if (!hasMedia && !draft.content.trim()) return;
+    const previous = posts.find((p) => p.id === postId);
+    const previousMediaUrl = previous?.mediaUrl;
+    setSavingPostId(postId);
+    try {
+      const updated = await postApi.update(postNum, draft);
+      updatePosts((prev) =>
+        prev.map((p) => (p.id === postId ? mapPostToFeed(updated) : p))
+      );
+      if (
+        previousMediaUrl &&
+        previousMediaUrl !== (draft.mediaUrl?.trim() || undefined)
+      ) {
+        await deleteCloudinaryByUrl(previousMediaUrl);
+      }
+      closeEdit(postId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể cập nhật bài viết");
+    } finally {
+      setSavingPostId(null);
+    }
+  }
+
+  async function uploadEditMedia(postId: string, file?: File) {
+    if (!file) return;
+    setUploadingEditMediaPostId(postId);
+    setError(null);
+    try {
+      const uploaded = await uploadToCloudinary(file);
+      setDraftByPostId((prev) => ({
+        ...prev,
+        [postId]: {
+          ...prev[postId],
+          mediaUrl: uploaded.secureUrl,
+        },
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể tải ảnh/video lên Cloudinary");
+    } finally {
+      setUploadingEditMediaPostId(null);
+    }
+  }
+
+  async function deletePost(postId: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    setActionBusyId(postId);
+    try {
+      await postApi.remove(postNum);
+      updatePosts((prev) => prev.filter((p) => p.id !== postId));
+      if (activePostId === postId) setActivePostId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể xóa bài viết");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function hidePostByAdmin(postId: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    setActionBusyId(postId);
+    try {
+      const updated = await postApi.adminHide(postNum);
+      updatePosts((prev) =>
+        prev.map((p) => (p.id === postId ? mapPostToFeed(updated) : p))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể ẩn bài viết");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  const actorId = (() => {
+    const token = getAuthTokens()?.accessToken;
+    return token ? getUserIdFromAccessToken(token) : null;
+  })();
+
+  const canManagePost = (post: FeedPost) =>
+    !readonly && actorId != null && post.authorId === actorId;
+
+  async function loadMore() {
+    if (!hasMore || loadingMore) return;
+    await load(currentPage + 1, true);
+  }
+
+  async function openPostDetail(postId: string) {
+    setOpeningPostId(postId);
+    setActivePostId(postId);
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) {
+      setOpeningPostId(null);
+      return;
+    }
+    try {
+      const [fresh, comments] = await Promise.all([
+        postApi.getById(postNum),
+        postApi.listComments(postNum),
+      ]);
+      updatePosts((prev) =>
+        prev.map((p) => (p.id === postId ? mapPostToFeed(fresh) : p))
+      );
+      setCommentsMap((prev) => ({ ...prev, [postId]: comments.map(mapComment) }));
+      const likeState = await postApi.getLikeState(postNum);
+      setLikedMap((prev) => ({ ...prev, [postId]: likeState.liked }));
+    } catch {
+      // keep modal usable
+    } finally {
+      setOpeningPostId(null);
+    }
+  }
+
+  async function toggleLike(postId: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    const oldLiked = Boolean(likedMap[postId]);
+    const oldLikes = posts.find((p) => p.id === postId)?.likes ?? 0;
+    const optimisticLiked = !oldLiked;
+    setLikedMap((prev) => ({ ...prev, [postId]: !oldLiked }));
+    updatePosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, likes: Math.max(0, p.likes + (oldLiked ? -1 : 1)) }
+          : p
+      )
+    );
+    try {
+      const likeRes = await postApi.toggleLike(postNum);
+      setLikedMap((prev) => ({ ...prev, [postId]: optimisticLiked }));
+      updatePosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likes: likeRes.likeCount } : p))
+      );
+
+      // Sync thật từ server theo thứ tự, tránh race condition với request toggle.
+      void postApi.getLikeState(postNum).then((stateRes) => {
+        setLikedMap((prev) => ({ ...prev, [postId]: stateRes.liked }));
+      }).catch(() => undefined);
+    } catch (e) {
+      setLikedMap((prev) => ({ ...prev, [postId]: oldLiked }));
+      updatePosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likes: oldLikes } : p))
+      );
+      setError(e instanceof Error ? e.message : "Không thể thích bài viết");
+    }
+  }
+
+  async function addComment(postId: string, text: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    try {
+      const created = await postApi.createComment(postNum, text);
+      const mapped = mapComment(created);
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: [...(prev[postId] || []), mapped],
+      }));
+      updatePosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, comments: p.comments + 1 } : p
+        )
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể bình luận");
+    }
+  }
+
+  async function toggleCommentLike(postId: string, commentId: string) {
+    const postNum = Number(postId);
+    const commentNum = Number(commentId);
+    if (!Number.isFinite(postNum) || !Number.isFinite(commentNum)) return;
+
+    const list = commentsMap[postId] || [];
+    const target = list.find((c) => c.id === commentId);
+    if (!target) return;
+    const prevLiked = target.likedByMe;
+    const prevCount = target.likeCount;
+    const optimisticLiked = !prevLiked;
 
     setCommentsMap((prev) => ({
       ...prev,
-      [postId]: [...(prev[postId] || []), newComment],
+      [postId]: (prev[postId] || []).map((c) =>
+        c.id === commentId
+          ? {
+              ...c,
+              likedByMe: !prevLiked,
+              likeCount: Math.max(0, c.likeCount + (prevLiked ? -1 : 1)),
+            }
+          : c
+      ),
     }));
 
-    sync(
-      posts.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p))
-    );
+    try {
+      const countRes = await postApi.toggleCommentLike(postNum, commentNum);
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map((c) =>
+          c.id === commentId
+            ? { ...c, likeCount: countRes.likeCount, likedByMe: optimisticLiked }
+            : c
+        ),
+      }));
+
+      void postApi
+        .getCommentLikeState(postNum, commentNum)
+        .then((stateRes) => {
+          setCommentsMap((prev) => ({
+            ...prev,
+            [postId]: (prev[postId] || []).map((c) =>
+              c.id === commentId ? { ...c, likedByMe: stateRes.liked } : c
+            ),
+          }));
+        })
+        .catch(() => undefined);
+    } catch (e) {
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map((c) =>
+          c.id === commentId
+            ? { ...c, likeCount: prevCount, likedByMe: prevLiked }
+            : c
+        ),
+      }));
+      setError(e instanceof Error ? e.message : "Không thể thích bình luận");
+    }
+  }
+
+  async function addReply(postId: string, parentCommentId: string, text: string) {
+    const postNum = Number(postId);
+    const parentNum = Number(parentCommentId);
+    if (!Number.isFinite(postNum) || !Number.isFinite(parentNum)) return;
+    try {
+      const reply = await postApi.createReply(postNum, parentNum, text);
+      const mapped = mapComment(reply);
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: [...(prev[postId] || []), mapped],
+      }));
+      updatePosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể trả lời bình luận");
+    }
+  }
+
+  async function sharePost(postId: string, payload?: { content?: string; visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE" }) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    try {
+      const shared = await postApi.share(postNum, payload ?? { visibility: "PUBLIC" });
+      updatePosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, shares: (p.shares ?? 0) + 1 } : p
+        )
+      );
+      if (source === "feed" || source === "me") {
+        updatePosts((prev) => [mapPostToFeed(shared), ...prev]);
+      }
+      setShareModalPostId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể chia sẻ bài viết");
+    }
+  }
+
+  async function submitShare(payload: {
+    postId: string;
+    content?: string;
+    visibility: "PUBLIC" | "FRIENDS" | "PRIVATE";
+  }) {
+    setSharing(true);
+    try {
+      await sharePost(payload.postId, {
+        content: payload.content,
+        visibility: payload.visibility,
+      });
+    } finally {
+      setSharing(false);
+    }
   }
 
   return (
-    <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-        <h3 className="text-base font-bold tracking-tight text-slate-900">Bảng tin cá nhân</h3>
-        <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setTab("posts")}
-          className={`cursor-pointer rounded-xl px-5 py-2.5 text-sm font-bold transition-colors ${
-            tab === "posts" ? "bg-rose-500 text-white shadow-sm shadow-rose-200" : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
-          }`}
-        >
-          Bài viết
-        </button>
-        <button
-          onClick={() => setTab("media")}
-          className={`cursor-pointer rounded-xl px-5 py-2.5 text-sm font-bold transition-colors ${
-            tab === "media" ? "bg-rose-500 text-white shadow-sm shadow-rose-200" : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
-          }`}
-        >
-          Ảnh
-        </button>
+    <section className="mx-auto mb-8 w-full max-w-3xl space-y-4">
+      {!readonly && (
+        <div>
+          <PostComposer avatarUrl={avatarUrl} onSubmit={createPost} />
         </div>
+      )}
+
+      <div className="space-y-4">
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white py-14 text-center text-slate-500">
+            Đang tải bài viết...
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : posts.length > 0 ? (
+          posts.map((post) => (
+            <div key={post.id} className="space-y-2">
+              <PostCard
+                post={post}
+                liked={Boolean(likedMap[post.id])}
+                onToggleLike={(id) => void toggleLike(id)}
+                onOpen={(id) => void openPostDetail(id)}
+                canManage={canManagePost(post)}
+                canAdminHide={isAdmin && post.status !== "DELETED" && post.status !== "REJECTED"}
+                onEdit={openEdit}
+                onDelete={(id) => void deletePost(id)}
+                onAdminHide={(id) => void hidePostByAdmin(id)}
+                onShare={(id) => setShareModalPostId(id)}
+                actionBusy={actionBusyId === post.id}
+              />
+              {openingPostId === post.id ? (
+                <p className="px-1 text-xs text-slate-400">Đang đồng bộ chi tiết bài viết...</p>
+              ) : null}
+              {draftByPostId[post.id] ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <textarea
+                    value={draftByPostId[post.id].content}
+                    onChange={(e) =>
+                      setDraftByPostId((prev) => ({
+                        ...prev,
+                        [post.id]: {
+                          ...prev[post.id],
+                          content: e.target.value,
+                        },
+                      }))
+                    }
+                    className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-100"
+                    rows={4}
+                  />
+                  <div className="mt-2 rounded-xl border border-slate-200 px-3 py-2">
+                    <p className="truncate text-xs text-slate-600">
+                      {draftByPostId[post.id].mediaUrl
+                        ? "Đã chọn media từ Cloudinary"
+                        : "Chưa có ảnh/video"}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        id={`edit-media-${post.id}`}
+                        type="file"
+                        accept="image/*,video/*"
+                        className="hidden"
+                        onChange={(e) =>
+                          void uploadEditMedia(post.id, e.target.files?.[0])
+                        }
+                      />
+                      <label
+                        htmlFor={`edit-media-${post.id}`}
+                        className="cursor-pointer rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        {uploadingEditMediaPostId === post.id
+                          ? "Đang tải..."
+                          : "Chọn ảnh/video"}
+                      </label>
+                      {draftByPostId[post.id].mediaUrl ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraftByPostId((prev) => ({
+                              ...prev,
+                              [post.id]: {
+                                ...prev[post.id],
+                                mediaUrl: undefined,
+                              },
+                            }))
+                          }
+                          className="cursor-pointer rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                        >
+                          Gỡ media
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <select
+                      value={draftByPostId[post.id].visibility}
+                      onChange={(e) =>
+                        setDraftByPostId((prev) => ({
+                          ...prev,
+                          [post.id]: {
+                            ...prev[post.id],
+                            visibility: e.target.value as PostVisibility,
+                          },
+                        }))
+                      }
+                      className="rounded-full border border-slate-200 px-3 py-1.5 text-xs"
+                    >
+                      <option value="PUBLIC">Công khai</option>
+                      <option value="FRIENDS">Bạn bè</option>
+                      <option value="PRIVATE">Riêng tư</option>
+                    </select>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => closeEdit(post.id)}
+                        className="cursor-pointer rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveEdit(post.id)}
+                        disabled={
+                          savingPostId === post.id ||
+                          (!draftByPostId[post.id].mediaUrl?.trim() &&
+                            !draftByPostId[post.id].content.trim())
+                        }
+                        className="cursor-pointer rounded-full bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
+                      >
+                        {savingPostId === post.id ? "Đang lưu..." : "Lưu"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))
+        ) : (
+          <div className="py-14 flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-400">
+            <svg className="mb-3 h-12 w-12 text-slate-200" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+            <p className="font-medium text-slate-500">Chưa có bài viết nào.</p>
+          </div>
+        )}
       </div>
 
-      {tab === "posts" && (
-        <>
-          {!readonly && (
-            <div className="mb-6">
-              <PostComposer avatarUrl={avatarUrl} onSubmit={createPost} />
-            </div>
-          )}
-
-          <div className="grid gap-5 md:grid-cols-2">
-            {posts.length > 0 ? (
-              posts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  liked={Boolean(likedMap[post.id])}
-                  onToggleLike={toggleLike}
-                  onOpen={setActivePostId}
-                />
-              ))
-            ) : (
-              <div className="col-span-full py-14 flex flex-col items-center justify-center text-slate-400">
-                 <svg className="w-12 h-12 mb-3 text-slate-200" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-                 <p className="font-medium text-slate-500">Chưa có bài viết nào.</p>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {tab === "media" && (
-        <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
-          {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div
-              key={n}
-              className="aspect-square rounded-2xl border border-slate-100 bg-gradient-to-br from-rose-50 to-orange-50 shadow-sm"
-            />
-          ))}
+      {!loading && !error && hasMore ? (
+        <div className="mt-5 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
+            className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {loadingMore ? "Đang tải..." : "Xem thêm"}
+          </button>
         </div>
-      )}
+      ) : null}
 
       <PostDetailModal
         post={activePost}
         liked={activePost ? Boolean(likedMap[activePost.id]) : false}
         comments={activePost ? commentsMap[activePost.id] || [] : []}
         onClose={() => setActivePostId(null)}
-        onToggleLike={toggleLike}
-        onAddComment={addComment}
+        onToggleLike={(id) => void toggleLike(id)}
+        onAddComment={(id, text) => void addComment(id, text)}
+        onToggleCommentLike={(postId, commentId) =>
+          void toggleCommentLike(postId, commentId)
+        }
+        onAddReply={(postId, parentCommentId, text) =>
+          void addReply(postId, parentCommentId, text)
+        }
+      />
+
+      <SharePostModal
+        open={Boolean(shareModalPostId)}
+        post={posts.find((p) => p.id === shareModalPostId) || null}
+        submitting={sharing}
+        onClose={() => setShareModalPostId(null)}
+        onSubmit={(payload) => void submitShare(payload)}
       />
     </section>
   );

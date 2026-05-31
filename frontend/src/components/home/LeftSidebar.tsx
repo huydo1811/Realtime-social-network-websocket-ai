@@ -4,10 +4,14 @@ import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
 import { getMyProfile } from "@/lib/api/authApi";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNavBadgesContext } from "@/lib/nav/NavBadgesContext";
 import { initChatSocket, subscribeFriendshipUser } from "@/lib/socket/chatSocket";
+import {
+  PROFILE_UPDATED_EVENT,
+  type ProfileUpdatedDetail,
+} from "@/lib/profile/profileEvents";
 
 type UserProfile = { fullName?: string; username?: string; avatarUrl?: string };
 
@@ -33,16 +37,11 @@ export default function LeftSidebar() {
   const [friendPush, setFriendPush] = useState<string | null>(null);
   const friendPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  const loadUser = useCallback(() => {
     const tokens = getAuthTokens();
     if (!tokens?.accessToken) return;
-    let mounted = true;
-
     getMyProfile(tokens.accessToken)
-      .then((u) => {
-        if (!mounted) return;
-        setUser(u as UserProfile);
-      })
+      .then((u) => setUser(u as UserProfile))
       .catch((err) => {
         const msg = err instanceof Error ? err.message : String(err || "");
         if (msg.toLowerCase().includes("unauthorized") || msg.includes("401")) {
@@ -50,11 +49,25 @@ export default function LeftSidebar() {
           router.replace("/login");
         }
       });
-
-    return () => {
-      mounted = false;
-    };
   }, [router]);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  useEffect(() => {
+    function onProfileUpdated(e: Event) {
+      const detail = (e as CustomEvent<ProfileUpdatedDetail>).detail;
+      setUser((prev) => ({
+        fullName: detail?.fullName ?? prev?.fullName,
+        username: detail?.username ?? prev?.username,
+        avatarUrl: detail?.avatarUrl ?? prev?.avatarUrl,
+      }));
+      void loadUser();
+    }
+    window.addEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
+  }, [loadUser]);
 
   useEffect(() => {
     const tokens = getAuthTokens();

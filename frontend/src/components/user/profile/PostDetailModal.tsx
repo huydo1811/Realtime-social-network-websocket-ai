@@ -2,15 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import PostMediaDisplay from "./PostMediaDisplay";
 import { FeedPost } from "./types";
-
-type CommentReply = {
-  id: string;
-  authorName: string;
-  authorAvatar?: string;
-  text: string;
-  createdAt?: string;
-};
 
 type CommentItem = {
   id: string;
@@ -18,8 +11,9 @@ type CommentItem = {
   authorAvatar?: string;
   text: string;
   createdAt?: string;
-  likes?: number;
-  replies?: CommentReply[];
+  parentCommentId?: string;
+  likeCount: number;
+  likedByMe: boolean;
 };
 
 type Props = {
@@ -29,6 +23,8 @@ type Props = {
   onClose: () => void;
   onToggleLike: (postId: string) => void;
   onAddComment: (postId: string, text: string) => void;
+  onToggleCommentLike: (postId: string, commentId: string) => Promise<void> | void;
+  onAddReply: (postId: string, parentCommentId: string, text: string) => Promise<void> | void;
 };
 
 export default function PostDetailModal({
@@ -38,14 +34,13 @@ export default function PostDetailModal({
   onClose,
   onToggleLike,
   onAddComment,
+  onToggleCommentLike,
+  onAddReply,
 }: Props) {
   const [text, setText] = useState("");
-  const [likedCommentMap, setLikedCommentMap] = useState<Record<string, boolean>>({});
-  const [commentLikeDeltaMap, setCommentLikeDeltaMap] = useState<Record<string, number>>({});
-  const [openReplyFor, setOpenReplyFor] = useState<string | null>(null);
-  const [replyDraftMap, setReplyDraftMap] = useState<Record<string, string>>({});
-  const [replyAdditionsMap, setReplyAdditionsMap] = useState<Record<string, CommentReply[]>>({});
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
+  const [openReplyFor, setOpenReplyFor] = useState<string | null>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -58,22 +53,13 @@ export default function PostDetailModal({
   if (!post) return null;
   const activePost = post;
   const hasMedia = Boolean(activePost.mediaUrl);
-
-  function makeKey(commentId: string) {
-    return `${activePost.id}:${commentId}`;
-  }
-
-  function getReplies(comment: CommentItem) {
-    const k = makeKey(comment.id);
-    return [...(comment.replies ?? []), ...(replyAdditionsMap[k] ?? [])];
-  }
-
-  function getCommentLikeCount(comment: CommentItem) {
-    const k = makeKey(comment.id);
-    return Math.max(0, (comment.likes ?? 0) + (commentLikeDeltaMap[k] ?? 0));
-  }
-
-  const totalReplies = comments.reduce((sum, c) => sum + getReplies(c).length, 0);
+  const rootComments = comments.filter((c) => !c.parentCommentId);
+  const repliesMap = comments.reduce<Record<string, CommentItem[]>>((acc, c) => {
+    if (!c.parentCommentId) return acc;
+    if (!acc[c.parentCommentId]) acc[c.parentCommentId] = [];
+    acc[c.parentCommentId].push(c);
+    return acc;
+  }, {});
 
   function submitComment() {
     const value = text.trim();
@@ -88,65 +74,36 @@ export default function PostDetailModal({
     }, 120);
   }
 
-  function toggleCommentLike(commentId: string) {
-    const k = makeKey(commentId);
-    const isLiked = Boolean(likedCommentMap[k]);
-    setLikedCommentMap((prev) => ({ ...prev, [k]: !isLiked }));
-    setCommentLikeDeltaMap((prev) => ({
-      ...prev,
-      [k]: (prev[k] ?? 0) + (isLiked ? -1 : 1),
-    }));
-  }
-
-  function submitReply(comment: CommentItem) {
-    const k = makeKey(comment.id);
-    const value = (replyDraftMap[k] || "").trim();
-    if (!value) return;
-
-    const reply: CommentReply = {
-      id: `reply-${Date.now()}-${comment.id}`,
-      authorName: "Bạn",
-      authorAvatar: activePost.authorAvatar,
-      text: value,
-      createdAt: "Vừa xong",
-    };
-
-    setReplyAdditionsMap((prev) => ({
-      ...prev,
-      [k]: [...(prev[k] || []), reply],
-    }));
-    setReplyDraftMap((prev) => ({ ...prev, [k]: "" }));
-    setOpenReplyFor(null);
-  }
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(1200px_500px_at_15%_10%,rgba(244,63,94,0.18),transparent_45%),radial-gradient(900px_500px_at_85%_0%,rgba(59,130,246,0.14),transparent_40%),rgba(2,6,23,0.66)] p-2 backdrop-blur-sm md:p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(1200px_500px_at_15%_10%,rgba(244,63,94,0.12),transparent_45%),radial-gradient(900px_500px_at_85%_0%,rgba(59,130,246,0.1),transparent_40%),rgba(15,23,42,0.46)] p-2 backdrop-blur-[3px] md:p-6"
       onClick={onClose}
       aria-modal="true"
       role="dialog"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`relative w-full ${hasMedia ? "max-w-7xl" : "max-w-4xl"} px-1 sm:px-2`}
+        className={`relative w-full ${hasMedia ? "max-w-6xl" : "max-w-4xl"} px-1 sm:px-2`}
       >
-        <div className="rounded-[30px] bg-gradient-to-br from-white/70 via-white/30 to-slate-200/20 p-[1px] shadow-[0_28px_90px_rgba(15,23,42,0.45)]">
-          <div className="overflow-hidden rounded-[29px] bg-white/95 backdrop-blur-xl">
+        <div className="rounded-[28px] bg-gradient-to-br from-white/70 via-white/30 to-slate-200/20 p-[1px] shadow-[0_20px_55px_rgba(15,23,42,0.25)]">
+          <div
+            className={`overflow-hidden rounded-[27px] bg-white/98 ${
+              hasMedia ? "grid max-h-[90vh] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]" : ""
+            }`}
+          >
             {hasMedia && (
-              <div className="relative min-h-[360px] bg-slate-100 lg:min-h-[84vh]">
-                <Image
-                  src={activePost.mediaUrl as string}
+              <div className="flex min-h-[220px] items-center justify-center border-b border-slate-200 bg-white p-3 lg:max-h-[90vh] lg:border-b-0 lg:border-r">
+                <PostMediaDisplay
+                  mediaUrl={activePost.mediaUrl as string}
                   alt="post media"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 60vw"
-                  className="object-cover"
+                  variant="modal"
+                  className="!bg-transparent"
                 />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent" />
               </div>
             )}
 
-            <div className="flex max-h-[84vh] flex-col bg-gradient-to-b from-white via-slate-50/55 to-white">
-              <div className="border-b border-slate-200/80 px-5 py-4">
+            <div className="flex max-h-[84vh] flex-col bg-white lg:max-h-[90vh]">
+              <div className="border-b border-slate-100 px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     {activePost.authorAvatar ? (
@@ -175,7 +132,7 @@ export default function PostDetailModal({
                   </button>
                 </div>
 
-                <div className="mt-3 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 shadow-sm">
+                <div className="mt-3 rounded-2xl bg-slate-50/80 px-4 py-3">
                   <p className="text-sm leading-6 text-slate-800">{activePost.content}</p>
                 </div>
 
@@ -183,12 +140,10 @@ export default function PostDetailModal({
                   <span>{activePost.likes} lượt thích</span>
                   <span>•</span>
                   <span>{comments.length} bình luận</span>
-                  <span>•</span>
-                  <span>{totalReplies} trả lời</span>
                 </div>
               </div>
 
-              <div className="border-b border-slate-200/80 px-5 py-3">
+              <div className="border-b border-slate-100 px-5 py-3">
                 <button
                   onClick={() => onToggleLike(activePost.id)}
                   className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition ${
@@ -209,15 +164,12 @@ export default function PostDetailModal({
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {comments.map((c, idx) => {
-                        const k = makeKey(c.id);
-                        const replies = getReplies(c);
-                        const isReplyOpen = openReplyFor === c.id;
-
+                      {rootComments.map((c, idx) => {
+                        const replies = repliesMap[c.id] || [];
                         return (
                           <div
-                            key={`${k}-${idx}`}
-                            className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-slate-300"
+                            key={`${c.id}-${idx}`}
+                            className="rounded-2xl bg-slate-50/85 p-3 transition-colors hover:bg-slate-100/70"
                           >
                             <div className="flex gap-3">
                               {c.authorAvatar ? (
@@ -239,59 +191,74 @@ export default function PostDetailModal({
                                 </div>
 
                                 <p className="mt-1 break-words text-sm text-slate-700">{c.text}</p>
-
-                                <div className="mt-2 flex items-center gap-5">
+                                <div className="mt-2 flex items-center gap-4">
                                   <button
-                                    onClick={() => toggleCommentLike(c.id)}
-                                    className={`cursor-pointer text-xs font-medium ${
-                                      likedCommentMap[k] ? "text-rose-600" : "text-slate-500 hover:text-slate-700"
+                                    type="button"
+                                    onClick={() => void onToggleCommentLike(activePost.id, c.id)}
+                                    className={`cursor-pointer text-xs font-semibold ${
+                                      c.likedByMe ? "text-rose-600" : "text-slate-500 hover:text-slate-700"
                                     }`}
                                   >
-                                    {likedCommentMap[k] ? "Đã thích" : "Thích"} ({getCommentLikeCount(c)})
+                                    {c.likedByMe ? "Đã thích" : "Thích"} ({c.likeCount})
                                   </button>
-
                                   <button
-                                    onClick={() => setOpenReplyFor((prev) => (prev === c.id ? null : c.id))}
-                                    className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-700"
+                                    type="button"
+                                    onClick={() =>
+                                      setOpenReplyFor((prev) => (prev === c.id ? null : c.id))
+                                    }
+                                    className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-700"
                                   >
                                     Trả lời
                                   </button>
                                 </div>
 
-                                {isReplyOpen && (
-                                  <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                    <div className="flex gap-2">
-                                      <input
-                                        value={replyDraftMap[k] || ""}
-                                        onChange={(e) =>
-                                          setReplyDraftMap((prev) => ({ ...prev, [k]: e.target.value }))
-                                        }
-                                        placeholder={`Trả lời ${c.authorName}...`}
-                                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-rose-100"
-                                      />
-                                      <button
-                                        onClick={() => submitReply(c)}
-                                        className="cursor-pointer rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                                      >
-                                        Gửi
-                                      </button>
-                                    </div>
+                                {openReplyFor === c.id ? (
+                                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm">
+                                    <input
+                                      value={replyDraft[c.id] ?? ""}
+                                      onChange={(e) =>
+                                        setReplyDraft((prev) => ({ ...prev, [c.id]: e.target.value }))
+                                      }
+                                      placeholder="Viết phản hồi..."
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-rose-100"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const value = (replyDraft[c.id] ?? "").trim();
+                                        if (!value) return;
+                                        void onAddReply(activePost.id, c.id, value);
+                                        setReplyDraft((prev) => ({ ...prev, [c.id]: "" }));
+                                      }}
+                                      className="cursor-pointer rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                                    >
+                                      Gửi
+                                    </button>
                                   </div>
-                                )}
+                                ) : null}
 
-                                {replies.length > 0 && (
-                                  <div className="mt-3 space-y-2 border-l-2 border-slate-100 pl-3">
-                                    {replies.map((r, rIdx) => (
-                                      <div key={`${r.id}-${rIdx}`} className="rounded-xl bg-slate-50 p-2.5">
+                                {replies.length > 0 ? (
+                                  <div className="mt-3 space-y-2 border-l-2 border-slate-200/70 pl-3">
+                                    {replies.map((r) => (
+                                      <div key={r.id} className="rounded-xl bg-slate-50 px-3 py-2">
                                         <div className="flex items-center justify-between gap-2">
                                           <p className="text-xs font-semibold text-slate-800">{r.authorName}</p>
-                                          <p className="text-[10px] text-slate-400">{r.createdAt ?? "Vua xong"}</p>
+                                          <p className="text-[10px] text-slate-400">{r.createdAt}</p>
                                         </div>
-                                        <p className="mt-1 text-xs text-slate-700">{r.text}</p>
+                                        <p className="text-sm text-slate-700">{r.text}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => void onToggleCommentLike(activePost.id, r.id)}
+                                          className={`mt-1 cursor-pointer text-[11px] font-semibold ${
+                                            r.likedByMe ? "text-rose-600" : "text-slate-500 hover:text-slate-700"
+                                          }`}
+                                        >
+                                          {r.likedByMe ? "Đã thích" : "Thích"} ({r.likeCount})
+                                        </button>
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                ) : null}
                               </div>
                             </div>
                           </div>
@@ -302,7 +269,7 @@ export default function PostDetailModal({
                 </div>
               </div>
 
-              <div className="border-t border-slate-200/80 bg-white px-5 py-4">
+              <div className="border-t border-slate-100 bg-white px-5 py-4">
                 <div className="flex items-center gap-3">
                   {activePost.authorAvatar ? (
                     <Image

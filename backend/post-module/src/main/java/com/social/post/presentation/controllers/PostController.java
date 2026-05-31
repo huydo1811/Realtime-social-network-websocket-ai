@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,14 +22,29 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.social.post.application.usecases.AdminHidePostUseCase;
 import com.social.post.application.usecases.CreatePostUseCase;
+import com.social.post.application.usecases.CreatePostCommentUseCase;
+import com.social.post.application.usecases.CreatePostReplyUseCase;
 import com.social.post.application.usecases.DeletePostUseCase;
 import com.social.post.application.usecases.GetPostByIdUseCase;
+import com.social.post.application.usecases.GetPostCommentLikeCountUseCase;
+import com.social.post.application.usecases.GetPostCommentLikeStateUseCase;
+import com.social.post.application.usecases.GetPostLikeStateUseCase;
 import com.social.post.application.usecases.ListFeedPostsUseCase;
+import com.social.post.application.usecases.ListPostCommentsUseCase;
 import com.social.post.application.usecases.ListUserPostsUseCase;
+import com.social.post.application.usecases.SharePostUseCase;
+import com.social.post.application.usecases.TogglePostCommentLikeUseCase;
+import com.social.post.application.usecases.TogglePostLikeUseCase;
 import com.social.post.application.usecases.UpdatePostUseCase;
+import com.social.post.application.usecases.UpdatePostVisibilityUseCase;
 import com.social.post.presentation.dto.CreatePostRequest;
+import com.social.post.presentation.dto.PostCommentRequest;
+import com.social.post.presentation.dto.PostCommentResponse;
+import com.social.post.presentation.dto.PostReplyRequest;
 import com.social.post.presentation.dto.PostResponse;
+import com.social.post.presentation.dto.PostShareRequest;
 import com.social.post.presentation.dto.UpdatePostRequest;
+import com.social.post.presentation.dto.UpdatePostVisibilityRequest;
 import com.social.post.presentation.mapper.PostMapper;
 
 import jakarta.validation.Valid;
@@ -38,29 +54,59 @@ import jakarta.validation.Valid;
 public class PostController {
     private final CreatePostUseCase createPostUseCase;
     private final UpdatePostUseCase updatePostUseCase;
+    private final UpdatePostVisibilityUseCase updatePostVisibilityUseCase;
     private final DeletePostUseCase deletePostUseCase;
     private final GetPostByIdUseCase getPostByIdUseCase;
     private final ListUserPostsUseCase listUserPostsUseCase;
     private final ListFeedPostsUseCase listFeedPostsUseCase;
     private final AdminHidePostUseCase adminHidePostUseCase;
+    private final TogglePostLikeUseCase togglePostLikeUseCase;
+    private final CreatePostCommentUseCase createPostCommentUseCase;
+    private final CreatePostReplyUseCase createPostReplyUseCase;
+    private final ListPostCommentsUseCase listPostCommentsUseCase;
+    private final SharePostUseCase sharePostUseCase;
+    private final GetPostLikeStateUseCase getPostLikeStateUseCase;
+    private final TogglePostCommentLikeUseCase togglePostCommentLikeUseCase;
+    private final GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase;
+    private final GetPostCommentLikeCountUseCase getPostCommentLikeCountUseCase;
     private final PostMapper postMapper;
 
     public PostController(
             CreatePostUseCase createPostUseCase,
             UpdatePostUseCase updatePostUseCase,
+            UpdatePostVisibilityUseCase updatePostVisibilityUseCase,
             DeletePostUseCase deletePostUseCase,
             GetPostByIdUseCase getPostByIdUseCase,
             ListUserPostsUseCase listUserPostsUseCase,
             ListFeedPostsUseCase listFeedPostsUseCase,
             AdminHidePostUseCase adminHidePostUseCase,
+            TogglePostLikeUseCase togglePostLikeUseCase,
+            CreatePostCommentUseCase createPostCommentUseCase,
+            CreatePostReplyUseCase createPostReplyUseCase,
+            ListPostCommentsUseCase listPostCommentsUseCase,
+            SharePostUseCase sharePostUseCase,
+            GetPostLikeStateUseCase getPostLikeStateUseCase,
+            TogglePostCommentLikeUseCase togglePostCommentLikeUseCase,
+            GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase,
+            GetPostCommentLikeCountUseCase getPostCommentLikeCountUseCase,
             PostMapper postMapper) {
         this.createPostUseCase = createPostUseCase;
         this.updatePostUseCase = updatePostUseCase;
+        this.updatePostVisibilityUseCase = updatePostVisibilityUseCase;
         this.deletePostUseCase = deletePostUseCase;
         this.getPostByIdUseCase = getPostByIdUseCase;
         this.listUserPostsUseCase = listUserPostsUseCase;
         this.listFeedPostsUseCase = listFeedPostsUseCase;
         this.adminHidePostUseCase = adminHidePostUseCase;
+        this.togglePostLikeUseCase = togglePostLikeUseCase;
+        this.createPostCommentUseCase = createPostCommentUseCase;
+        this.createPostReplyUseCase = createPostReplyUseCase;
+        this.listPostCommentsUseCase = listPostCommentsUseCase;
+        this.sharePostUseCase = sharePostUseCase;
+        this.getPostLikeStateUseCase = getPostLikeStateUseCase;
+        this.togglePostCommentLikeUseCase = togglePostCommentLikeUseCase;
+        this.getPostCommentLikeStateUseCase = getPostCommentLikeStateUseCase;
+        this.getPostCommentLikeCountUseCase = getPostCommentLikeCountUseCase;
         this.postMapper = postMapper;
     }
 
@@ -77,6 +123,15 @@ public class PostController {
             @Valid @RequestBody UpdatePostRequest request) {
         Long actorId = currentUserId();
         var post = updatePostUseCase.execute(actorId, postId, request.getContent(), request.getMediaUrl(), request.getVisibility());
+        return ResponseEntity.ok(postMapper.toResponse(post));
+    }
+
+    @PatchMapping("/{postId}/visibility")
+    public ResponseEntity<PostResponse> updatePostVisibility(
+            @PathVariable Long postId,
+            @Valid @RequestBody UpdatePostVisibilityRequest request) {
+        Long actorId = currentUserId();
+        var post = updatePostVisibilityUseCase.execute(actorId, postId, request.getVisibility());
         return ResponseEntity.ok(postMapper.toResponse(post));
     }
 
@@ -119,6 +174,107 @@ public class PostController {
     @PostMapping("/admin/{postId}/hide")
     public ResponseEntity<PostResponse> adminHidePost(@PathVariable Long postId) {
         var post = adminHidePostUseCase.execute(postId);
+        return ResponseEntity.ok(postMapper.toResponse(post));
+    }
+
+    @PostMapping("/{postId}/like")
+    public ResponseEntity<Map<String, Long>> toggleLike(@PathVariable Long postId) {
+        Long actorId = currentUserId();
+        long likeCount = togglePostLikeUseCase.execute(actorId, postId);
+        return ResponseEntity.ok(Map.of("likeCount", likeCount));
+    }
+
+    @GetMapping("/{postId}/like")
+    public ResponseEntity<Map<String, Boolean>> getLikeState(@PathVariable Long postId) {
+        Long actorId = currentUserId();
+        boolean liked = getPostLikeStateUseCase.execute(actorId, postId);
+        return ResponseEntity.ok(Map.of("liked", liked));
+    }
+
+    @PostMapping("/{postId}/comments")
+    public ResponseEntity<PostCommentResponse> createComment(
+            @PathVariable Long postId,
+            @Valid @RequestBody PostCommentRequest request) {
+        Long actorId = currentUserId();
+        var comment = createPostCommentUseCase.execute(actorId, postId, request.getContent());
+        PostCommentResponse response = new PostCommentResponse();
+        response.setId(comment.getId());
+        response.setPostId(comment.getPostId());
+        response.setUserId(comment.getUserId());
+        response.setParentCommentId(comment.getParentCommentId());
+        response.setContent(comment.getContent());
+        response.setLikeCount(0);
+        response.setLikedByMe(false);
+        response.setCreatedAt(comment.getCreatedAt());
+        response.setUpdatedAt(comment.getUpdatedAt());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{postId}/comments/{commentId}/replies")
+    public ResponseEntity<PostCommentResponse> createReply(
+            @PathVariable Long postId,
+            @PathVariable Long commentId,
+            @Valid @RequestBody PostReplyRequest request) {
+        Long actorId = currentUserId();
+        var reply = createPostReplyUseCase.execute(actorId, postId, commentId, request.getContent());
+        PostCommentResponse response = new PostCommentResponse();
+        response.setId(reply.getId());
+        response.setPostId(reply.getPostId());
+        response.setUserId(reply.getUserId());
+        response.setParentCommentId(reply.getParentCommentId());
+        response.setContent(reply.getContent());
+        response.setLikeCount(0);
+        response.setLikedByMe(false);
+        response.setCreatedAt(reply.getCreatedAt());
+        response.setUpdatedAt(reply.getUpdatedAt());
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{postId}/comments")
+    public ResponseEntity<java.util.List<PostCommentResponse>> listComments(@PathVariable Long postId) {
+        Long actorId = currentUserId();
+        var comments = listPostCommentsUseCase.execute(actorId, postId).stream().map(comment -> {
+            PostCommentResponse response = new PostCommentResponse();
+            response.setId(comment.getId());
+            response.setPostId(comment.getPostId());
+            response.setUserId(comment.getUserId());
+            response.setParentCommentId(comment.getParentCommentId());
+            response.setContent(comment.getContent());
+            response.setLikeCount(getPostCommentLikeCountUseCase.execute(comment.getId()));
+            response.setLikedByMe(getPostCommentLikeStateUseCase.execute(actorId, comment.getId()));
+            response.setCreatedAt(comment.getCreatedAt());
+            response.setUpdatedAt(comment.getUpdatedAt());
+            return response;
+        }).toList();
+        return ResponseEntity.ok(comments);
+    }
+
+    @PostMapping("/{postId}/comments/{commentId}/like")
+    public ResponseEntity<Map<String, Long>> toggleCommentLike(
+            @PathVariable Long postId,
+            @PathVariable Long commentId) {
+        Long actorId = currentUserId();
+        long likeCount = togglePostCommentLikeUseCase.execute(actorId, commentId);
+        return ResponseEntity.ok(Map.of("likeCount", likeCount));
+    }
+
+    @GetMapping("/{postId}/comments/{commentId}/like")
+    public ResponseEntity<Map<String, Boolean>> getCommentLikeState(
+            @PathVariable Long postId,
+            @PathVariable Long commentId) {
+        Long actorId = currentUserId();
+        boolean liked = getPostCommentLikeStateUseCase.execute(actorId, commentId);
+        return ResponseEntity.ok(Map.of("liked", liked));
+    }
+
+    @PostMapping("/{postId}/share")
+    public ResponseEntity<PostResponse> sharePost(
+            @PathVariable Long postId,
+            @Valid @RequestBody(required = false) PostShareRequest request) {
+        Long actorId = currentUserId();
+        String content = request == null ? null : request.getContent();
+        var visibility = request == null ? null : request.getVisibility();
+        var post = sharePostUseCase.execute(actorId, postId, content, visibility);
         return ResponseEntity.ok(postMapper.toResponse(post));
     }
 

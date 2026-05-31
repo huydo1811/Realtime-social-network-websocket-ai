@@ -2,22 +2,18 @@ package com.social.post.presentation.dto;
 
 import java.time.LocalDateTime;
 
-public class PostResponse {
+public class SharedPostPreviewResponse {
     private Long id;
     private Long authorId;
-    private String authorName;
-    private String authorAvatarUrl;
     private String content;
     private String mediaUrl;
     private String visibility;
-    private String status;
-    private Long sharedPostId;
+    private String authorName;
+    private String authorAvatarUrl;
     private long likeCount;
     private long commentCount;
     private long shareCount;
-    private SharedPostPreviewResponse sharedPost;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 
     public Long getId() {
         return id;
@@ -33,22 +29,6 @@ public class PostResponse {
 
     public void setAuthorId(Long authorId) {
         this.authorId = authorId;
-    }
-
-    public String getAuthorName() {
-        return authorName;
-    }
-
-    public void setAuthorName(String authorName) {
-        this.authorName = authorName;
-    }
-
-    public String getAuthorAvatarUrl() {
-        return authorAvatarUrl;
-    }
-
-    public void setAuthorAvatarUrl(String authorAvatarUrl) {
-        this.authorAvatarUrl = authorAvatarUrl;
     }
 
     public String getContent() {
@@ -75,20 +55,20 @@ public class PostResponse {
         this.visibility = visibility;
     }
 
-    public String getStatus() {
-        return status;
+    public String getAuthorName() {
+        return authorName;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setAuthorName(String authorName) {
+        this.authorName = authorName;
     }
 
-    public Long getSharedPostId() {
-        return sharedPostId;
+    public String getAuthorAvatarUrl() {
+        return authorAvatarUrl;
     }
 
-    public void setSharedPostId(Long sharedPostId) {
-        this.sharedPostId = sharedPostId;
+    public void setAuthorAvatarUrl(String authorAvatarUrl) {
+        this.authorAvatarUrl = authorAvatarUrl;
     }
 
     public long getLikeCount() {
@@ -115,27 +95,11 @@ public class PostResponse {
         this.shareCount = shareCount;
     }
 
-    public SharedPostPreviewResponse getSharedPost() {
-        return sharedPost;
-    }
-
-    public void setSharedPost(SharedPostPreviewResponse sharedPost) {
-        this.sharedPost = sharedPost;
-    }
-
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
     }
 }

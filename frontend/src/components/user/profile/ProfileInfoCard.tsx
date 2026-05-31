@@ -12,6 +12,13 @@ import { getAuthTokens } from "@/lib/api/authToken";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { loadProfilesByIds } from "@/lib/friendship/loadProfiles";
 import { peerUserId } from "@/lib/friendship/peerUserId";
+import { updateMyProfile } from "@/lib/api/authApi";
+import { postApi } from "@/lib/api/postApi";
+import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
+import { emitProfileUpdated } from "@/lib/profile/profileEvents";
+import ProfileMediaUpdateModal, {
+  type ProfileMediaVisibility,
+} from "./ProfileMediaUpdateModal";
 
 type Props = {
   profile: ProfileInfo;
@@ -39,6 +46,16 @@ export default function ProfileInfoCard({ profile }: Props) {
 
   const [editing, setEditing] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
+  const [pendingMediaTarget, setPendingMediaTarget] = useState<"avatar" | "cover" | null>(
+    null
+  );
+  const [pendingMediaFile, setPendingMediaFile] = useState<File | null>(null);
+  const [pendingMediaPreview, setPendingMediaPreview] = useState("");
+  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
 
   const postCount = useMemo(() => {
     const base = localProfile.stats?.posts ?? posts.length;
@@ -93,15 +110,110 @@ export default function ProfileInfoCard({ profile }: Props) {
     }
   }
 
+  function resetMediaPickerInputs() {
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+    if (coverInputRef.current) coverInputRef.current.value = "";
+  }
+
+  function closeMediaModal() {
+    if (pendingMediaPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(pendingMediaPreview);
+    }
+    setMediaModalOpen(false);
+    setPendingMediaTarget(null);
+    setPendingMediaFile(null);
+    setPendingMediaPreview("");
+    resetMediaPickerInputs();
+  }
+
   function onPickImage(file: File | undefined, target: "avatar" | "cover") {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    if (target === "avatar") {
-      setAvatarPreview(url);
-      setLocalProfile({ ...localProfile, avatarUrl: url });
-    } else {
-      setCoverPreview(url);
-      setLocalProfile({ ...localProfile, coverUrl: url });
+    setUploadError("");
+    if (pendingMediaPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(pendingMediaPreview);
+    }
+    setPendingMediaFile(file);
+    setPendingMediaTarget(target);
+    setPendingMediaPreview(URL.createObjectURL(file));
+    setMediaModalOpen(true);
+  }
+
+  async function applyVisibilityToAllPosts(visibility: ProfileMediaVisibility) {
+    const userId = localProfile.id;
+    if (userId == null || !Number.isFinite(userId)) return;
+    const allPosts = await postApi.listAllUserPosts(userId);
+    await Promise.all(
+      allPosts.map((p) => postApi.updateVisibility(p.id, visibility))
+    );
+    setFeedRefreshKey((k) => k + 1);
+  }
+
+  async function confirmMediaUpdate(payload: {
+    visibility: ProfileMediaVisibility;
+    applyVisibilityToAllPosts: boolean;
+    postContent?: string;
+  }) {
+    if (!pendingMediaFile || !pendingMediaTarget) return;
+    const target = pendingMediaTarget;
+    const previousUrl =
+      target === "avatar" ? localProfile.avatarUrl : localProfile.coverUrl;
+    setUploadError("");
+    if (target === "avatar") setUploadingAvatar(true);
+    else setUploadingCover(true);
+    try {
+      const uploaded = await uploadToCloudinary(pendingMediaFile);
+      const url = uploaded.secureUrl;
+      const tokens = getAuthTokens();
+      if (tokens?.accessToken) {
+        await updateMyProfile(tokens.accessToken, {
+          avatarUrl: target === "avatar" ? url : undefined,
+          coverUrl: target === "cover" ? url : undefined,
+        });
+      }
+      if (target === "avatar") {
+        setAvatarPreview(url);
+        setLocalProfile((prev) => ({ ...prev, avatarUrl: url }));
+      } else {
+        setCoverPreview(url);
+        setLocalProfile((prev) => ({ ...prev, coverUrl: url }));
+      }
+
+      await postApi.create({
+        content: payload.postContent?.trim() || "",
+        mediaUrl: url,
+        visibility: payload.visibility,
+      });
+      setFeedRefreshKey((k) => k + 1);
+
+      if (previousUrl && previousUrl !== url) {
+        await deleteCloudinaryByUrl(previousUrl);
+      }
+
+      emitProfileUpdated({
+        avatarUrl: target === "avatar" ? url : localProfile.avatarUrl,
+        coverUrl: target === "cover" ? url : localProfile.coverUrl,
+        fullName: localProfile.fullName,
+        username: localProfile.username,
+      });
+
+      localStorage.setItem("defaultPostVisibility", payload.visibility);
+      if (payload.applyVisibilityToAllPosts) {
+        try {
+          await applyVisibilityToAllPosts(payload.visibility);
+        } catch (e) {
+          const message =
+            e instanceof Error ? e.message : "Không thể cập nhật quyền xem tất cả bài viết";
+          setUploadError(message);
+        }
+      }
+
+      closeMediaModal();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Không thể tải ảnh lên.";
+      setUploadError(message);
+    } finally {
+      setUploadingAvatar(false);
+      setUploadingCover(false);
     }
   }
 
@@ -146,10 +258,36 @@ export default function ProfileInfoCard({ profile }: Props) {
         onPickCover={() => coverInputRef.current?.click()}
         onOpenFriends={() => void handleOpenFriendsModal()}
         onEdit={handleStartEdit}
+        uploadingAvatar={uploadingAvatar}
+        uploadingCover={uploadingCover}
       />
 
-      <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => onPickImage(e.target.files?.[0], "avatar")} />
-      <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => onPickImage(e.target.files?.[0], "cover")} />
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => onPickImage(e.target.files?.[0], "avatar")}
+      />
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => onPickImage(e.target.files?.[0], "cover")}
+      />
+
+      <ProfileMediaUpdateModal
+        open={mediaModalOpen}
+        target={pendingMediaTarget}
+        previewUrl={pendingMediaPreview}
+        submitting={uploadingAvatar || uploadingCover}
+        onClose={closeMediaModal}
+        onConfirm={confirmMediaUpdate}
+      />
+      {uploadError ? (
+        <p className="text-sm text-rose-600">{uploadError}</p>
+      ) : null}
 
       {editing && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
@@ -197,7 +335,24 @@ export default function ProfileInfoCard({ profile }: Props) {
         </div>
       )}
 
-      {!editing && !showSecurity && <ProfileFeedSection avatarUrl={avatarPreview} initialPosts={posts} onPostsChanged={setPosts} />}
+      {!editing && !showSecurity && (
+        <div className="space-y-4">
+          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h4 className="text-sm font-bold text-slate-900">Giới thiệu</h4>
+            <p className="mt-2 text-sm text-slate-600">{localProfile.bio || "Chưa có mô tả cá nhân."}</p>
+          </aside>
+
+          <ProfileFeedSection
+            avatarUrl={avatarPreview}
+            initialPosts={posts}
+            onPostsChanged={setPosts}
+            source="me"
+            userId={localProfile.id}
+            isAdmin={String(localProfile.role).toUpperCase() === "ADMIN"}
+            refreshKey={feedRefreshKey}
+          />
+        </div>
+      )}
 
       <FriendListModal
         open={!editing && !showSecurity && friendsModalOpen}

@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import com.social.post.application.usecases.GetPostStatsUseCase;
 import com.social.post.domain.entities.Post;
+import com.social.post.domain.entities.PostStatus;
 import com.social.post.domain.repositories.PostRepository;
 import com.social.post.presentation.dto.PostResponse;
 import com.social.post.presentation.dto.SharedPostPreviewResponse;
@@ -45,6 +46,9 @@ public class PostMapper {
         response.setUpdatedAt(post.getUpdatedAt());
         if (post.getSharedPostId() != null) {
             postRepository.findById(post.getSharedPostId()).ifPresent(shared -> {
+                if (shared.getStatus() != PostStatus.APPROVED) {
+                    return;
+                }
                 var sharedStats = getPostStatsUseCase.execute(shared.getId());
                 SharedPostPreviewResponse preview = new SharedPostPreviewResponse();
                 preview.setId(shared.getId());

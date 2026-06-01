@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { postApi } from "@/lib/api/postApi";
 import { getAuthTokens } from "@/lib/api/authToken";
@@ -16,6 +17,7 @@ import PostCard from "./PostCard";
 import PostComposer from "./PostComposer";
 import PostDetailModal from "./PostDetailModal";
 import SharePostModal from "./SharePostModal";
+import ReportContentModal from "./ReportContentModal";
 import type { FeedPost } from "./types";
 
 type Props = {
@@ -106,6 +108,8 @@ export default function ProfileFeedSection({
   isAdmin = false,
   refreshKey = 0,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [posts, setPosts] = useState<FeedPost[]>(initialPosts ?? []);
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
   const [commentsMap, setCommentsMap] = useState<Record<string, CommentItem[]>>({});
@@ -126,6 +130,13 @@ export default function ProfileFeedSection({
   const [openingPostId, setOpeningPostId] = useState<string | null>(null);
   const [shareModalPostId, setShareModalPostId] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [reportModal, setReportModal] = useState<{
+    open: boolean;
+    targetType: "POST" | "COMMENT";
+    postId?: string;
+    commentId?: string;
+  }>({ open: false, targetType: "POST" });
+  const [reporting, setReporting] = useState(false);
 
   const activePost = useMemo(
     () => posts.find((p) => p.id === activePostId) || null,
@@ -335,17 +346,31 @@ export default function ProfileFeedSection({
         postApi.getById(postNum),
         postApi.listComments(postNum),
       ]);
+      const resolvedId = String(fresh.id);
+      const mappedFresh = mapPostToFeed(fresh);
       updatePosts((prev) =>
-        prev.map((p) => (p.id === postId ? mapPostToFeed(fresh) : p))
+        prev.some((p) => p.id === resolvedId)
+          ? prev.map((p) => (p.id === resolvedId ? mappedFresh : p))
+          : [mappedFresh, ...prev]
       );
-      setCommentsMap((prev) => ({ ...prev, [postId]: comments.map(mapComment) }));
+      setCommentsMap((prev) => ({ ...prev, [resolvedId]: comments.map(mapComment) }));
       const likeState = await postApi.getLikeState(postNum);
-      setLikedMap((prev) => ({ ...prev, [postId]: likeState.liked }));
+      setLikedMap((prev) => ({ ...prev, [resolvedId]: likeState.liked }));
+      setActivePostId(resolvedId);
     } catch {
       // keep modal usable
     } finally {
       setOpeningPostId(null);
     }
+  }
+
+  function openAuthorProfile(authorId?: number) {
+    if (!authorId || !Number.isFinite(authorId)) return;
+    if (source === "me" && pathname === "/profile") return;
+    if (source === "user" && userId === authorId) return;
+    const targetPath = actorId === authorId ? "/profile" : `/profile/${authorId}`;
+    if (pathname === targetPath) return;
+    router.push(targetPath);
   }
 
   async function toggleLike(postId: string) {
@@ -516,6 +541,47 @@ export default function ProfileFeedSection({
     }
   }
 
+  function openPostReportModal(postId: string) {
+    setReportModal({ open: true, targetType: "POST", postId });
+  }
+
+  function openCommentReportModal(postId: string, commentId?: string) {
+    const targetCommentId = commentId ?? commentsMap[postId]?.find((c) => !c.parentCommentId)?.id;
+    if (!targetCommentId) {
+      setError("Bài viết chưa có bình luận để báo cáo.");
+      return;
+    }
+    setReportModal({
+      open: true,
+      targetType: "COMMENT",
+      postId,
+      commentId: targetCommentId,
+    });
+  }
+
+  async function submitReport(reason: string) {
+    if (!reportModal.open) return;
+    setReporting(true);
+    try {
+      if (reportModal.targetType === "POST") {
+        const postNum = Number(reportModal.postId);
+        if (!Number.isFinite(postNum)) return;
+        await postApi.reportPost(postNum, reason);
+        setError("Đã gửi báo cáo bài viết. Quản trị viên sẽ kiểm tra.");
+      } else {
+        const commentNum = Number(reportModal.commentId);
+        if (!Number.isFinite(commentNum)) return;
+        await postApi.reportComment(commentNum, reason);
+        setError("Đã gửi báo cáo bình luận. Quản trị viên sẽ kiểm tra.");
+      }
+      setReportModal({ open: false, targetType: "POST" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể gửi báo cáo");
+    } finally {
+      setReporting(false);
+    }
+  }
+
   return (
     <section className="mx-auto mb-8 w-full max-w-3xl space-y-4">
       {!readonly && (
@@ -541,6 +607,8 @@ export default function ProfileFeedSection({
                 liked={Boolean(likedMap[post.id])}
                 onToggleLike={(id) => void toggleLike(id)}
                 onOpen={(id) => void openPostDetail(id)}
+                onOpenAuthorProfile={openAuthorProfile}
+                onReportPost={(id) => openPostReportModal(id)}
                 canManage={canManagePost(post)}
                 canAdminHide={isAdmin && post.status !== "DELETED" && post.status !== "REJECTED"}
                 onEdit={openEdit}
@@ -682,6 +750,9 @@ export default function ProfileFeedSection({
         post={activePost}
         liked={activePost ? Boolean(likedMap[activePost.id]) : false}
         comments={activePost ? commentsMap[activePost.id] || [] : []}
+        onOpenAuthorProfile={openAuthorProfile}
+        onReportPost={(id) => openPostReportModal(id)}
+        onReportComment={(id, commentId) => openCommentReportModal(id, commentId)}
         onClose={() => setActivePostId(null)}
         onToggleLike={(id) => void toggleLike(id)}
         onAddComment={(id, text) => void addComment(id, text)}
@@ -699,6 +770,14 @@ export default function ProfileFeedSection({
         submitting={sharing}
         onClose={() => setShareModalPostId(null)}
         onSubmit={(payload) => void submitShare(payload)}
+      />
+
+      <ReportContentModal
+        open={reportModal.open}
+        targetType={reportModal.targetType}
+        submitting={reporting}
+        onClose={() => setReportModal({ open: false, targetType: "POST" })}
+        onSubmit={(reason) => void submitReport(reason)}
       />
     </section>
   );

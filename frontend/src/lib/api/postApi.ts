@@ -1,5 +1,6 @@
 import { API_URL, apiAuthFetch } from "@/lib/api/userApi";
 import type {
+  ContentReportDto,
   CreatePostPayload,
   PostCommentDto,
   PostDto,
@@ -239,5 +240,62 @@ export const postApi = {
     });
     if (!res.ok) throw await parseError(res, "Không thể chia sẻ bài viết");
     return (await res.json()) as PostDto;
+  },
+
+  async reportPost(postId: number, reason: string): Promise<ContentReportDto> {
+    const res = await apiAuthFetch(`${API_URL}/reports/posts/${postId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể báo cáo bài viết");
+    return (await res.json()) as ContentReportDto;
+  },
+
+  async reportComment(commentId: number, reason: string): Promise<ContentReportDto> {
+    const res = await apiAuthFetch(`${API_URL}/reports/comments/${commentId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể báo cáo bình luận");
+    return (await res.json()) as ContentReportDto;
+  },
+
+  async adminListReports(params?: {
+    page?: number;
+    size?: number;
+    status?: "ALL" | "PENDING" | "RESOLVED" | "REJECTED";
+  }): Promise<BackendPage<ContentReportDto>> {
+    const query = new URLSearchParams({
+      page: String(params?.page ?? 0),
+      size: String(params?.size ?? 20),
+    });
+    if (params?.status && params.status !== "ALL") {
+      query.set("status", params.status);
+    }
+    const res = await apiAuthFetch(`${API_URL}/reports/admin?${query.toString()}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách báo cáo");
+    return (await res.json()) as BackendPage<ContentReportDto>;
+  },
+
+  async adminResolveReport(reportId: number, note?: string): Promise<ContentReportDto> {
+    const res = await apiAuthFetch(`${API_URL}/reports/admin/${reportId}/resolve`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể đánh dấu xử lý báo cáo");
+    return (await res.json()) as ContentReportDto;
+  },
+
+  async adminRejectReport(reportId: number, note?: string): Promise<ContentReportDto> {
+    const res = await apiAuthFetch(`${API_URL}/reports/admin/${reportId}/reject`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể từ chối báo cáo");
+    return (await res.json()) as ContentReportDto;
   },
 };

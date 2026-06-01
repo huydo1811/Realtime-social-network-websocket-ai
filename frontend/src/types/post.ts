@@ -64,3 +64,21 @@ export interface PostCommentDto {
   createdAt: string;
   updatedAt: string;
 }
+
+export type ContentReportStatus = "PENDING" | "RESOLVED" | "REJECTED";
+export type ContentReportTargetType = "POST" | "COMMENT";
+
+export interface ContentReportDto {
+  id: number;
+  targetType: ContentReportTargetType;
+  targetId: number;
+  postId?: number | null;
+  reporterUserId: number;
+  reason: string;
+  status: ContentReportStatus;
+  adminNote?: string | null;
+  resolvedBy?: number | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

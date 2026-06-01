@@ -86,7 +86,7 @@ public class ChatConversation {
         ChatConversation c = new ChatConversation();
         c.type = ConversationType.PRIVATE;
         c.memberIds.add(userId);
-        c.name = "Saved messages";
+        c.name = "Bản thân";
         return c;
     }
 

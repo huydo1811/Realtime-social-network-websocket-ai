@@ -20,6 +20,9 @@ type Props = {
   post: FeedPost | null;
   liked: boolean;
   comments: CommentItem[];
+  onOpenAuthorProfile?: (authorId?: number) => void;
+  onReportPost?: (postId: string) => void;
+  onReportComment?: (postId: string, commentId: string) => void;
   onClose: () => void;
   onToggleLike: (postId: string) => void;
   onAddComment: (postId: string, text: string) => void;
@@ -31,6 +34,9 @@ export default function PostDetailModal({
   post,
   liked,
   comments,
+  onOpenAuthorProfile,
+  onReportPost,
+  onReportComment,
   onClose,
   onToggleLike,
   onAddComment,
@@ -106,20 +112,32 @@ export default function PostDetailModal({
               <div className="border-b border-slate-100 px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {activePost.authorAvatar ? (
-                      <Image
-                        src={activePost.authorAvatar}
-                        alt="avatar"
-                        width={46}
-                        height={46}
-                        className="h-11 w-11 rounded-full object-cover ring-2 ring-white shadow"
-                      />
-                    ) : (
-                      <div className="h-11 w-11 rounded-full bg-slate-200" />
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => onOpenAuthorProfile?.(activePost.authorId)}
+                      className="cursor-pointer"
+                    >
+                      {activePost.authorAvatar ? (
+                        <Image
+                          src={activePost.authorAvatar}
+                          alt="avatar"
+                          width={46}
+                          height={46}
+                          className="h-11 w-11 rounded-full object-cover ring-2 ring-white shadow"
+                        />
+                      ) : (
+                        <div className="h-11 w-11 rounded-full bg-slate-200" />
+                      )}
+                    </button>
 
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{activePost.authorName ?? "Người dùng"}</p>
+                      <button
+                        type="button"
+                        onClick={() => onOpenAuthorProfile?.(activePost.authorId)}
+                        className="cursor-pointer text-sm font-semibold text-slate-900 hover:underline"
+                      >
+                        {activePost.authorName ?? "Người dùng"}
+                      </button>
                       <p className="text-xs text-slate-500">{activePost.createdAt}</p>
                     </div>
                   </div>
@@ -140,6 +158,18 @@ export default function PostDetailModal({
                   <span>{activePost.likes} lượt thích</span>
                   <span>•</span>
                   <span>{comments.length} bình luận</span>
+                  {onReportPost ? (
+                    <>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => onReportPost(activePost.id)}
+                        className="cursor-pointer font-semibold text-amber-700 hover:underline"
+                      >
+                        Báo cáo bài viết
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
 
@@ -210,6 +240,15 @@ export default function PostDetailModal({
                                   >
                                     Trả lời
                                   </button>
+                                  {onReportComment ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => onReportComment(activePost.id, c.id)}
+                                      className="cursor-pointer text-xs font-semibold text-amber-700 hover:underline"
+                                    >
+                                      Báo cáo
+                                    </button>
+                                  ) : null}
                                 </div>
 
                                 {openReplyFor === c.id ? (
@@ -255,6 +294,15 @@ export default function PostDetailModal({
                                         >
                                           {r.likedByMe ? "Đã thích" : "Thích"} ({r.likeCount})
                                         </button>
+                                        {onReportComment ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => onReportComment(activePost.id, r.id)}
+                                            className="ml-3 cursor-pointer text-[11px] font-semibold text-amber-700 hover:underline"
+                                          >
+                                            Báo cáo
+                                          </button>
+                                        ) : null}
                                       </div>
                                     ))}
                                   </div>

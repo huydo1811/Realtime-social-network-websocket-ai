@@ -82,6 +82,14 @@ export default function AdminSidebar() {
         >
           Bài viết
         </Link>
+        <Link
+          href="/admin/reports"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/reports") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Báo cáo nội dung
+        </Link>
         <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Moderation (sắp có)</button>
       </nav>
 

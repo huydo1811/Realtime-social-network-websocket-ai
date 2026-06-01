@@ -51,6 +51,7 @@ export default function RightSidebar() {
   const [userNames, setUserNames] = useState<Record<number, string>>({});
   const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
   const [isDesktop, setIsDesktop] = useState(false);
+  const [loadSeq, setLoadSeq] = useState(0);
 
   const openIds = useMemo(() => openChats.map((c) => c.id), [openChats]);
   const openIdsRef = useRef<number[]>([]);
@@ -110,21 +111,30 @@ export default function RightSidebar() {
   }, []);
 
   useEffect(() => {
+    setLoadSeq((seq) => seq + 1);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    void fetchSidebarData().finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    const run = async () => {
+      setLoading(true);
+      try {
+        await fetchSidebarData();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };
-  }, [fetchSidebarData]);
+  }, [fetchSidebarData, loadSeq]);
 
   useEffect(() => {
     return onPrivateThreadsSync(() => {
-      void fetchSidebarData();
+      setLoadSeq((seq) => seq + 1);
     });
-  }, [fetchSidebarData]);
+  }, []);
 
   useEffect(() => {
     const ids = contacts
@@ -255,7 +265,7 @@ export default function RightSidebar() {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [privateIdsKey, currentUserId]);
+  }, [privateIdsKey, currentUserId, privateThreads]);
 
   const totalUnread = useMemo(() => contacts.reduce((s, c) => s + c.unreadCount, 0), [contacts]);
 

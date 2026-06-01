@@ -10,6 +10,8 @@ type Props = {
   liked: boolean;
   onToggleLike: (postId: string) => void;
   onOpen: (postId: string) => void;
+  onOpenAuthorProfile?: (authorId?: number) => void;
+  onReportPost?: (postId: string) => void;
   canManage?: boolean;
   canAdminHide?: boolean;
   onEdit?: (postId: string) => void;
@@ -24,6 +26,8 @@ export default function PostCard({
   liked,
   onToggleLike,
   onOpen,
+  onOpenAuthorProfile,
+  onReportPost,
   canManage = false,
   canAdminHide = false,
   onEdit,
@@ -48,7 +52,7 @@ export default function PostCard({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
 
-  const canShowMenu = canManage || canAdminHide;
+  const canShowMenu = canManage || canAdminHide || Boolean(onReportPost);
 
   const visibilityMeta =
     post.visibility === "PUBLIC"
@@ -89,23 +93,39 @@ export default function PostCard({
     >
       <div className="flex items-start justify-between gap-3 px-4 pt-4">
         <div className="flex min-w-0 items-center gap-3">
-          {post.authorAvatar ? (
-            <Image
-              src={post.authorAvatar}
-              alt={post.authorName ?? "avatar"}
-              width={42}
-              height={42}
-              className="h-10 w-10 rounded-full object-cover"
-            />
-          ) : (
-            <div className="h-10 w-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-sm font-bold">
-              {(post.authorName?.[0] ?? "U").toUpperCase()}
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenAuthorProfile?.(post.authorId);
+            }}
+            className="cursor-pointer"
+          >
+            {post.authorAvatar ? (
+              <Image
+                src={post.authorAvatar}
+                alt={post.authorName ?? "avatar"}
+                width={42}
+                height={42}
+                className="h-10 w-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-sm font-bold text-rose-600">
+                {(post.authorName?.[0] ?? "U").toUpperCase()}
+              </div>
+            )}
+          </button>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenAuthorProfile?.(post.authorId);
+              }}
+              className="cursor-pointer truncate text-sm font-semibold text-slate-900 hover:underline"
+            >
               {post.authorName ?? "Người dùng"}
-            </p>
+            </button>
             <p className="text-xs text-slate-500">{post.createdAt}</p>
           </div>
         </div>
@@ -182,6 +202,22 @@ export default function PostCard({
                       Ẩn bài (Admin)
                     </button>
                   ) : null}
+                  {onReportPost ? (
+                    <button
+                      type="button"
+                      disabled={actionBusy}
+                      onClick={() => {
+                        onReportPost(post.id);
+                        setMenuOpen(false);
+                      }}
+                      className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Báo cáo bài viết
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -213,23 +249,39 @@ export default function PostCard({
             Bài viết gốc được chia sẻ
           </p>
           <div className="mt-2 flex items-center gap-2">
-            {post.sharedPost.authorAvatar ? (
-              <Image
-                src={post.sharedPost.authorAvatar}
-                alt={post.sharedPost.authorName ?? "avatar"}
-                width={30}
-                height={30}
-                className="h-8 w-8 rounded-full object-cover"
-              />
-            ) : (
-              <div className="h-8 w-8 rounded-full bg-rose-100 flex items-center justify-center text-xs font-bold text-rose-600">
-                {(post.sharedPost.authorName?.[0] ?? "U").toUpperCase()}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenAuthorProfile?.(post.sharedPost?.authorId);
+              }}
+              className="cursor-pointer"
+            >
+              {post.sharedPost.authorAvatar ? (
+                <Image
+                  src={post.sharedPost.authorAvatar}
+                  alt={post.sharedPost.authorName ?? "avatar"}
+                  width={30}
+                  height={30}
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-600">
+                  {(post.sharedPost.authorName?.[0] ?? "U").toUpperCase()}
+                </div>
+              )}
+            </button>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenAuthorProfile?.(post.sharedPost?.authorId);
+                }}
+                className="cursor-pointer truncate text-sm font-semibold text-slate-900 hover:underline"
+              >
                 {post.sharedPost.authorName ?? "Người dùng"}
-              </p>
+              </button>
               <p className="text-xs text-slate-500">{post.sharedPost.createdAt}</p>
             </div>
           </div>

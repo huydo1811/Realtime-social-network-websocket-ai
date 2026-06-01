@@ -1,0 +1,2 @@
+ALTER TABLE post_comments
+    ADD COLUMN IF NOT EXISTS hidden_by_admin BOOLEAN NOT NULL DEFAULT FALSE;

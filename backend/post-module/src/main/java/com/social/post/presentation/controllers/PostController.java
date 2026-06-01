@@ -47,6 +47,7 @@ import com.social.post.presentation.dto.PostShareRequest;
 import com.social.post.presentation.dto.UpdatePostRequest;
 import com.social.post.presentation.dto.UpdatePostVisibilityRequest;
 import com.social.post.presentation.mapper.PostMapper;
+import com.social.user.domain.repositories.UserRepository;
 
 import jakarta.validation.Valid;
 
@@ -72,6 +73,7 @@ public class PostController {
     private final GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase;
     private final GetPostCommentLikeCountUseCase getPostCommentLikeCountUseCase;
     private final PostMapper postMapper;
+    private final UserRepository userRepository;
 
     public PostController(
             CreatePostUseCase createPostUseCase,
@@ -92,7 +94,8 @@ public class PostController {
             TogglePostCommentLikeUseCase togglePostCommentLikeUseCase,
             GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase,
             GetPostCommentLikeCountUseCase getPostCommentLikeCountUseCase,
-            PostMapper postMapper) {
+            PostMapper postMapper,
+            UserRepository userRepository) {
         this.createPostUseCase = createPostUseCase;
         this.updatePostUseCase = updatePostUseCase;
         this.updatePostVisibilityUseCase = updatePostVisibilityUseCase;
@@ -112,6 +115,7 @@ public class PostController {
         this.getPostCommentLikeStateUseCase = getPostCommentLikeStateUseCase;
         this.getPostCommentLikeCountUseCase = getPostCommentLikeCountUseCase;
         this.postMapper = postMapper;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
@@ -214,6 +218,10 @@ public class PostController {
         response.setUserId(comment.getUserId());
         response.setParentCommentId(comment.getParentCommentId());
         response.setContent(comment.getContent());
+        userRepository.findById(comment.getUserId()).ifPresent(user -> {
+            response.setAuthorName(user.getFullName());
+            response.setAuthorAvatarUrl(user.getAvatarUrl());
+        });
         response.setLikeCount(0);
         response.setLikedByMe(false);
         response.setCreatedAt(comment.getCreatedAt());
@@ -234,6 +242,10 @@ public class PostController {
         response.setUserId(reply.getUserId());
         response.setParentCommentId(reply.getParentCommentId());
         response.setContent(reply.getContent());
+        userRepository.findById(reply.getUserId()).ifPresent(user -> {
+            response.setAuthorName(user.getFullName());
+            response.setAuthorAvatarUrl(user.getAvatarUrl());
+        });
         response.setLikeCount(0);
         response.setLikedByMe(false);
         response.setCreatedAt(reply.getCreatedAt());
@@ -244,13 +256,19 @@ public class PostController {
     @GetMapping("/{postId}/comments")
     public ResponseEntity<java.util.List<PostCommentResponse>> listComments(@PathVariable Long postId) {
         Long actorId = currentUserId();
-        var comments = listPostCommentsUseCase.execute(actorId, postId).stream().map(comment -> {
+        var comments = listPostCommentsUseCase.execute(actorId, postId).stream()
+                .filter(comment -> !comment.isHiddenByAdmin())
+                .map(comment -> {
             PostCommentResponse response = new PostCommentResponse();
             response.setId(comment.getId());
             response.setPostId(comment.getPostId());
             response.setUserId(comment.getUserId());
             response.setParentCommentId(comment.getParentCommentId());
             response.setContent(comment.getContent());
+            userRepository.findById(comment.getUserId()).ifPresent(user -> {
+                response.setAuthorName(user.getFullName());
+                response.setAuthorAvatarUrl(user.getAvatarUrl());
+            });
             response.setLikeCount(getPostCommentLikeCountUseCase.execute(comment.getId()));
             response.setLikedByMe(getPostCommentLikeStateUseCase.execute(actorId, comment.getId()));
             response.setCreatedAt(comment.getCreatedAt());

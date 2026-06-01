@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { postApi } from "@/lib/api/postApi";
 import { getAuthTokens } from "@/lib/api/authToken";
+import { blockUser } from "@/lib/api/friendshipApi";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
 import type {
@@ -33,6 +34,7 @@ type Props = {
 
 type CommentItem = {
   id: string;
+  authorId?: number;
   authorName: string;
   authorAvatar?: string;
   text: string;
@@ -55,7 +57,9 @@ function toRelativeDate(input: string): string {
 function mapComment(item: PostCommentDto): CommentItem {
   return {
     id: String(item.id),
-    authorName: `User #${item.userId}`,
+    authorId: item.userId,
+    authorName: item.authorName?.trim() || `User #${item.userId}`,
+    authorAvatar: item.authorAvatarUrl ?? undefined,
     text: item.content,
     createdAt: toRelativeDate(item.createdAt),
     parentCommentId: item.parentCommentId != null ? String(item.parentCommentId) : undefined,
@@ -137,6 +141,11 @@ export default function ProfileFeedSection({
     commentId?: string;
   }>({ open: false, targetType: "POST" });
   const [reporting, setReporting] = useState(false);
+  const [reportResult, setReportResult] = useState<{
+    open: boolean;
+    title: string;
+    details: string[];
+  }>({ open: false, title: "", details: [] });
 
   const activePost = useMemo(
     () => posts.find((p) => p.id === activePostId) || null,
@@ -542,6 +551,11 @@ export default function ProfileFeedSection({
   }
 
   function openPostReportModal(postId: string) {
+    const targetPost = posts.find((p) => p.id === postId);
+    if (actorId != null && targetPost?.authorId != null && targetPost.authorId === actorId) {
+      setError("Không thể báo cáo bài viết của chính bạn.");
+      return;
+    }
     setReportModal({ open: true, targetType: "POST", postId });
   }
 
@@ -549,6 +563,11 @@ export default function ProfileFeedSection({
     const targetCommentId = commentId ?? commentsMap[postId]?.find((c) => !c.parentCommentId)?.id;
     if (!targetCommentId) {
       setError("Bài viết chưa có bình luận để báo cáo.");
+      return;
+    }
+    const targetComment = (commentsMap[postId] || []).find((c) => c.id === targetCommentId);
+    if (actorId != null && targetComment?.authorId != null && targetComment.authorId === actorId) {
+      setError("Không thể báo cáo bình luận của chính bạn.");
       return;
     }
     setReportModal({
@@ -559,22 +578,66 @@ export default function ProfileFeedSection({
     });
   }
 
-  async function submitReport(reason: string) {
+  async function submitReport(payload: {
+    reason: string;
+    hideForMe: boolean;
+    blockUser: boolean;
+  }) {
     if (!reportModal.open) return;
     setReporting(true);
     try {
+      const details: string[] = [];
+      const targetPost = reportModal.postId
+        ? posts.find((p) => p.id === reportModal.postId)
+        : undefined;
+      const targetAuthorId = targetPost?.authorId;
       if (reportModal.targetType === "POST") {
         const postNum = Number(reportModal.postId);
         if (!Number.isFinite(postNum)) return;
-        await postApi.reportPost(postNum, reason);
-        setError("Đã gửi báo cáo bài viết. Quản trị viên sẽ kiểm tra.");
+        await postApi.reportPost(postNum, payload.reason);
+        details.push("Đã gửi báo cáo bài viết thành công.");
+        if (payload.hideForMe && reportModal.postId) {
+          await postApi.hideForMe(postNum).catch(() => undefined);
+          updatePosts((prev) => prev.filter((p) => p.id !== reportModal.postId));
+          details.push("Nội dung đã được ẩn khỏi feed của bạn.");
+        }
       } else {
         const commentNum = Number(reportModal.commentId);
         if (!Number.isFinite(commentNum)) return;
-        await postApi.reportComment(commentNum, reason);
-        setError("Đã gửi báo cáo bình luận. Quản trị viên sẽ kiểm tra.");
+        const targetComment = reportModal.postId
+          ? (commentsMap[reportModal.postId] || []).find((c) => c.id === reportModal.commentId)
+          : undefined;
+        if (actorId != null && targetComment?.authorId != null && targetComment.authorId === actorId) {
+          setError("Không thể báo cáo bình luận của chính bạn.");
+          return;
+        }
+        await postApi.reportComment(commentNum, payload.reason);
+        details.push("Đã gửi báo cáo bình luận thành công.");
+        if (payload.hideForMe && reportModal.postId && reportModal.commentId) {
+          setCommentsMap((prev) => ({
+            ...prev,
+            [reportModal.postId!]: (prev[reportModal.postId!] || []).filter(
+              (c) => c.id !== reportModal.commentId
+            ),
+          }));
+          details.push("Bình luận đã được ẩn khỏi giao diện của bạn.");
+        }
+      }
+
+      if (payload.blockUser && targetAuthorId != null && actorId != null && targetAuthorId !== actorId) {
+        try {
+          await blockUser(targetAuthorId);
+          details.push("Đã chặn người dùng vi phạm.");
+        } catch {
+          details.push("Không thể chặn người dùng ngay lúc này.");
+        }
       }
       setReportModal({ open: false, targetType: "POST" });
+      setReportResult({
+        open: true,
+        title: "Báo cáo đã được gửi",
+        details,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể gửi báo cáo");
     } finally {
@@ -608,7 +671,7 @@ export default function ProfileFeedSection({
                 onToggleLike={(id) => void toggleLike(id)}
                 onOpen={(id) => void openPostDetail(id)}
                 onOpenAuthorProfile={openAuthorProfile}
-                onReportPost={(id) => openPostReportModal(id)}
+                onReportPost={actorId != null && post.authorId === actorId ? undefined : (id) => openPostReportModal(id)}
                 canManage={canManagePost(post)}
                 canAdminHide={isAdmin && post.status !== "DELETED" && post.status !== "REJECTED"}
                 onEdit={openEdit}
@@ -748,6 +811,7 @@ export default function ProfileFeedSection({
 
       <PostDetailModal
         post={activePost}
+        actorId={actorId}
         liked={activePost ? Boolean(likedMap[activePost.id]) : false}
         comments={activePost ? commentsMap[activePost.id] || [] : []}
         onOpenAuthorProfile={openAuthorProfile}
@@ -777,8 +841,36 @@ export default function ProfileFeedSection({
         targetType={reportModal.targetType}
         submitting={reporting}
         onClose={() => setReportModal({ open: false, targetType: "POST" })}
-        onSubmit={(reason) => void submitReport(reason)}
+        onSubmit={(payload) => void submitReport(payload)}
       />
+
+      {reportResult.open ? (
+        <div
+          className="fixed inset-0 z-[72] flex items-center justify-center bg-slate-900/45 p-4"
+          onClick={() => setReportResult({ open: false, title: "", details: [] })}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+          >
+            <h3 className="text-lg font-bold text-slate-900">{reportResult.title}</h3>
+            <ul className="mt-3 space-y-1 text-sm text-slate-600">
+              {reportResult.details.map((item, idx) => (
+                <li key={`${item}-${idx}`}>{item}</li>
+              ))}
+            </ul>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setReportResult({ open: false, title: "", details: [] })}
+                className="cursor-pointer rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
+              >
+                Dong
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

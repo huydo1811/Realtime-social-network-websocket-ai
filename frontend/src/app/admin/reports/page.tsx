@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { postApi } from "@/lib/api/postApi";
 import type { ContentReportDto, ContentReportStatus } from "@/types/post";
+import ReportRejectModal from "@/components/user/profile/ReportRejectModal";
 
 const PAGE_SIZE = 20;
 
@@ -22,6 +23,12 @@ export default function AdminReportsPage() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | ContentReportStatus>("PENDING");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [resolveModal, setResolveModal] = useState<{
+    open: boolean;
+    reportId?: number;
+    accept?: boolean;
+  }>({ open: false });
+  const [resolveBusy, setResolveBusy] = useState(false);
 
   async function load(nextPage = 0) {
     setLoading(true);
@@ -48,8 +55,8 @@ export default function AdminReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
-  async function resolve(reportId: number, accept: boolean) {
-    const note = window.prompt(accept ? "Ghi chú xử lý (tuỳ chọn)" : "Lý do từ chối báo cáo");
+  async function resolve(reportId: number, accept: boolean, note?: string) {
+    setResolveBusy(true);
     setError(null);
     setNotice(null);
     try {
@@ -57,9 +64,15 @@ export default function AdminReportsPage() {
         ? await postApi.adminResolveReport(reportId, note || undefined)
         : await postApi.adminRejectReport(reportId, note || undefined);
       setReports((prev) => prev.map((item) => (item.id === reportId ? updated : item)));
-      setNotice(accept ? "Đã đánh dấu báo cáo đã xử lý." : "Đã từ chối báo cáo.");
+      setNotice(
+        accept
+          ? "Duyệt báo cáo: nội dung đã được xử lý ẩn bởi quản trị viên."
+          : "Từ chối báo cáo: nội dung được giữ nguyên, log vẫn được lưu."
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể cập nhật báo cáo");
+    } finally {
+      setResolveBusy(false);
     }
   }
 
@@ -132,6 +145,7 @@ export default function AdminReportsPage() {
                 <th className="py-2 pr-2">Target</th>
                 <th className="py-2 pr-2">Reporter</th>
                 <th className="py-2 pr-2">Lý do</th>
+                <th className="py-2 pr-2">Nội dung bị báo cáo</th>
                 <th className="py-2 pr-2">Trạng thái</th>
                 <th className="py-2 pr-2">Tạo lúc</th>
                 <th className="py-2 pr-2">Hành động</th>
@@ -140,7 +154,7 @@ export default function AdminReportsPage() {
             <tbody>
               {reports.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     {loading ? "Đang tải..." : "Không có dữ liệu"}
                   </td>
                 </tr>
@@ -155,6 +169,22 @@ export default function AdminReportsPage() {
                     </td>
                     <td className="py-2 pr-2">User #{report.reporterUserId}</td>
                     <td className="py-2 pr-2 max-w-[280px] whitespace-pre-wrap">{report.reason}</td>
+                    <td className="py-2 pr-2 max-w-[300px] text-xs text-slate-600">
+                      <p>
+                        Tác giả:{" "}
+                        <span className="font-semibold text-slate-800">
+                          {report.targetAuthorUserId ? `User #${report.targetAuthorUserId}` : "--"}
+                        </span>
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap">
+                        Nội dung: {(report.targetContent || "[Không tải được nội dung]").slice(0, 180)}
+                      </p>
+                      {report.targetType === "COMMENT" && report.relatedPostContent ? (
+                        <p className="mt-1 text-slate-500">
+                          Bài viết liên quan: {report.relatedPostContent.slice(0, 140)}
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="py-2 pr-2">
                       <span
                         className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
@@ -174,18 +204,20 @@ export default function AdminReportsPage() {
                         <button
                           type="button"
                           disabled={report.status !== "PENDING"}
-                          onClick={() => void resolve(report.id, true)}
+                          onClick={() => void resolve(report.id, true, "Duyệt: ẩn nội dung vi phạm")}
                           className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                         >
-                          Duyệt xử lý
+                          Duyệt (ẩn nội dung)
                         </button>
                         <button
                           type="button"
                           disabled={report.status !== "PENDING"}
-                          onClick={() => void resolve(report.id, false)}
+                          onClick={() =>
+                            setResolveModal({ open: true, reportId: report.id, accept: false })
+                          }
                           className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
                         >
-                          Từ chối
+                          Từ chối (giữ nguyên)
                         </button>
                       </div>
                     </td>
@@ -196,6 +228,17 @@ export default function AdminReportsPage() {
           </table>
         </div>
       </section>
+
+      <ReportRejectModal
+        open={resolveModal.open}
+        submitting={resolveBusy}
+        onClose={() => setResolveModal({ open: false })}
+        onSubmit={async (note) => {
+          if (!resolveModal.reportId || resolveModal.accept == null) return;
+          await resolve(resolveModal.reportId, resolveModal.accept, note);
+          setResolveModal({ open: false });
+        }}
+      />
     </section>
   );
 }

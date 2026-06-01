@@ -26,7 +26,7 @@ public class GetPostStatsUseCase {
     public PostStats execute(Long postId) {
         return new PostStats(
                 postLikeRepository.countByPostId(postId),
-                postCommentRepository.countByPostId(postId),
+                postCommentRepository.countVisibleByPostId(postId),
                 postShareRepository.countBySourcePostId(postId));
     }
 

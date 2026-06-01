@@ -30,6 +30,9 @@ public class PostComment {
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "hidden_by_admin", nullable = false)
+    private boolean hiddenByAdmin;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -45,6 +48,7 @@ public class PostComment {
         comment.userId = userId;
         comment.parentCommentId = null;
         comment.content = normalizeContent(content);
+        comment.hiddenByAdmin = false;
         return comment;
     }
 
@@ -54,7 +58,12 @@ public class PostComment {
         comment.userId = userId;
         comment.parentCommentId = parentCommentId;
         comment.content = normalizeContent(content);
+        comment.hiddenByAdmin = false;
         return comment;
+    }
+
+    public void hideByAdmin() {
+        this.hiddenByAdmin = true;
     }
 
     private static String normalizeContent(String value) {
@@ -98,6 +107,10 @@ public class PostComment {
 
     public String getContent() {
         return content;
+    }
+
+    public boolean isHiddenByAdmin() {
+        return hiddenByAdmin;
     }
 
     public LocalDateTime getCreatedAt() {

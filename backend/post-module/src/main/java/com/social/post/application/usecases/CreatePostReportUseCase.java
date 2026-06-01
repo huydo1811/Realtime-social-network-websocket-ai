@@ -28,6 +28,9 @@ public class CreatePostReportUseCase {
         if (post.getStatus() == PostStatus.DELETED) {
             throw new PostDomainException("Bài viết đã bị xóa");
         }
+        if (post.getAuthorId().equals(actorId)) {
+            throw new PostDomainException("Không thể tự báo cáo bài viết của chính mình");
+        }
         return contentReportRepository.save(ContentReport.createPostReport(actorId, postId, reason));
     }
 }

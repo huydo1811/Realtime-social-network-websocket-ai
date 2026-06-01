@@ -11,6 +11,7 @@ public interface PostCommentRepository {
     List<PostComment> findByPostIdOrderByCreatedAtAsc(Long postId);
 
     long countByPostId(Long postId);
+    long countVisibleByPostId(Long postId);
 
     Optional<PostComment> findById(Long id);
 }

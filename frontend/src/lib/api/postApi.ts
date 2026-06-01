@@ -298,4 +298,11 @@ export const postApi = {
     if (!res.ok) throw await parseError(res, "Không thể từ chối báo cáo");
     return (await res.json()) as ContentReportDto;
   },
+
+  async hideForMe(postId: number): Promise<void> {
+    const res = await apiAuthFetch(`${API_URL}/posts/${postId}/hide-for-me`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể ẩn bài khỏi feed của bạn");
+  },
 };

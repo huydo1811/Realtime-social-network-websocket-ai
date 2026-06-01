@@ -8,8 +8,9 @@ type Props = {
   open: boolean;
   targetType: ReportTargetType;
   submitting?: boolean;
+  withActions?: boolean;
   onClose: () => void;
-  onSubmit: (reason: string) => Promise<void> | void;
+  onSubmit: (payload: { reason: string; hideForMe: boolean; blockUser: boolean }) => Promise<void> | void;
 };
 
 const PRESET_REASONS = [
@@ -25,11 +26,14 @@ export default function ReportContentModal({
   open,
   targetType,
   submitting = false,
+  withActions = true,
   onClose,
   onSubmit,
 }: Props) {
   const [selectedReason, setSelectedReason] = useState<string>(PRESET_REASONS[0]);
   const [extraText, setExtraText] = useState("");
+  const [hideForMe, setHideForMe] = useState(true);
+  const [blockUser, setBlockUser] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const title = useMemo(
@@ -51,9 +55,11 @@ export default function ReportContentModal({
       return;
     }
     setError(null);
-    await onSubmit(reason);
+    await onSubmit({ reason, hideForMe, blockUser });
     setSelectedReason(PRESET_REASONS[0]);
     setExtraText("");
+    setHideForMe(true);
+    setBlockUser(false);
   }
 
   return (
@@ -69,7 +75,7 @@ export default function ReportContentModal({
       >
         <h3 className="text-lg font-bold text-slate-900">{title}</h3>
         <p className="mt-1 text-sm text-slate-500">
-          Chọn lý do phù hợp, sau đó có thể ghi thêm chi tiết để quản trị viên xử lý nhanh hơn.
+          Chon ly do phu hop, sau do co the ghi them chi tiet de quan tri vien xu ly nhanh hon.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -100,6 +106,29 @@ export default function ReportContentModal({
           rows={4}
           className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300"
         />
+
+        {withActions ? (
+          <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={hideForMe}
+                onChange={(e) => setHideForMe(e.target.checked)}
+                className="mt-0.5"
+              />
+              Ẩn nội dung này khỏi feed của tôi
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={blockUser}
+                onChange={(e) => setBlockUser(e.target.checked)}
+                className="mt-0.5"
+              />
+              Chặn người dùng này
+            </label>
+          </div>
+        ) : null}
 
         {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
 

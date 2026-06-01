@@ -1,6 +1,7 @@
 package com.social.post.infrastructure.repositories;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
@@ -18,7 +19,7 @@ public class PostCommentRepositoryImpl implements PostCommentRepository {
 
     @Override
     public PostComment save(PostComment comment) {
-        return jpaPostCommentRepository.save(comment);
+        return jpaPostCommentRepository.save(Objects.requireNonNull(comment, "comment"));
     }
 
     @Override
@@ -32,7 +33,12 @@ public class PostCommentRepositoryImpl implements PostCommentRepository {
     }
 
     @Override
+    public long countVisibleByPostId(Long postId) {
+        return jpaPostCommentRepository.countVisibleByPostId(postId);
+    }
+
+    @Override
     public Optional<PostComment> findById(Long id) {
-        return jpaPostCommentRepository.findById(id);
+        return jpaPostCommentRepository.findById(Objects.requireNonNull(id, "id"));
     }
 }

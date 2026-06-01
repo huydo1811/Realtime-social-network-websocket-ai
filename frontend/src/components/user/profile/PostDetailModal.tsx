@@ -7,6 +7,7 @@ import { FeedPost } from "./types";
 
 type CommentItem = {
   id: string;
+  authorId?: number;
   authorName: string;
   authorAvatar?: string;
   text: string;
@@ -18,6 +19,7 @@ type CommentItem = {
 
 type Props = {
   post: FeedPost | null;
+  actorId?: number | null;
   liked: boolean;
   comments: CommentItem[];
   onOpenAuthorProfile?: (authorId?: number) => void;
@@ -32,6 +34,7 @@ type Props = {
 
 export default function PostDetailModal({
   post,
+  actorId,
   liked,
   comments,
   onOpenAuthorProfile,
@@ -60,6 +63,10 @@ export default function PostDetailModal({
   const activePost = post;
   const hasMedia = Boolean(activePost.mediaUrl);
   const rootComments = comments.filter((c) => !c.parentCommentId);
+  const canReportPost = Boolean(
+    onReportPost &&
+      (actorId == null || activePost.authorId == null || activePost.authorId !== actorId)
+  );
   const repliesMap = comments.reduce<Record<string, CommentItem[]>>((acc, c) => {
     if (!c.parentCommentId) return acc;
     if (!acc[c.parentCommentId]) acc[c.parentCommentId] = [];
@@ -158,12 +165,12 @@ export default function PostDetailModal({
                   <span>{activePost.likes} lượt thích</span>
                   <span>•</span>
                   <span>{comments.length} bình luận</span>
-                  {onReportPost ? (
+                  {canReportPost ? (
                     <>
                       <span>•</span>
                       <button
                         type="button"
-                        onClick={() => onReportPost(activePost.id)}
+                        onClick={() => onReportPost?.(activePost.id)}
                         className="cursor-pointer font-semibold text-amber-700 hover:underline"
                       >
                         Báo cáo bài viết
@@ -202,21 +209,33 @@ export default function PostDetailModal({
                             className="rounded-2xl bg-slate-50/85 p-3 transition-colors hover:bg-slate-100/70"
                           >
                             <div className="flex gap-3">
-                              {c.authorAvatar ? (
-                                <Image
-                                  src={c.authorAvatar}
-                                  alt={c.authorName}
-                                  width={38}
-                                  height={38}
-                                  className="h-9 w-9 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="h-9 w-9 rounded-full bg-slate-200" />
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => onOpenAuthorProfile?.(c.authorId)}
+                                className="cursor-pointer"
+                              >
+                                {c.authorAvatar ? (
+                                  <Image
+                                    src={c.authorAvatar}
+                                    alt={c.authorName}
+                                    width={38}
+                                    height={38}
+                                    className="h-9 w-9 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-9 w-9 rounded-full bg-slate-200" />
+                                )}
+                              </button>
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="truncate text-sm font-semibold text-slate-900">{c.authorName}</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenAuthorProfile?.(c.authorId)}
+                                    className="cursor-pointer truncate text-sm font-semibold text-slate-900 hover:underline"
+                                  >
+                                    {c.authorName}
+                                  </button>
                                   <p className="text-[11px] text-slate-400">{c.createdAt ?? "Vua xong"}</p>
                                 </div>
 
@@ -243,8 +262,10 @@ export default function PostDetailModal({
                                   {onReportComment ? (
                                     <button
                                       type="button"
+                                      disabled={actorId != null && c.authorId != null && c.authorId === actorId}
                                       onClick={() => onReportComment(activePost.id, c.id)}
-                                      className="cursor-pointer text-xs font-semibold text-amber-700 hover:underline"
+                                      className="cursor-pointer text-xs font-semibold text-amber-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+                                      title={actorId != null && c.authorId != null && c.authorId === actorId ? "Không thể báo cáo bình luận của chính bạn" : "Báo cáo bình luận"}
                                     >
                                       Báo cáo
                                     </button>
@@ -281,7 +302,13 @@ export default function PostDetailModal({
                                     {replies.map((r) => (
                                       <div key={r.id} className="rounded-xl bg-slate-50 px-3 py-2">
                                         <div className="flex items-center justify-between gap-2">
-                                          <p className="text-xs font-semibold text-slate-800">{r.authorName}</p>
+                                          <button
+                                            type="button"
+                                            onClick={() => onOpenAuthorProfile?.(r.authorId)}
+                                            className="cursor-pointer text-xs font-semibold text-slate-800 hover:underline"
+                                          >
+                                            {r.authorName}
+                                          </button>
                                           <p className="text-[10px] text-slate-400">{r.createdAt}</p>
                                         </div>
                                         <p className="text-sm text-slate-700">{r.text}</p>
@@ -297,8 +324,10 @@ export default function PostDetailModal({
                                         {onReportComment ? (
                                           <button
                                             type="button"
+                                            disabled={actorId != null && r.authorId != null && r.authorId === actorId}
                                             onClick={() => onReportComment(activePost.id, r.id)}
-                                            className="ml-3 cursor-pointer text-[11px] font-semibold text-amber-700 hover:underline"
+                                            className="ml-3 cursor-pointer text-[11px] font-semibold text-amber-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+                                            title={actorId != null && r.authorId != null && r.authorId === actorId ? "Không thể báo cáo bình luận của chính bạn" : "Báo cáo bình luận"}
                                           >
                                             Báo cáo
                                           </button>

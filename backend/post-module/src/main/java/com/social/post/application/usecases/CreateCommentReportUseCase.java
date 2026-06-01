@@ -23,6 +23,9 @@ public class CreateCommentReportUseCase {
     public com.social.post.domain.entities.ContentReport execute(Long actorId, Long commentId, String reason) {
         var comment = postCommentRepository.findById(commentId)
                 .orElseThrow(() -> new PostDomainException("Không tìm thấy bình luận"));
+        if (comment.getUserId().equals(actorId)) {
+            throw new PostDomainException("Không thể tự báo cáo bình luận của chính mình");
+        }
         return contentReportRepository.save(
                 com.social.post.domain.entities.ContentReport.createCommentReport(
                         actorId,

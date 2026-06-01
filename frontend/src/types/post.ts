@@ -57,6 +57,8 @@ export interface PostCommentDto {
   id: number;
   postId: number;
   userId: number;
+  authorName?: string;
+  authorAvatarUrl?: string | null;
   parentCommentId: number | null;
   content: string;
   likeCount: number;
@@ -74,7 +76,10 @@ export interface ContentReportDto {
   targetId: number;
   postId?: number | null;
   reporterUserId: number;
+  targetAuthorUserId?: number | null;
   reason: string;
+  targetContent?: string | null;
+  relatedPostContent?: string | null;
   status: ContentReportStatus;
   adminNote?: string | null;
   resolvedBy?: number | null;

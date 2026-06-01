@@ -8,7 +8,10 @@ public class ContentReportResponse {
     private Long targetId;
     private Long postId;
     private Long reporterUserId;
+    private Long targetAuthorUserId;
     private String reason;
+    private String targetContent;
+    private String relatedPostContent;
     private String status;
     private String adminNote;
     private Long resolvedBy;
@@ -56,12 +59,36 @@ public class ContentReportResponse {
         this.reporterUserId = reporterUserId;
     }
 
+    public Long getTargetAuthorUserId() {
+        return targetAuthorUserId;
+    }
+
+    public void setTargetAuthorUserId(Long targetAuthorUserId) {
+        this.targetAuthorUserId = targetAuthorUserId;
+    }
+
     public String getReason() {
         return reason;
     }
 
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    public String getTargetContent() {
+        return targetContent;
+    }
+
+    public void setTargetContent(String targetContent) {
+        this.targetContent = targetContent;
+    }
+
+    public String getRelatedPostContent() {
+        return relatedPostContent;
+    }
+
+    public void setRelatedPostContent(String relatedPostContent) {
+        this.relatedPostContent = relatedPostContent;
     }
 
     public String getStatus() {

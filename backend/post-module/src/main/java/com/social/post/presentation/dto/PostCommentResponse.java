@@ -6,6 +6,8 @@ public class PostCommentResponse {
     private Long id;
     private Long postId;
     private Long userId;
+    private String authorName;
+    private String authorAvatarUrl;
     private Long parentCommentId;
     private String content;
     private long likeCount;
@@ -35,6 +37,22 @@ public class PostCommentResponse {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public String getAuthorName() {
+        return authorName;
+    }
+
+    public void setAuthorName(String authorName) {
+        this.authorName = authorName;
+    }
+
+    public String getAuthorAvatarUrl() {
+        return authorAvatarUrl;
+    }
+
+    public void setAuthorAvatarUrl(String authorAvatarUrl) {
+        this.authorAvatarUrl = authorAvatarUrl;
     }
 
     public Long getParentCommentId() {

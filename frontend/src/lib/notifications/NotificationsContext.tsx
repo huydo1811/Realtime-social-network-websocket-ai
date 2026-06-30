@@ -10,12 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import { listIncomingRequests } from "@/lib/api/friendshipApi";
+import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import {
   friendshipEventToNotification,
   incomingRequestToNotification,
 } from "@/lib/notifications/friendshipToNotification";
+import { dueRemindersToNotifications } from "@/lib/notifications/petReminderToNotification";
 import {
   loadNotifications,
   mergeNotifications,
@@ -75,23 +77,34 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const refreshFromServer = useCallback(async () => {
     if (myId == null) return;
     try {
-      const incoming = await listIncomingRequests();
+      const [incoming, dueReminders] = await Promise.all([
+        listIncomingRequests(),
+        petApi.listDueReminders().catch(() => [] as Awaited<ReturnType<typeof petApi.listDueReminders>>),
+      ]);
       const incomingIds = new Set(incoming.map((row) => row.friendshipId));
-      const fromApi = incoming.map((row) =>
+      const fromFriendApi = incoming.map((row) =>
         incomingRequestToNotification(
           row.friendshipId,
           peerUserId(row, myId),
           row.createdAt ?? row.updatedAt
         )
       );
+      const dueReminderIds = new Set(dueReminders.map((r) => r.id));
+      const fromPetApi = dueRemindersToNotifications(dueReminders);
       setItems((prev) => {
-        const reconciled = prev.map((n) => {
-          if (n.kind === "friend_request" && n.friendshipId != null && !incomingIds.has(n.friendshipId)) {
-            return { ...n, actionable: false, read: true };
-          }
-          return n;
-        });
-        const merged = mergeNotifications(reconciled, fromApi);
+        const reconciled = prev
+          .map((n) => {
+            if (n.kind === "friend_request" && n.friendshipId != null && !incomingIds.has(n.friendshipId)) {
+              return { ...n, actionable: false, read: true };
+            }
+            return n;
+          })
+          .filter(
+            (n) =>
+              n.kind !== "pet_reminder" ||
+              (n.reminderId != null && dueReminderIds.has(n.reminderId))
+          );
+        const merged = mergeNotifications(reconciled, [...fromFriendApi, ...fromPetApi]);
         saveNotifications(myId, merged);
         return merged;
       });
@@ -120,13 +133,19 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated || myId == null) return;
     void refreshFromServer();
+    const interval = window.setInterval(() => void refreshFromServer(), 30 * 60 * 1000);
+    return () => window.clearInterval(interval);
   }, [hydrated, myId, refreshFromServer]);
 
   useEffect(() => {
     if (myId == null) return;
     const h = () => void refreshFromServer();
     window.addEventListener("friendship-changed", h);
-    return () => window.removeEventListener("friendship-changed", h);
+    window.addEventListener("pet-reminder-changed", h);
+    return () => {
+      window.removeEventListener("friendship-changed", h);
+      window.removeEventListener("pet-reminder-changed", h);
+    };
   }, [myId, refreshFromServer]);
 
   useEffect(() => {
@@ -142,7 +161,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const unreadCount = useMemo(() => items.filter((n) => !n.read).length, [items]);
 
   const pendingFriendCount = useMemo(
-    () => items.filter((n) => !n.read && n.actionable).length,
+    () => items.filter((n) => !n.read && n.actionable && n.kind === "friend_request").length,
     [items]
   );
 

@@ -2,17 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import UserLayout from "@/components/layout/UserLayout";
+import PetHealthSection from "@/components/pets/PetHealthSection";
 import PostCard from "@/components/user/profile/PostCard";
 import type { FeedPost } from "@/components/user/profile/types";
 import { petApi } from "@/lib/api/petApi";
 import { postApi } from "@/lib/api/postApi";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
+import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import type { PostDto } from "@/types/post";
 import type { PetDto } from "@/types/pet";
+
+type Tab = "posts" | "health";
 
 function toRelativeDate(input: string): string {
   const dt = new Date(input);
@@ -54,6 +58,14 @@ export default function PetDetailPage() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("posts");
+
+  const actorId = useMemo(() => {
+    const token = getAuthTokens()?.accessToken;
+    return token ? getUserIdFromAccessToken(token) : null;
+  }, []);
+
+  const isOwner = pet != null && actorId != null && pet.ownerUserId === actorId;
 
   const load = useCallback(async () => {
     if (!Number.isFinite(petId)) {
@@ -137,23 +149,51 @@ export default function PetDetailPage() {
               </div>
             </div>
 
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">Bài viết</h2>
-            {posts.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-                Chưa có bài viết nào gắn với thú cưng này.
-              </p>
+            <div className="mb-4 flex gap-2 border-b border-slate-200">
+              <button
+                type="button"
+                onClick={() => setTab("posts")}
+                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
+                  tab === "posts"
+                    ? "border-b-2 border-rose-500 text-rose-600"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Bài viết
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("health")}
+                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
+                  tab === "health"
+                    ? "border-b-2 border-rose-500 text-rose-600"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Sức khỏe
+              </button>
+            </div>
+
+            {tab === "posts" ? (
+              posts.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
+                  Chưa có bài viết nào gắn với thú cưng này.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {posts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      liked={false}
+                      onToggleLike={() => {}}
+                      onOpen={() => {}}
+                    />
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="space-y-4">
-                {posts.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    liked={false}
-                    onToggleLike={() => {}}
-                    onOpen={() => {}}
-                  />
-                ))}
-              </div>
+              <PetHealthSection petId={petId} isOwner={isOwner} />
             )}
           </>
         ) : null}

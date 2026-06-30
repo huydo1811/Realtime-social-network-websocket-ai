@@ -4,7 +4,8 @@ export type NotificationKind =
   | "friend_rejected"
   | "friend_cancelled"
   | "friend_blocked"
-  | "friend_unblocked";
+  | "friend_unblocked"
+  | "pet_reminder";
 
 export type AppNotification = {
   id: string;
@@ -13,6 +14,8 @@ export type AppNotification = {
   body: string;
   actorUserId?: number;
   friendshipId?: number;
+  petId?: number;
+  reminderId?: number;
   occurredAt: string;
   read: boolean;
   /** Hiện nút Đồng ý / Từ chối */

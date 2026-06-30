@@ -9,6 +9,7 @@ import {
   acceptFriendRequest,
   rejectFriendRequest,
 } from "@/lib/api/friendshipApi";
+import { petApi } from "@/lib/api/petApi";
 import { loadProfilesByIds } from "@/lib/friendship/loadProfiles";
 import type { ProfileInfo } from "@/components/user/profile/types";
 import { useNotifications } from "@/lib/notifications/NotificationsContext";
@@ -38,6 +39,7 @@ export default function NotificationPanel({ anchorRect, placement = "header", on
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [profiles, setProfiles] = useState<Map<number, ProfileInfo>>(new Map());
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyPetReminderId, setBusyPetReminderId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -98,6 +100,19 @@ export default function NotificationPanel({ anchorRect, placement = "header", on
       setVisibleCount((c) => Math.min(c + PAGE_SIZE, items.length));
     }
   }, [hasMore, items.length]);
+
+  async function runPetReminderComplete(n: AppNotification) {
+    if (n.petId == null || n.reminderId == null) return;
+    setBusyPetReminderId(n.reminderId);
+    try {
+      await petApi.completeReminder(n.petId, n.reminderId);
+      removeNotification(n.id);
+      window.dispatchEvent(new CustomEvent("pet-reminder-changed"));
+      await refreshFromServer();
+    } finally {
+      setBusyPetReminderId(null);
+    }
+  }
 
   async function runAction(
     n: AppNotification,
@@ -186,7 +201,7 @@ export default function NotificationPanel({ anchorRect, placement = "header", on
               </svg>
             </div>
             <p className="text-sm font-semibold text-slate-700">Không có thông báo</p>
-            <p className="mt-1 text-xs text-slate-500">Lời mời kết bạn và hoạt động khác sẽ hiện ở đây</p>
+            <p className="mt-1 text-xs text-slate-500">Lời mời kết bạn, nhắc nhở thú cưng và hoạt động khác sẽ hiện ở đây</p>
           </div>
         ) : (
           <div className="pb-2">
@@ -204,6 +219,8 @@ export default function NotificationPanel({ anchorRect, placement = "header", on
                         n.actorUserId != null ? profiles.get(n.actorUserId) : undefined
                       }
                       busy={busyId === n.friendshipId}
+                      petReminderBusy={busyPetReminderId === n.reminderId}
+                      onCompletePetReminder={() => runPetReminderComplete(n)}
                       onClose={onClose}
                       onAccept={() =>
                         n.friendshipId != null &&
@@ -250,22 +267,33 @@ function NotificationRow({
   notification: n,
   profile,
   busy,
+  petReminderBusy,
   onClose,
   onAccept,
   onReject,
+  onCompletePetReminder,
   onMarkRead,
 }: {
   notification: AppNotification;
   profile?: ProfileInfo;
   busy: boolean;
+  petReminderBusy: boolean;
   onClose: () => void;
   onAccept: () => void;
   onReject: () => void;
+  onCompletePetReminder: () => void;
   onMarkRead: () => void;
 }) {
-  const name = profile?.fullName ?? (n.actorUserId ? `Người dùng #${n.actorUserId}` : "Hệ thống");
+  const isPetReminder = n.kind === "pet_reminder";
+  const name = isPetReminder
+    ? n.title
+    : profile?.fullName ?? (n.actorUserId ? `Người dùng #${n.actorUserId}` : "Hệ thống");
   const avatar = profile?.avatarUrl ?? "/hype.png";
-  const href = n.actorUserId ? `/profile/${n.actorUserId}` : "/friends";
+  const href = isPetReminder && n.petId != null
+    ? `/pets/${n.petId}`
+    : n.actorUserId
+      ? `/profile/${n.actorUserId}`
+      : "/friends";
 
   return (
     <li
@@ -273,25 +301,51 @@ function NotificationRow({
       onMouseEnter={onMarkRead}
     >
       <div className="flex gap-3">
-        <Link
-          href={href}
-          onClick={onClose}
-          className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-slate-100 bg-slate-50"
-        >
-          <Image src={avatar} alt="" fill className="object-cover" sizes="48px" unoptimized />
-          {!n.read && (
-            <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-rose-500" />
-          )}
-        </Link>
+        {isPetReminder ? (
+          <Link
+            href={href}
+            onClick={onClose}
+            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-lg"
+            aria-hidden
+          >
+            🐾
+            {!n.read && (
+              <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-rose-500" />
+            )}
+          </Link>
+        ) : (
+          <Link
+            href={href}
+            onClick={onClose}
+            className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-slate-100 bg-slate-50"
+          >
+            <Image src={avatar} alt="" fill className="object-cover" sizes="48px" unoptimized />
+            {!n.read && (
+              <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-rose-500" />
+            )}
+          </Link>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-sm leading-snug text-slate-800">
-            <Link href={href} onClick={onClose} className="font-bold text-slate-900 hover:text-rose-600">
-              {name}
-            </Link>{" "}
-            <span className={!n.read ? "font-medium" : ""}>{n.body}</span>
+            {isPetReminder ? (
+              <>
+                <Link href={href} onClick={onClose} className="font-bold text-slate-900 hover:text-rose-600">
+                  {name}
+                </Link>
+                {": "}
+                <span className={!n.read ? "font-medium" : ""}>{n.body}</span>
+              </>
+            ) : (
+              <>
+                <Link href={href} onClick={onClose} className="font-bold text-slate-900 hover:text-rose-600">
+                  {name}
+                </Link>{" "}
+                <span className={!n.read ? "font-medium" : ""}>{n.body}</span>
+              </>
+            )}
           </p>
           <p className="mt-0.5 text-xs text-slate-400">{formatTimeAgo(n.occurredAt)}</p>
-          {n.actionable && n.friendshipId != null && (
+          {n.actionable && n.kind === "friend_request" && n.friendshipId != null && (
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
@@ -308,6 +362,25 @@ function NotificationRow({
                 className="cursor-pointer flex-1 rounded-lg bg-slate-100 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
               >
                 Từ chối
+              </button>
+            </div>
+          )}
+          {n.actionable && isPetReminder && n.petId != null && (
+            <div className="mt-2 flex gap-2">
+              <Link
+                href={href}
+                onClick={onClose}
+                className="flex-1 rounded-lg bg-amber-100 py-1.5 text-center text-xs font-bold text-amber-900 hover:bg-amber-200"
+              >
+                Xem chi tiết
+              </Link>
+              <button
+                type="button"
+                disabled={petReminderBusy}
+                onClick={onCompletePetReminder}
+                className="cursor-pointer flex-1 rounded-lg bg-rose-500 py-1.5 text-xs font-bold text-white hover:bg-rose-600 disabled:opacity-50"
+              >
+                Đã xong
               </button>
             </div>
           )}

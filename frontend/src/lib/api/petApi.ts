@@ -6,6 +6,12 @@ import type {
   PetSpecies,
   UpdatePetPayload,
 } from "@/types/pet";
+import type {
+  CreatePetHealthRecordPayload,
+  CreatePetHealthReminderPayload,
+  PetHealthRecordDto,
+  PetHealthReminderDto,
+} from "@/types/petHealth";
 
 type BackendError = {
   message?: string;
@@ -72,5 +78,80 @@ export const petApi = {
     const res = await apiAuthFetch(`${API_URL}/pets/breeds${query}`);
     if (!res.ok) throw await parseError(res, "Không thể tải danh sách giống");
     return (await res.json()) as PetBreedDto[];
+  },
+
+  async listHealthRecords(petId: number): Promise<PetHealthRecordDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health-records`);
+    if (!res.ok) throw await parseError(res, "Không thể tải sổ sức khỏe");
+    return (await res.json()) as PetHealthRecordDto[];
+  },
+
+  async createHealthRecord(
+    petId: number,
+    payload: CreatePetHealthRecordPayload
+  ): Promise<PetHealthRecordDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health-records`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể thêm hồ sơ sức khỏe");
+    return (await res.json()) as PetHealthRecordDto;
+  },
+
+  async deleteHealthRecord(petId: number, recordId: number): Promise<void> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health-records/${recordId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể xóa hồ sơ sức khỏe");
+  },
+
+  async listReminders(petId: number): Promise<PetHealthReminderDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/reminders`);
+    if (!res.ok) throw await parseError(res, "Không thể tải nhắc nhở");
+    return (await res.json()) as PetHealthReminderDto[];
+  },
+
+  async createReminder(
+    petId: number,
+    payload: CreatePetHealthReminderPayload
+  ): Promise<PetHealthReminderDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/reminders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể tạo nhắc nhở");
+    return (await res.json()) as PetHealthReminderDto;
+  },
+
+  async completeReminder(petId: number, reminderId: number): Promise<PetHealthReminderDto> {
+    const res = await apiAuthFetch(
+      `${API_URL}/pets/${petId}/reminders/${reminderId}/complete`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw await parseError(res, "Không thể đánh dấu hoàn thành");
+    return (await res.json()) as PetHealthReminderDto;
+  },
+
+  async dismissReminder(petId: number, reminderId: number): Promise<PetHealthReminderDto> {
+    const res = await apiAuthFetch(
+      `${API_URL}/pets/${petId}/reminders/${reminderId}/dismiss`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw await parseError(res, "Không thể bỏ qua nhắc nhở");
+    return (await res.json()) as PetHealthReminderDto;
+  },
+
+  async listMyUpcomingReminders(): Promise<PetHealthReminderDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/me/reminders/upcoming`);
+    if (!res.ok) throw await parseError(res, "Không thể tải nhắc nhở sắp tới");
+    return (await res.json()) as PetHealthReminderDto[];
+  },
+
+  async listDueReminders(): Promise<PetHealthReminderDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/me/reminders/due`);
+    if (!res.ok) throw await parseError(res, "Không thể tải nhắc nhở đến hạn");
+    return (await res.json()) as PetHealthReminderDto[];
   },
 };

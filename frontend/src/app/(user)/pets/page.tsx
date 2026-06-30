@@ -9,6 +9,7 @@ import UserLayout from "@/components/layout/UserLayout";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
 import type { CreatePetPayload, PetDto, PetSpecies } from "@/types/pet";
+import type { PetHealthReminderDto } from "@/types/petHealth";
 
 const SPECIES_OPTIONS: { value: PetSpecies; label: string }[] = [
   { value: "DOG", label: "Chó" },
@@ -34,6 +35,7 @@ export default function PetsPage() {
     gender: "UNKNOWN",
     visibility: "PUBLIC",
   });
+  const [upcomingReminders, setUpcomingReminders] = useState<PetHealthReminderDto[]>([]);
 
   const loadPets = useCallback(async () => {
     const tokens = getAuthTokens();
@@ -44,7 +46,12 @@ export default function PetsPage() {
     setLoading(true);
     setError(null);
     try {
-      setPets(await petApi.listMine());
+      const [petList, reminders] = await Promise.all([
+        petApi.listMine(),
+        petApi.listMyUpcomingReminders().catch(() => []),
+      ]);
+      setPets(petList);
+      setUpcomingReminders(reminders);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Không thể tải thú cưng";
       if (msg.toLowerCase().includes("unauthorized")) {
@@ -106,6 +113,30 @@ export default function PetsPage() {
         {error ? (
           <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
+          </div>
+        ) : null}
+
+        {upcomingReminders.length > 0 ? (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <h2 className="mb-3 text-sm font-semibold text-amber-900">Nhắc nhở sắp tới</h2>
+            <div className="space-y-2">
+              {upcomingReminders.slice(0, 5).map((r) => (
+                <Link
+                  key={r.id}
+                  href={`/pets/${r.petId}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-amber-100 bg-white px-3 py-2 text-sm hover:border-amber-200"
+                >
+                  <span className="min-w-0 truncate text-slate-800">
+                    <span className="font-medium">{r.petName ?? "Thú cưng"}</span>
+                    {" · "}
+                    {r.title}
+                  </span>
+                  <span className="shrink-0 text-xs text-amber-700">
+                    {new Date(r.dueDate).toLocaleDateString("vi-VN")}
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
         ) : null}
 

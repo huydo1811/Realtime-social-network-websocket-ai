@@ -17,7 +17,7 @@ import com.social.pet.domain.exceptions.PetDomainException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-@ControllerAdvice(basePackageClasses = PetController.class)
+@ControllerAdvice(basePackageClasses = {PetController.class, PetHealthController.class})
 public class PetExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest req) {

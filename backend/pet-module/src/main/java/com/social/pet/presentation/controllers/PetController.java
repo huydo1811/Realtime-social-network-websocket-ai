@@ -18,15 +18,19 @@ import org.springframework.web.bind.annotation.RestController;
 import com.social.pet.application.usecases.CreatePetUseCase;
 import com.social.pet.application.usecases.DeletePetUseCase;
 import com.social.pet.application.usecases.GetPetByIdUseCase;
+import com.social.pet.application.usecases.ListDuePetRemindersUseCase;
 import com.social.pet.application.usecases.ListMyPetsUseCase;
+import com.social.pet.application.usecases.ListMyUpcomingRemindersUseCase;
 import com.social.pet.application.usecases.ListPetBreedsUseCase;
 import com.social.pet.application.usecases.ListUserPetsUseCase;
 import com.social.pet.application.usecases.UpdatePetUseCase;
 import com.social.pet.domain.entities.PetSpecies;
 import com.social.pet.presentation.dto.CreatePetRequest;
 import com.social.pet.presentation.dto.PetBreedResponse;
+import com.social.pet.presentation.dto.PetHealthReminderResponse;
 import com.social.pet.presentation.dto.PetResponse;
 import com.social.pet.presentation.dto.UpdatePetRequest;
+import com.social.pet.presentation.mapper.PetHealthMapper;
 import com.social.pet.presentation.mapper.PetMapper;
 
 import jakarta.validation.Valid;
@@ -41,7 +45,10 @@ public class PetController {
     private final ListMyPetsUseCase listMyPetsUseCase;
     private final ListUserPetsUseCase listUserPetsUseCase;
     private final ListPetBreedsUseCase listPetBreedsUseCase;
+    private final ListMyUpcomingRemindersUseCase listMyUpcomingRemindersUseCase;
+    private final ListDuePetRemindersUseCase listDuePetRemindersUseCase;
     private final PetMapper petMapper;
+    private final PetHealthMapper petHealthMapper;
 
     public PetController(
             CreatePetUseCase createPetUseCase,
@@ -51,7 +58,10 @@ public class PetController {
             ListMyPetsUseCase listMyPetsUseCase,
             ListUserPetsUseCase listUserPetsUseCase,
             ListPetBreedsUseCase listPetBreedsUseCase,
-            PetMapper petMapper) {
+            ListMyUpcomingRemindersUseCase listMyUpcomingRemindersUseCase,
+            ListDuePetRemindersUseCase listDuePetRemindersUseCase,
+            PetMapper petMapper,
+            PetHealthMapper petHealthMapper) {
         this.createPetUseCase = createPetUseCase;
         this.updatePetUseCase = updatePetUseCase;
         this.deletePetUseCase = deletePetUseCase;
@@ -59,7 +69,10 @@ public class PetController {
         this.listMyPetsUseCase = listMyPetsUseCase;
         this.listUserPetsUseCase = listUserPetsUseCase;
         this.listPetBreedsUseCase = listPetBreedsUseCase;
+        this.listMyUpcomingRemindersUseCase = listMyUpcomingRemindersUseCase;
+        this.listDuePetRemindersUseCase = listDuePetRemindersUseCase;
         this.petMapper = petMapper;
+        this.petHealthMapper = petHealthMapper;
     }
 
     @PostMapping
@@ -93,6 +106,22 @@ public class PetController {
                 .map(petMapper::toResponse)
                 .toList();
         return ResponseEntity.ok(pets);
+    }
+
+    @GetMapping("/me/reminders/upcoming")
+    public ResponseEntity<List<PetHealthReminderResponse>> listMyUpcomingReminders() {
+        List<PetHealthReminderResponse> reminders = listMyUpcomingRemindersUseCase.execute(currentUserId()).stream()
+                .map(petHealthMapper::toReminderResponse)
+                .toList();
+        return ResponseEntity.ok(reminders);
+    }
+
+    @GetMapping("/me/reminders/due")
+    public ResponseEntity<List<PetHealthReminderResponse>> listDueReminders() {
+        List<PetHealthReminderResponse> reminders = listDuePetRemindersUseCase.execute(currentUserId()).stream()
+                .map(petHealthMapper::toReminderResponse)
+                .toList();
+        return ResponseEntity.ok(reminders);
     }
 
     @GetMapping("/breeds")

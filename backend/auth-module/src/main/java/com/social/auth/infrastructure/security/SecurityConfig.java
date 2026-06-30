@@ -54,6 +54,7 @@ public class SecurityConfig {
         .requestMatchers(mvc.pattern(HttpMethod.PUT, "/users/me")).authenticated()
         .requestMatchers(mvc.pattern("/friendships/**")).authenticated()
         .requestMatchers(mvc.pattern("/posts/**")).authenticated()
+        .requestMatchers(mvc.pattern("/pets/**")).authenticated()
         .requestMatchers(mvc.pattern(HttpMethod.POST, "/users")).hasRole("ADMIN")
         .requestMatchers(mvc.pattern(HttpMethod.PUT, "/users/{id}")).hasRole("ADMIN")
         .requestMatchers(mvc.pattern(HttpMethod.DELETE, "/users/{id}")).hasRole("ADMIN")

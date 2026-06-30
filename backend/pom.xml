@@ -29,6 +29,7 @@
         <module>chat-module</module>
         <module>call-module</module>
         <module>moderation-module</module>
+        <module>pet-module</module>
         <module>api</module>
     </modules>
 

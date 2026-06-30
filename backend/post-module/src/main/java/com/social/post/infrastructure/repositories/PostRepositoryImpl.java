@@ -1,6 +1,7 @@
 package com.social.post.infrastructure.repositories;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -45,5 +46,10 @@ public class PostRepositoryImpl implements PostRepository {
                 .map(friendship -> friendship.getOtherUserId(actorId))
                 .toList();
         return jpaPostRepository.findFeed(actorId, friendIds, pageable);
+    }
+
+    @Override
+    public Page<Post> findByPetId(Long petId, Pageable pageable) {
+        return jpaPostRepository.findByPetId(Objects.requireNonNull(petId), Objects.requireNonNull(pageable));
     }
 }

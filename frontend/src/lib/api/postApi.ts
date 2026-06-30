@@ -74,6 +74,7 @@ export const postApi = {
         content: payload.content,
         mediaUrl: normalizeText(payload.mediaUrl),
         visibility: payload.visibility ?? "PUBLIC",
+        petId: payload.petId ?? null,
       }),
     });
     if (!res.ok) throw await parseError(res, "Không thể tạo bài viết");
@@ -101,6 +102,7 @@ export const postApi = {
         content: payload.content,
         mediaUrl: normalizeText(payload.mediaUrl),
         visibility: payload.visibility ?? "PUBLIC",
+        petId: payload.petId ?? null,
       }),
     });
     if (!res.ok) throw await parseError(res, "Không thể cập nhật bài viết");
@@ -155,6 +157,19 @@ export const postApi = {
     );
     if (!res.ok)
       throw await parseError(res, "Không thể tải bài viết của người dùng");
+    const data = (await res.json()) as BackendPage<PostDto>;
+    return mapPage(data);
+  },
+
+  async listPetPosts(petId: number, page = 0, size = 10): Promise<PostPage> {
+    const query = new URLSearchParams({
+      page: String(Math.max(0, page)),
+      size: String(Math.min(Math.max(size, 1), 100)),
+    });
+    const res = await apiAuthFetch(
+      `${API_URL}/posts/pet/${petId}?${query.toString()}`
+    );
+    if (!res.ok) throw await parseError(res, "Không thể tải bài viết của thú cưng");
     const data = (await res.json()) as BackendPage<PostDto>;
     return mapPage(data);
   },

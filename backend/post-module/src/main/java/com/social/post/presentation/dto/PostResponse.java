@@ -12,6 +12,9 @@ public class PostResponse {
     private String visibility;
     private String status;
     private Long sharedPostId;
+    private Long petId;
+    private String petName;
+    private String petAvatarUrl;
     private long likeCount;
     private long commentCount;
     private long shareCount;
@@ -89,6 +92,30 @@ public class PostResponse {
 
     public void setSharedPostId(Long sharedPostId) {
         this.sharedPostId = sharedPostId;
+    }
+
+    public Long getPetId() {
+        return petId;
+    }
+
+    public void setPetId(Long petId) {
+        this.petId = petId;
+    }
+
+    public String getPetName() {
+        return petName;
+    }
+
+    public void setPetName(String petName) {
+        this.petName = petName;
+    }
+
+    public String getPetAvatarUrl() {
+        return petAvatarUrl;
+    }
+
+    public void setPetAvatarUrl(String petAvatarUrl) {
+        this.petAvatarUrl = petAvatarUrl;
     }
 
     public long getLikeCount() {

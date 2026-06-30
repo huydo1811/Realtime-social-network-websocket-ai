@@ -12,6 +12,9 @@ export interface PostDto {
   visibility: PostVisibility;
   status: PostStatus;
   sharedPostId: number | null;
+  petId?: number | null;
+  petName?: string | null;
+  petAvatarUrl?: string | null;
   likeCount: number;
   commentCount: number;
   shareCount: number;
@@ -45,12 +48,14 @@ export interface CreatePostPayload {
   content: string;
   mediaUrl?: string;
   visibility?: PostVisibility;
+  petId?: number;
 }
 
 export interface UpdatePostPayload {
   content: string;
   mediaUrl?: string;
   visibility?: PostVisibility;
+  petId?: number | null;
 }
 
 export interface PostCommentDto {

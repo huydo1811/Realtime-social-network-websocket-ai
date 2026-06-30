@@ -46,16 +46,29 @@ public class Post {
     @Column(name = "shared_post_id")
     private Long sharedPostId;
 
+    @Column(name = "pet_id")
+    private Long petId;
+
     protected Post() {
     }
 
     public static Post create(Long authorId, String content, String mediaUrl, PostVisibility visibility) {
+        return create(authorId, content, mediaUrl, visibility, null);
+    }
+
+    public static Post create(
+            Long authorId,
+            String content,
+            String mediaUrl,
+            PostVisibility visibility,
+            Long petId) {
         Post post = new Post();
         post.authorId = authorId;
         post.mediaUrl = normalizeMediaUrl(mediaUrl);
         post.content = normalizeContent(content, post.mediaUrl);
         post.visibility = visibility == null ? PostVisibility.PUBLIC : visibility;
         post.status = PostStatus.APPROVED;
+        post.petId = petId;
         return post;
     }
 
@@ -71,6 +84,15 @@ public class Post {
     }
 
     public void update(Long actorId, String content, String mediaUrl, PostVisibility visibility) {
+        update(actorId, content, mediaUrl, visibility, this.petId);
+    }
+
+    public void update(
+            Long actorId,
+            String content,
+            String mediaUrl,
+            PostVisibility visibility,
+            Long petId) {
         ensureOwner(actorId);
         if (status == PostStatus.DELETED) {
             throw new IllegalStateException("Không thể cập nhật bài viết đã xóa");
@@ -78,6 +100,7 @@ public class Post {
         this.mediaUrl = normalizeMediaUrl(mediaUrl);
         this.content = normalizeContent(content, this.mediaUrl);
         this.visibility = visibility == null ? this.visibility : visibility;
+        this.petId = petId;
     }
 
     public void updateVisibility(Long actorId, PostVisibility visibility) {
@@ -192,5 +215,9 @@ public class Post {
 
     public Long getSharedPostId() {
         return sharedPostId;
+    }
+
+    public Long getPetId() {
+        return petId;
     }
 }

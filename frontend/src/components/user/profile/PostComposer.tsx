@@ -3,17 +3,20 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { uploadToCloudinary } from "@/lib/cloudinary/upload";
+import type { PetDto } from "@/types/pet";
 
 type Props = {
   avatarUrl: string;
+  pets?: PetDto[];
   onSubmit: (payload: {
     content: string;
     mediaUrl?: string;
     visibility: "PUBLIC" | "FRIENDS" | "PRIVATE";
+    petId?: number;
   }) => Promise<void> | void;
 };
 
-export default function PostComposer({ avatarUrl, onSubmit }: Props) {
+export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) {
   const [text, setText] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | undefined>(undefined);
   const [mediaName, setMediaName] = useState("");
@@ -22,6 +25,7 @@ export default function PostComposer({ avatarUrl, onSubmit }: Props) {
   const [visibility, setVisibility] = useState<"PUBLIC" | "FRIENDS" | "PRIVATE">(
     "PUBLIC"
   );
+  const [petId, setPetId] = useState<string>("");
 
   useEffect(() => {
     const saved = localStorage.getItem("defaultPostVisibility");
@@ -54,10 +58,12 @@ export default function PostComposer({ avatarUrl, onSubmit }: Props) {
         content,
         mediaUrl,
         visibility,
+        petId: petId ? Number(petId) : undefined,
       });
       setText("");
       setMediaUrl(undefined);
       setMediaName("");
+      setPetId("");
       setVisibility("PUBLIC");
       if (mediaInputRef.current) mediaInputRef.current.value = "";
     } finally {
@@ -138,19 +144,38 @@ export default function PostComposer({ avatarUrl, onSubmit }: Props) {
             </div>
             {uploadError ? <p className="text-xs text-rose-600">{uploadError}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs font-medium">
-                <span className="text-slate-500">Quyền xem:</span>
-                <select
-                  value={visibility}
-                  onChange={(e) =>
-                    setVisibility(e.target.value as "PUBLIC" | "FRIENDS" | "PRIVATE")
-                  }
-                  className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 outline-none focus:ring-2 focus:ring-rose-100"
-                >
-                  <option value="PUBLIC">Công khai</option>
-                  <option value="FRIENDS">Bạn bè</option>
-                  <option value="PRIVATE">Riêng tư</option>
-                </select>
+              <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
+                {pets.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">Thú cưng:</span>
+                    <select
+                      value={petId}
+                      onChange={(e) => setPetId(e.target.value)}
+                      className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 outline-none focus:ring-2 focus:ring-rose-100"
+                    >
+                      <option value="">Không gắn</option>
+                      {pets.map((pet) => (
+                        <option key={pet.id} value={pet.id}>
+                          {pet.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Quyền xem:</span>
+                  <select
+                    value={visibility}
+                    onChange={(e) =>
+                      setVisibility(e.target.value as "PUBLIC" | "FRIENDS" | "PRIVATE")
+                    }
+                    className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 outline-none focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="PUBLIC">Công khai</option>
+                    <option value="FRIENDS">Bạn bè</option>
+                    <option value="PRIVATE">Riêng tư</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">

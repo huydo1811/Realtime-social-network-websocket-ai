@@ -26,6 +26,9 @@ export type FeedPost = {
   mediaUrl?: string;
   authorName?: string;
   authorAvatar?: string;
+  petId?: number;
+  petName?: string;
+  petAvatar?: string;
   visibility?: PostVisibility;
   status?: PostStatus;
 };

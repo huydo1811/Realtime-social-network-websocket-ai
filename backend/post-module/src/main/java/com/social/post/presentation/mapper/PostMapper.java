@@ -8,6 +8,7 @@ import com.social.post.domain.entities.PostStatus;
 import com.social.post.domain.repositories.PostRepository;
 import com.social.post.presentation.dto.PostResponse;
 import com.social.post.presentation.dto.SharedPostPreviewResponse;
+import com.social.pet.domain.repositories.PetRepository;
 import com.social.user.domain.repositories.UserRepository;
 
 @Component
@@ -15,14 +16,17 @@ public class PostMapper {
     private final GetPostStatsUseCase getPostStatsUseCase;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final PetRepository petRepository;
 
     public PostMapper(
             GetPostStatsUseCase getPostStatsUseCase,
             PostRepository postRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            PetRepository petRepository) {
         this.getPostStatsUseCase = getPostStatsUseCase;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
+        this.petRepository = petRepository;
     }
 
     public PostResponse toResponse(Post post) {
@@ -39,6 +43,13 @@ public class PostMapper {
         response.setVisibility(post.getVisibility().name());
         response.setStatus(post.getStatus().name());
         response.setSharedPostId(post.getSharedPostId());
+        response.setPetId(post.getPetId());
+        if (post.getPetId() != null) {
+            petRepository.findById(post.getPetId()).ifPresent(pet -> {
+                response.setPetName(pet.getName());
+                response.setPetAvatarUrl(pet.getAvatarUrl());
+            });
+        }
         response.setLikeCount(stats.likeCount());
         response.setCommentCount(stats.commentCount());
         response.setShareCount(stats.shareCount());

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { postApi } from "@/lib/api/postApi";
+import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { blockUser } from "@/lib/api/friendshipApi";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
@@ -13,6 +14,7 @@ import type {
   PostDto,
   PostVisibility,
 } from "@/types/post";
+import type { PetDto } from "@/types/pet";
 
 import PostCard from "./PostCard";
 import PostComposer from "./PostComposer";
@@ -76,6 +78,9 @@ function mapPostToFeed(post: PostDto): FeedPost {
     authorId: post.authorId,
     authorName: post.authorName ?? undefined,
     authorAvatar: post.authorAvatarUrl ?? undefined,
+    petId: post.petId ?? undefined,
+    petName: post.petName ?? undefined,
+    petAvatar: post.petAvatarUrl ?? undefined,
     content: post.content,
     mediaUrl: post.mediaUrl ?? undefined,
     visibility: post.visibility,
@@ -146,6 +151,7 @@ export default function ProfileFeedSection({
     title: string;
     details: string[];
   }>({ open: false, title: "", details: [] });
+  const [myPets, setMyPets] = useState<PetDto[]>([]);
 
   const activePost = useMemo(
     () => posts.find((p) => p.id === activePostId) || null,
@@ -216,10 +222,18 @@ export default function ProfileFeedSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, userId, refreshKey]);
 
+  useEffect(() => {
+    if (readonly || source !== "me" && source !== "feed") return;
+    petApi.listMine()
+      .then(setMyPets)
+      .catch(() => setMyPets([]));
+  }, [readonly, source, refreshKey]);
+
   async function createPost(payload: {
     content: string;
     mediaUrl?: string;
     visibility: PostVisibility;
+    petId?: number;
   }) {
     if (readonly) return;
     const created = await postApi.create(payload);
@@ -378,6 +392,13 @@ export default function ProfileFeedSection({
     if (source === "me" && pathname === "/profile") return;
     if (source === "user" && userId === authorId) return;
     const targetPath = actorId === authorId ? "/profile" : `/profile/${authorId}`;
+    if (pathname === targetPath) return;
+    router.push(targetPath);
+  }
+
+  function openPetProfile(petId?: number) {
+    if (!petId || !Number.isFinite(petId)) return;
+    const targetPath = `/pets/${petId}`;
     if (pathname === targetPath) return;
     router.push(targetPath);
   }
@@ -649,7 +670,7 @@ export default function ProfileFeedSection({
     <section className="mx-auto mb-8 w-full max-w-3xl space-y-4">
       {!readonly && (
         <div>
-          <PostComposer avatarUrl={avatarUrl} onSubmit={createPost} />
+          <PostComposer avatarUrl={avatarUrl} pets={myPets} onSubmit={createPost} />
         </div>
       )}
 
@@ -671,6 +692,7 @@ export default function ProfileFeedSection({
                 onToggleLike={(id) => void toggleLike(id)}
                 onOpen={(id) => void openPostDetail(id)}
                 onOpenAuthorProfile={openAuthorProfile}
+                onOpenPetProfile={openPetProfile}
                 onReportPost={actorId != null && post.authorId === actorId ? undefined : (id) => openPostReportModal(id)}
                 canManage={canManagePost(post)}
                 canAdminHide={isAdmin && post.status !== "DELETED" && post.status !== "REJECTED"}

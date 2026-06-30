@@ -32,4 +32,12 @@ public interface JpaPostRepository extends JpaRepository<Post, Long> {
             ORDER BY p.createdAt DESC
             """)
     Page<Post> findFeed(@Param("actorId") Long actorId, @Param("friendIds") Collection<Long> friendIds, Pageable pageable);
+
+    @Query("""
+            SELECT p FROM Post p
+            WHERE p.petId = :petId
+              AND p.status <> com.social.post.domain.entities.PostStatus.DELETED
+            ORDER BY p.createdAt DESC
+            """)
+    Page<Post> findByPetId(@Param("petId") Long petId, Pageable pageable);
 }

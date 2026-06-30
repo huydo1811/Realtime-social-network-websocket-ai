@@ -14,6 +14,8 @@ public class CreatePostRequest {
 
     private PostVisibility visibility;
 
+    private Long petId;
+
     public String getContent() {
         return content;
     }
@@ -36,6 +38,14 @@ public class CreatePostRequest {
 
     public void setVisibility(PostVisibility visibility) {
         this.visibility = visibility;
+    }
+
+    public Long getPetId() {
+        return petId;
+    }
+
+    public void setPetId(Long petId) {
+        this.petId = petId;
     }
 
     @AssertTrue(message = "Phải có nội dung hoặc ảnh/video")

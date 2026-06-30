@@ -11,6 +11,7 @@ type Props = {
   onToggleLike: (postId: string) => void;
   onOpen: (postId: string) => void;
   onOpenAuthorProfile?: (authorId?: number) => void;
+  onOpenPetProfile?: (petId?: number) => void;
   onReportPost?: (postId: string) => void;
   canManage?: boolean;
   canAdminHide?: boolean;
@@ -27,6 +28,7 @@ export default function PostCard({
   onToggleLike,
   onOpen,
   onOpenAuthorProfile,
+  onOpenPetProfile,
   onReportPost,
   canManage = false,
   canAdminHide = false,
@@ -126,6 +128,31 @@ export default function PostCard({
             >
               {post.authorName ?? "Người dùng"}
             </button>
+            {post.petId && post.petName ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenPetProfile?.(post.petId);
+                }}
+                className="mt-0.5 flex cursor-pointer items-center gap-1.5 text-xs font-medium text-rose-600 hover:underline"
+              >
+                {post.petAvatar ? (
+                  <Image
+                    src={post.petAvatar}
+                    alt={post.petName}
+                    width={16}
+                    height={16}
+                    className="h-4 w-4 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-rose-100 text-[10px] font-bold">
+                    {post.petName[0]?.toUpperCase() ?? "P"}
+                  </span>
+                )}
+                <span>{post.petName}</span>
+              </button>
+            ) : null}
             <p className="text-xs text-slate-500">{post.createdAt}</p>
           </div>
         </div>

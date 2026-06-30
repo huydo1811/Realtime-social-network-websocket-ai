@@ -31,6 +31,7 @@ import com.social.post.application.usecases.GetPostCommentLikeCountUseCase;
 import com.social.post.application.usecases.GetPostCommentLikeStateUseCase;
 import com.social.post.application.usecases.GetPostLikeStateUseCase;
 import com.social.post.application.usecases.ListFeedPostsUseCase;
+import com.social.post.application.usecases.ListPetPostsUseCase;
 import com.social.post.application.usecases.ListPostCommentsUseCase;
 import com.social.post.application.usecases.ListUserPostsUseCase;
 import com.social.post.application.usecases.SharePostUseCase;
@@ -60,6 +61,7 @@ public class PostController {
     private final DeletePostUseCase deletePostUseCase;
     private final GetPostByIdUseCase getPostByIdUseCase;
     private final ListUserPostsUseCase listUserPostsUseCase;
+    private final ListPetPostsUseCase listPetPostsUseCase;
     private final ListFeedPostsUseCase listFeedPostsUseCase;
     private final AdminHidePostUseCase adminHidePostUseCase;
     private final AdminUnhidePostUseCase adminUnhidePostUseCase;
@@ -82,6 +84,7 @@ public class PostController {
             DeletePostUseCase deletePostUseCase,
             GetPostByIdUseCase getPostByIdUseCase,
             ListUserPostsUseCase listUserPostsUseCase,
+            ListPetPostsUseCase listPetPostsUseCase,
             ListFeedPostsUseCase listFeedPostsUseCase,
             AdminHidePostUseCase adminHidePostUseCase,
             AdminUnhidePostUseCase adminUnhidePostUseCase,
@@ -102,6 +105,7 @@ public class PostController {
         this.deletePostUseCase = deletePostUseCase;
         this.getPostByIdUseCase = getPostByIdUseCase;
         this.listUserPostsUseCase = listUserPostsUseCase;
+        this.listPetPostsUseCase = listPetPostsUseCase;
         this.listFeedPostsUseCase = listFeedPostsUseCase;
         this.adminHidePostUseCase = adminHidePostUseCase;
         this.adminUnhidePostUseCase = adminUnhidePostUseCase;
@@ -121,7 +125,12 @@ public class PostController {
     @PostMapping
     public ResponseEntity<PostResponse> createPost(@Valid @RequestBody CreatePostRequest request) {
         Long actorId = currentUserId();
-        var post = createPostUseCase.execute(actorId, request.getContent(), request.getMediaUrl(), request.getVisibility());
+        var post = createPostUseCase.execute(
+                actorId,
+                request.getContent(),
+                request.getMediaUrl(),
+                request.getVisibility(),
+                request.getPetId());
         return ResponseEntity.ok(postMapper.toResponse(post));
     }
 
@@ -130,7 +139,13 @@ public class PostController {
             @PathVariable Long postId,
             @Valid @RequestBody UpdatePostRequest request) {
         Long actorId = currentUserId();
-        var post = updatePostUseCase.execute(actorId, postId, request.getContent(), request.getMediaUrl(), request.getVisibility());
+        var post = updatePostUseCase.execute(
+                actorId,
+                postId,
+                request.getContent(),
+                request.getMediaUrl(),
+                request.getVisibility(),
+                request.getPetId());
         return ResponseEntity.ok(postMapper.toResponse(post));
     }
 
@@ -164,6 +179,17 @@ public class PostController {
         Long actorId = currentUserId();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         Page<PostResponse> response = listFeedPostsUseCase.execute(actorId, pageable).map(postMapper::toResponse);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/pet/{petId}")
+    public ResponseEntity<Page<PostResponse>> listPetPosts(
+            @PathVariable Long petId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Long actorId = currentUserId();
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        Page<PostResponse> response = listPetPostsUseCase.execute(actorId, petId, pageable).map(postMapper::toResponse);
         return ResponseEntity.ok(response);
     }
 

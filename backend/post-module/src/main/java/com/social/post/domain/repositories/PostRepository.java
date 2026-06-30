@@ -15,4 +15,6 @@ public interface PostRepository {
     Page<Post> findByAuthorId(Long authorId, Pageable pageable);
 
     Page<Post> findFeed(Long actorId, Pageable pageable);
+
+    Page<Post> findByPetId(Long petId, Pageable pageable);
 }

@@ -24,11 +24,24 @@ import com.social.pet.application.usecases.ListMyUpcomingRemindersUseCase;
 import com.social.pet.application.usecases.ListPetBreedsUseCase;
 import com.social.pet.application.usecases.ListUserPetsUseCase;
 import com.social.pet.application.usecases.UpdatePetUseCase;
+import com.social.pet.domain.entities.AppetiteLevel;
+import com.social.pet.domain.entities.PetActivityEntry;
+import com.social.pet.domain.entities.PetAppetiteEntry;
 import com.social.pet.domain.entities.PetSpecies;
+import com.social.pet.domain.entities.PetWeightEntry;
+import com.social.pet.domain.repositories.PetActivityEntryRepository;
+import com.social.pet.domain.repositories.PetAppetiteEntryRepository;
+import com.social.pet.domain.repositories.PetWeightEntryRepository;
+import com.social.pet.presentation.dto.CreatePetActivityEntryRequest;
+import com.social.pet.presentation.dto.CreatePetAppetiteEntryRequest;
 import com.social.pet.presentation.dto.CreatePetRequest;
+import com.social.pet.presentation.dto.CreatePetWeightEntryRequest;
+import com.social.pet.presentation.dto.PetActivityEntryResponse;
+import com.social.pet.presentation.dto.PetAppetiteEntryResponse;
 import com.social.pet.presentation.dto.PetBreedResponse;
 import com.social.pet.presentation.dto.PetHealthReminderResponse;
 import com.social.pet.presentation.dto.PetResponse;
+import com.social.pet.presentation.dto.PetWeightEntryResponse;
 import com.social.pet.presentation.dto.UpdatePetRequest;
 import com.social.pet.presentation.mapper.PetHealthMapper;
 import com.social.pet.presentation.mapper.PetMapper;
@@ -49,6 +62,9 @@ public class PetController {
     private final ListDuePetRemindersUseCase listDuePetRemindersUseCase;
     private final PetMapper petMapper;
     private final PetHealthMapper petHealthMapper;
+    private final PetWeightEntryRepository petWeightEntryRepository;
+    private final PetAppetiteEntryRepository petAppetiteEntryRepository;
+    private final PetActivityEntryRepository petActivityEntryRepository;
 
     public PetController(
             CreatePetUseCase createPetUseCase,
@@ -61,7 +77,10 @@ public class PetController {
             ListMyUpcomingRemindersUseCase listMyUpcomingRemindersUseCase,
             ListDuePetRemindersUseCase listDuePetRemindersUseCase,
             PetMapper petMapper,
-            PetHealthMapper petHealthMapper) {
+            PetHealthMapper petHealthMapper,
+            PetWeightEntryRepository petWeightEntryRepository,
+            PetAppetiteEntryRepository petAppetiteEntryRepository,
+            PetActivityEntryRepository petActivityEntryRepository) {
         this.createPetUseCase = createPetUseCase;
         this.updatePetUseCase = updatePetUseCase;
         this.deletePetUseCase = deletePetUseCase;
@@ -73,6 +92,9 @@ public class PetController {
         this.listDuePetRemindersUseCase = listDuePetRemindersUseCase;
         this.petMapper = petMapper;
         this.petHealthMapper = petHealthMapper;
+        this.petWeightEntryRepository = petWeightEntryRepository;
+        this.petAppetiteEntryRepository = petAppetiteEntryRepository;
+        this.petActivityEntryRepository = petActivityEntryRepository;
     }
 
     @PostMapping
@@ -163,6 +185,70 @@ public class PetController {
     public ResponseEntity<Void> delete(@PathVariable Long petId) {
         deletePetUseCase.execute(currentUserId(), petId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{petId:\\d+}/health/weight")
+    public ResponseEntity<List<PetWeightEntryResponse>> listWeightEntries(@PathVariable Long petId) {
+        List<PetWeightEntryResponse> entries = petWeightEntryRepository
+                .findByPetIdOrderByRecordedAtDesc(petId)
+                .stream()
+                .map(petHealthMapper::toWeightEntryResponse)
+                .toList();
+        return ResponseEntity.ok(entries);
+    }
+
+    @PostMapping("/{petId:\\d+}/health/weight")
+    public ResponseEntity<PetWeightEntryResponse> createWeightEntry(
+            @PathVariable Long petId,
+            @RequestBody CreatePetWeightEntryRequest request) {
+        PetWeightEntry entry = PetWeightEntry.create(petId, request.getWeightKg(), request.getNote());
+        PetWeightEntry saved = petWeightEntryRepository.save(entry);
+        return ResponseEntity.ok(petHealthMapper.toWeightEntryResponse(saved));
+    }
+
+    @GetMapping("/{petId:\\d+}/health/appetite")
+    public ResponseEntity<List<PetAppetiteEntryResponse>> listAppetiteEntries(@PathVariable Long petId) {
+        List<PetAppetiteEntryResponse> entries = petAppetiteEntryRepository
+                .findByPetIdOrderByRecordedAtDesc(petId)
+                .stream()
+                .map(petHealthMapper::toAppetiteEntryResponse)
+                .toList();
+        return ResponseEntity.ok(entries);
+    }
+
+    @PostMapping("/{petId:\\d+}/health/appetite")
+    public ResponseEntity<PetAppetiteEntryResponse> createAppetiteEntry(
+            @PathVariable Long petId,
+            @RequestBody CreatePetAppetiteEntryRequest request) {
+        AppetiteLevel level = request.getLevel() != null
+                ? AppetiteLevel.valueOf(request.getLevel().toUpperCase())
+                : AppetiteLevel.NORMAL;
+        PetAppetiteEntry entry = PetAppetiteEntry.create(petId, level, request.getNote());
+        PetAppetiteEntry saved = petAppetiteEntryRepository.save(entry);
+        return ResponseEntity.ok(petHealthMapper.toAppetiteEntryResponse(saved));
+    }
+
+    @GetMapping("/{petId:\\d+}/health/activity")
+    public ResponseEntity<List<PetActivityEntryResponse>> listActivityEntries(@PathVariable Long petId) {
+        List<PetActivityEntryResponse> entries = petActivityEntryRepository
+                .findByPetIdOrderByRecordedAtDesc(petId)
+                .stream()
+                .map(petHealthMapper::toActivityEntryResponse)
+                .toList();
+        return ResponseEntity.ok(entries);
+    }
+
+    @PostMapping("/{petId:\\d+}/health/activity")
+    public ResponseEntity<PetActivityEntryResponse> createActivityEntry(
+            @PathVariable Long petId,
+            @RequestBody CreatePetActivityEntryRequest request) {
+        PetActivityEntry entry = PetActivityEntry.create(
+                petId,
+                request.getMinutes(),
+                request.getActivityType(),
+                request.getNote());
+        PetActivityEntry saved = petActivityEntryRepository.save(entry);
+        return ResponseEntity.ok(petHealthMapper.toActivityEntryResponse(saved));
     }
 
     private Long currentUserId() {

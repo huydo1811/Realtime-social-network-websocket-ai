@@ -2,11 +2,17 @@ package com.social.pet.presentation.mapper;
 
 import org.springframework.stereotype.Component;
 
+import com.social.pet.domain.entities.PetActivityEntry;
+import com.social.pet.domain.entities.PetAppetiteEntry;
 import com.social.pet.domain.entities.PetHealthRecord;
 import com.social.pet.domain.entities.PetHealthReminder;
+import com.social.pet.domain.entities.PetWeightEntry;
 import com.social.pet.domain.repositories.PetRepository;
+import com.social.pet.presentation.dto.PetActivityEntryResponse;
+import com.social.pet.presentation.dto.PetAppetiteEntryResponse;
 import com.social.pet.presentation.dto.PetHealthRecordResponse;
 import com.social.pet.presentation.dto.PetHealthReminderResponse;
+import com.social.pet.presentation.dto.PetWeightEntryResponse;
 
 @Component
 public class PetHealthMapper {
@@ -46,6 +52,43 @@ public class PetHealthMapper {
         response.setCreatedByUserId(reminder.getCreatedByUserId());
         response.setCreatedAt(reminder.getCreatedAt());
         response.setUpdatedAt(reminder.getUpdatedAt());
+        return response;
+    }
+
+    public PetWeightEntryResponse toWeightEntryResponse(PetWeightEntry entry) {
+        PetWeightEntryResponse response = new PetWeightEntryResponse();
+        response.setId(entry.getId());
+        response.setPetId(entry.getPetId());
+        response.setWeightKg(entry.getWeightKg().doubleValue());
+        response.setRecordedAt(entry.getRecordedAt());
+        response.setNote(entry.getNote());
+        response.setCreatedAt(entry.getCreatedAt());
+        response.setUpdatedAt(entry.getUpdatedAt());
+        return response;
+    }
+
+    public PetAppetiteEntryResponse toAppetiteEntryResponse(PetAppetiteEntry entry) {
+        PetAppetiteEntryResponse response = new PetAppetiteEntryResponse();
+        response.setId(entry.getId());
+        response.setPetId(entry.getPetId());
+        response.setLevel(entry.getLevel().name());
+        response.setRecordedAt(entry.getRecordedAt());
+        response.setNote(entry.getNote());
+        response.setCreatedAt(entry.getCreatedAt());
+        response.setUpdatedAt(entry.getUpdatedAt());
+        return response;
+    }
+
+    public PetActivityEntryResponse toActivityEntryResponse(PetActivityEntry entry) {
+        PetActivityEntryResponse response = new PetActivityEntryResponse();
+        response.setId(entry.getId());
+        response.setPetId(entry.getPetId());
+        response.setMinutes(entry.getMinutes());
+        response.setActivityType(entry.getActivityType());
+        response.setRecordedAt(entry.getRecordedAt());
+        response.setNote(entry.getNote());
+        response.setCreatedAt(entry.getCreatedAt());
+        response.setUpdatedAt(entry.getUpdatedAt());
         return response;
     }
 }

@@ -6,7 +6,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import UserLayout from "@/components/layout/UserLayout";
+import PetAssistantSection from "@/components/pets/PetAssistantSection";
+import PetDiagnosisSection from "@/components/pets/PetDiagnosisSection";
 import PetHealthSection from "@/components/pets/PetHealthSection";
+import PetWalkSection from "@/components/pets/PetWalkSection";
 import PostCard from "@/components/user/profile/PostCard";
 import type { FeedPost } from "@/components/user/profile/types";
 import { petApi } from "@/lib/api/petApi";
@@ -16,7 +19,7 @@ import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import type { PostDto } from "@/types/post";
 import type { PetDto } from "@/types/pet";
 
-type Tab = "posts" | "health";
+type Tab = "posts" | "health" | "walk" | "assistant" | "diagnosis";
 
 function toRelativeDate(input: string): string {
   const dt = new Date(input);
@@ -106,7 +109,7 @@ export default function PetDetailPage() {
 
   return (
     <UserLayout>
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6">
         <Link href="/pets" className="mb-4 inline-block text-sm font-medium text-rose-600 hover:underline">
           ← Quay lại danh sách
         </Link>
@@ -172,6 +175,39 @@ export default function PetDetailPage() {
               >
                 Sức khỏe
               </button>
+              <button
+                type="button"
+                onClick={() => setTab("walk")}
+                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
+                  tab === "walk"
+                    ? "border-b-2 border-rose-500 text-rose-600"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Đi dạo
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("assistant")}
+                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
+                  tab === "assistant"
+                    ? "border-b-2 border-rose-500 text-rose-600"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Trợ lý & thú y
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("diagnosis")}
+                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
+                  tab === "diagnosis"
+                    ? "border-b-2 border-rose-500 text-rose-600"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                AI chẩn đoán
+              </button>
             </div>
 
             {tab === "posts" ? (
@@ -192,8 +228,14 @@ export default function PetDetailPage() {
                   ))}
                 </div>
               )
-            ) : (
+            ) : tab === "health" ? (
               <PetHealthSection petId={petId} isOwner={isOwner} />
+            ) : tab === "walk" ? (
+              <PetWalkSection petId={petId} isOwner={isOwner} />
+            ) : tab === "assistant" ? (
+              <PetAssistantSection petId={petId} petName={pet?.name ?? "Thú cưng"} species={pet?.species ?? "OTHER"} isOwner={isOwner} />
+            ) : (
+              <PetDiagnosisSection petId={petId} isOwner={isOwner} />
             )}
           </>
         ) : null}

@@ -17,7 +17,8 @@ import com.social.pet.domain.exceptions.PetDomainException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-@ControllerAdvice(basePackageClasses = {PetController.class, PetHealthController.class})
+@ControllerAdvice(basePackageClasses = { PetController.class, PetHealthController.class, PetWalkController.class,
+        PetDiagnosisController.class })
 public class PetExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest req) {
@@ -28,14 +29,15 @@ public class PetExceptionHandler {
                 messages.isEmpty() ? "Dữ liệu không hợp lệ" : messages.get(0), req.getRequestURI());
     }
 
-    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class, PetDomainException.class})
+    @ExceptionHandler({ IllegalArgumentException.class, IllegalStateException.class, PetDomainException.class })
     public ResponseEntity<?> handleBadRequest(RuntimeException ex, HttpServletRequest req) {
         return response(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage(), req.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleOther(Exception ex, HttpServletRequest req) {
-        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Đã xảy ra lỗi hệ thống", req.getRequestURI());
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Đã xảy ra lỗi hệ thống",
+                req.getRequestURI());
     }
 
     private ResponseEntity<?> response(HttpStatus status, String error, String message, String path) {

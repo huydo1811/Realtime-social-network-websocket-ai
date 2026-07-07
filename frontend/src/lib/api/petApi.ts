@@ -11,7 +11,19 @@ import type {
   CreatePetHealthReminderPayload,
   PetHealthRecordDto,
   PetHealthReminderDto,
+  WeightEntry,
+  AppetiteEntry,
+  ActivityEntry,
 } from "@/types/petHealth";
+import type {
+  CreatePetWalkMeetupPayload,
+  CreatePetWalkSessionPayload,
+  FinishPetWalkSessionPayload,
+  PetWalkMeetupRequestDto,
+  PetWalkSessionDto,
+} from "@/types/petWalk";
+import type { PetDiagnosisDto, SubmitPetSymptomsPayload } from "@/types/petDiagnosis";
+import type { VetClinicDto } from "@/types/petVet";
 
 type BackendError = {
   message?: string;
@@ -21,8 +33,8 @@ type BackendError = {
 async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
     const data = (await res.json()) as BackendError;
-    if (data.message?.trim()) return new Error(data.message.trim());
-    if (data.error?.trim()) return new Error(data.error.trim());
+    if (typeof data.message === "string" && data.message.trim()) return new Error(data.message.trim());
+    if (typeof data.error === "string" && data.error.trim()) return new Error(data.error.trim());
   } catch {
     // ignore
   }
@@ -153,5 +165,168 @@ export const petApi = {
     const res = await apiAuthFetch(`${API_URL}/pets/me/reminders/due`);
     if (!res.ok) throw await parseError(res, "Không thể tải nhắc nhở đến hạn");
     return (await res.json()) as PetHealthReminderDto[];
+  },
+
+  async listWalks(petId: number): Promise<PetWalkSessionDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/walks`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lịch đi dạo");
+    return (await res.json()) as PetWalkSessionDto[];
+  },
+
+  async createWalk(
+    petId: number,
+    payload: CreatePetWalkSessionPayload
+  ): Promise<PetWalkSessionDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/walks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể tạo phiên đi dạo");
+    return (await res.json()) as PetWalkSessionDto;
+  },
+
+  async finishWalk(
+    petId: number,
+    walkId: number,
+    payload: FinishPetWalkSessionPayload
+  ): Promise<PetWalkSessionDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/walks/${walkId}/finish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể kết thúc phiên đi dạo");
+    return (await res.json()) as PetWalkSessionDto;
+  },
+
+  async listNearbyWalks(latitude: number, longitude: number, radiusKm = 5): Promise<PetWalkSessionDto[]> {
+    const query = new URLSearchParams({
+      latitude: String(latitude),
+      longitude: String(longitude),
+      radiusKm: String(radiusKm),
+    });
+    const res = await apiAuthFetch(`${API_URL}/pets/walks/nearby?${query.toString()}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải bản đồ đi dạo");
+    return (await res.json()) as PetWalkSessionDto[];
+  },
+
+  async listWalkMeetups(petId: number): Promise<PetWalkMeetupRequestDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/walk-meetups`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lời mời gặp gỡ");
+    return (await res.json()) as PetWalkMeetupRequestDto[];
+  },
+
+  async createWalkMeetup(
+    walkId: number,
+    payload: CreatePetWalkMeetupPayload
+  ): Promise<PetWalkMeetupRequestDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/walks/${walkId}/meetups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể gửi lời mời gặp gỡ");
+    return (await res.json()) as PetWalkMeetupRequestDto;
+  },
+
+  async acceptWalkMeetup(meetupId: number): Promise<PetWalkMeetupRequestDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/walk-meetups/${meetupId}/accept`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể chấp nhận lời mời");
+    return (await res.json()) as PetWalkMeetupRequestDto;
+  },
+
+  async declineWalkMeetup(meetupId: number): Promise<PetWalkMeetupRequestDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/walk-meetups/${meetupId}/decline`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể từ chối lời mời");
+    return (await res.json()) as PetWalkMeetupRequestDto;
+  },
+
+  async listDiagnoses(petId: number): Promise<PetDiagnosisDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/diagnosis`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lịch sử chẩn đoán");
+    return (await res.json()) as PetDiagnosisDto[];
+  },
+
+  async submitSymptoms(
+    petId: number,
+    payload: SubmitPetSymptomsPayload
+  ): Promise<PetDiagnosisDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/diagnosis/symptoms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể phân tích triệu chứng");
+    return (await res.json()) as PetDiagnosisDto;
+  },
+
+  async getDiagnosis(petId: number, diagnosisId: number): Promise<PetDiagnosisDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/diagnosis/${diagnosisId}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải chẩn đoán");
+    return (await res.json()) as PetDiagnosisDto;
+  },
+
+  async findNearbyVets(latitude: number, longitude: number, radiusKm = 6): Promise<VetClinicDto[]> {
+    const query = new URLSearchParams({
+      latitude: String(latitude),
+      longitude: String(longitude),
+      radiusKm: String(radiusKm),
+    });
+    const res = await apiAuthFetch(`${API_URL}/pets/vets/nearby?${query.toString()}`);
+    if (!res.ok) throw await parseError(res, "Không thể tìm thú y gần đây");
+    return (await res.json()) as VetClinicDto[];
+  },
+
+  async listWeightEntries(petId: number): Promise<WeightEntry[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health/weight`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lịch sử cân nặng");
+    return (await res.json()) as WeightEntry[];
+  },
+
+  async createWeightEntry(petId: number, weightKg: number, note?: string): Promise<WeightEntry> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health/weight`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weightKg, note }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể ghi nhận cân nặng");
+    return (await res.json()) as WeightEntry;
+  },
+
+  async listAppetiteEntries(petId: number): Promise<AppetiteEntry[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health/appetite`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lịch sử thèm ăn");
+    return (await res.json()) as AppetiteEntry[];
+  },
+
+  async createAppetiteEntry(petId: number, level: AppetiteEntry["level"], note?: string): Promise<AppetiteEntry> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health/appetite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level, note }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể ghi nhận thèm ăn");
+    return (await res.json()) as AppetiteEntry;
+  },
+
+  async listActivityEntries(petId: number): Promise<ActivityEntry[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health/activity`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lịch sử hoạt động");
+    return (await res.json()) as ActivityEntry[];
+  },
+
+  async createActivityEntry(petId: number, minutes: number, activityType: string, note?: string): Promise<ActivityEntry> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/health/activity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ minutes, activityType, note }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể ghi nhận hoạt động");
+    return (await res.json()) as ActivityEntry;
   },
 };

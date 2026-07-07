@@ -62,3 +62,28 @@ export const HEALTH_RECORD_TYPE_LABELS: Record<PetHealthRecordType, string> = {
   MEDICATION: "Thuốc / điều trị",
   OTHER: "Khác",
 };
+
+export type WeightEntry = {
+  id: number;
+  petId: number;
+  weightKg: number;
+  recordedAt: string;
+  note?: string | null;
+};
+
+export type AppetiteEntry = {
+  id: number;
+  petId: number;
+  level: "GOOD" | "NORMAL" | "POOR" | "NONE";
+  note?: string | null;
+  recordedAt: string;
+};
+
+export type ActivityEntry = {
+  id: number;
+  petId: number;
+  minutes: number;
+  activityType: string;
+  note?: string | null;
+  recordedAt: string;
+};

@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import com.social.pet.domain.entities.PetHealthReminder;
@@ -15,43 +17,25 @@ import com.social.pet.domain.repositories.PetHealthReminderRepository;
 public class PetHealthReminderRepositoryImpl implements PetHealthReminderRepository {
     private final JpaPetHealthReminderRepository jpaRepository;
 
-    public PetHealthReminderRepositoryImpl(JpaPetHealthReminderRepository jpaRepository) {
-        this.jpaRepository = jpaRepository;
-    }
+    public PetHealthReminderRepositoryImpl(JpaPetHealthReminderRepository jpaRepository) { this.jpaRepository = jpaRepository; }
 
-    @Override
-    public PetHealthReminder save(PetHealthReminder reminder) {
-        return jpaRepository.save(reminder);
-    }
+    @Override public PetHealthReminder save(PetHealthReminder reminder) { return jpaRepository.save(reminder); }
 
-    @Override
-    public Optional<PetHealthReminder> findById(Long id) {
-        return jpaRepository.findById(Objects.requireNonNull(id));
-    }
+    @Override public Optional<PetHealthReminder> findById(Long id) { return jpaRepository.findById(Objects.requireNonNull(id)); }
 
-    @Override
-    public void delete(PetHealthReminder reminder) {
-        jpaRepository.delete(reminder);
-    }
+    @Override public void delete(PetHealthReminder reminder) { jpaRepository.delete(reminder); }
 
-    @Override
-    public List<PetHealthReminder> findByPetIdAndStatusOrderByDueDateAsc(Long petId, PetReminderStatus status) {
-        return jpaRepository.findByPetIdAndStatusOrderByDueDateAsc(petId, status);
-    }
+    @Override public List<PetHealthReminder> findByPetIdAndStatusOrderByDueDateAsc(Long petId, PetReminderStatus status) { return jpaRepository.findByPetIdAndStatusOrderByDueDateAsc(petId, status); }
 
-    @Override
-    public List<PetHealthReminder> findUpcomingByOwnerUserId(
-            Long ownerUserId,
-            LocalDate fromDate,
-            PetReminderStatus status) {
-        return jpaRepository.findUpcomingByOwnerUserId(ownerUserId, fromDate, status);
-    }
+    @Override public List<PetHealthReminder> findUpcomingByOwnerUserId(Long ownerUserId, LocalDate fromDate, PetReminderStatus status) { return jpaRepository.findUpcomingByOwnerUserId(ownerUserId, fromDate, status); }
 
-    @Override
-    public List<PetHealthReminder> findDueByOwnerUserId(
-            Long ownerUserId,
-            LocalDate today,
-            PetReminderStatus status) {
-        return jpaRepository.findDueByOwnerUserId(ownerUserId, today, status);
-    }
+    @Override public List<PetHealthReminder> findDueByOwnerUserId(Long ownerUserId, LocalDate today, PetReminderStatus status) { return jpaRepository.findDueByOwnerUserId(ownerUserId, today, status); }
+
+    @Override public Page<PetHealthReminder> findAll(Pageable pageable) { return jpaRepository.findAllByOrderByDueDateDesc(Objects.requireNonNull(pageable)); }
+
+    @Override public Page<PetHealthReminder> findByOwnerUserId(Long ownerUserId, Pageable pageable) { return jpaRepository.findByOwnerUserId(Objects.requireNonNull(ownerUserId), Objects.requireNonNull(pageable)); }
+
+    @Override public long countByStatus(PetReminderStatus status) { return jpaRepository.countByStatus(status); }
+
+    @Override public long countOverdue(LocalDate today, PetReminderStatus status) { return jpaRepository.countOverdue(today, status); }
 }

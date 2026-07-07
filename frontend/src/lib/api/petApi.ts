@@ -329,4 +329,198 @@ export const petApi = {
     if (!res.ok) throw await parseError(res, "Không thể ghi nhận hoạt động");
     return (await res.json()) as ActivityEntry;
   },
+
+  // ── Admin endpoints ──────────────────────────────────────────────────────────
+
+  async adminGetStats(): Promise<{
+    totalPets: number;
+    totalActivePets: number;
+    totalWalkSessions: number;
+    totalDiagnoses: number;
+    pendingReminders: number;
+    overdueReminders: number;
+    generatedAt: string;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/stats`);
+    if (!res.ok) throw await parseError(res, "Không thể tải thống kê");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminGetStats>>;
+  },
+
+  async adminGetUserPets(userId: number): Promise<{
+    userId: number;
+    fullName: string;
+    username: string;
+    avatarUrl: string | null;
+    totalPets: number;
+    activePets: number;
+    pendingReminders: number;
+    pets: PetDto[];
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/users/${userId}/pets`);
+    if (!res.ok) throw await parseError(res, "Không thể tải thú cưng của người dùng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminGetUserPets>>;
+  },
+
+  async adminGetPetDetail(petId: number): Promise<{
+    pet: PetDto;
+    healthRecords: PetHealthRecordDto[];
+    reminders: PetHealthReminderDto[];
+    recentDiagnoses: PetDiagnosisDto[];
+    recentWalks: PetWalkSessionDto[];
+    fetchedAt: string;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/pets/${petId}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải chi tiết thú cưng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminGetPetDetail>>;
+  },
+
+  async adminSearchPets(q: string, page = 0, size = 20): Promise<{
+    items: PetDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`);
+    if (!res.ok) throw await parseError(res, "Không thể tìm thú cưng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminSearchPets>>;
+  },
+
+  async adminListPets(page = 0, size = 20): Promise<{
+    items: PetDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/search?page=${page}&size=${size}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách thú cưng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListPets>>;
+  },
+
+  async adminListDiagnoses(page = 0, size = 20): Promise<{
+    items: PetDiagnosisDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/diagnoses?page=${page}&size=${size}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách chẩn đoán");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListDiagnoses>>;
+  },
+
+  async adminListWalks(page = 0, size = 20): Promise<{
+    items: PetWalkSessionDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/walks?page=${page}&size=${size}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách đi dạo");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListWalks>>;
+  },
+
+  async adminListReminders(page = 0, size = 20): Promise<{
+    items: PetHealthReminderDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(`${API_URL}/pets/admin/reminders?page=${page}&size=${size}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách nhắc nhở");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListReminders>>;
+  },
+
+  async adminListPetsByOwner(
+    userId: number,
+    page = 0,
+    size = 20
+  ): Promise<{
+    items: PetDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(
+      `${API_URL}/pets/admin/users/${userId}/pets-page?page=${page}&size=${size}`
+    );
+    if (!res.ok) throw await parseError(res, "Không thể tải thú cưng của người dùng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListPetsByOwner>>;
+  },
+
+  async adminListDiagnosesByOwner(
+    userId: number,
+    page = 0,
+    size = 20
+  ): Promise<{
+    items: PetDiagnosisDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(
+      `${API_URL}/pets/admin/users/${userId}/diagnoses?page=${page}&size=${size}`
+    );
+    if (!res.ok) throw await parseError(res, "Không thể tải chẩn đoán của người dùng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListDiagnosesByOwner>>;
+  },
+
+  async adminListWalksByOwner(
+    userId: number,
+    page = 0,
+    size = 20
+  ): Promise<{
+    items: PetWalkSessionDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(
+      `${API_URL}/pets/admin/users/${userId}/walks?page=${page}&size=${size}`
+    );
+    if (!res.ok) throw await parseError(res, "Không thể tải lịch đi dạo của người dùng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListWalksByOwner>>;
+  },
+
+  async adminListRemindersByOwner(
+    userId: number,
+    page = 0,
+    size = 20
+  ): Promise<{
+    items: PetHealthReminderDto[];
+    page: number;
+    size: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  }> {
+    const res = await apiAuthFetch(
+      `${API_URL}/pets/admin/users/${userId}/reminders?page=${page}&size=${size}`
+    );
+    if (!res.ok) throw await parseError(res, "Không thể tải nhắc nhở của người dùng");
+    return (await res.json()) as Awaited<ReturnType<typeof petApi.adminListRemindersByOwner>>;
+  },
 };

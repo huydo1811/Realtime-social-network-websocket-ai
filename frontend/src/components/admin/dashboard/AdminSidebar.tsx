@@ -90,6 +90,14 @@ export default function AdminSidebar() {
         >
           Báo cáo nội dung
         </Link>
+        <Link
+          href="/admin/pet"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/pet") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Thú cưng
+        </Link>
         <button className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-100 font-medium">Moderation (sắp có)</button>
       </nav>
 

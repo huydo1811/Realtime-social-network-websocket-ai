@@ -5,14 +5,22 @@ import org.springframework.stereotype.Component;
 import com.social.pet.domain.entities.PetDiagnosis;
 import com.social.pet.domain.entities.PetSymptomReport;
 import com.social.pet.domain.repositories.PetRepository;
+import com.social.pet.domain.repositories.PetSymptomReportRepository;
 import com.social.pet.presentation.dto.PetDiagnosisResponse;
 
 @Component
 public class PetDiagnosisMapper {
     private final PetRepository petRepository;
+    private final PetSymptomReportRepository symptomReportRepository;
 
-    public PetDiagnosisMapper(PetRepository petRepository) {
+    public PetDiagnosisMapper(PetRepository petRepository, PetSymptomReportRepository symptomReportRepository) {
         this.petRepository = petRepository;
+        this.symptomReportRepository = symptomReportRepository;
+    }
+
+    public PetDiagnosisResponse toResponse(PetDiagnosis diagnosis) {
+        PetSymptomReport report = symptomReportRepository.findById(diagnosis.getReportId()).orElse(null);
+        return toResponse(diagnosis, report);
     }
 
     public PetDiagnosisResponse toResponse(PetDiagnosis diagnosis, PetSymptomReport report) {

@@ -3,6 +3,9 @@ package com.social.post.application.usecases;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.social.moderation.domain.entities.ModerationAudit.TargetType;
+import com.social.post.application.services.PostModerationService;
+import com.social.post.application.services.PostModerationService.Outcome;
 import com.social.post.domain.entities.Post;
 import com.social.post.domain.entities.PostComment;
 import com.social.post.domain.entities.PostStatus;
@@ -16,14 +19,17 @@ public class CreatePostCommentUseCase {
     private final PostRepository postRepository;
     private final PostCommentRepository postCommentRepository;
     private final UserRepository userRepository;
+    private final PostModerationService moderationService;
 
     public CreatePostCommentUseCase(
             PostRepository postRepository,
             PostCommentRepository postCommentRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            PostModerationService moderationService) {
         this.postRepository = postRepository;
         this.postCommentRepository = postCommentRepository;
         this.userRepository = userRepository;
+        this.moderationService = moderationService;
     }
 
     @Transactional
@@ -34,6 +40,24 @@ public class CreatePostCommentUseCase {
             throw new PostDomainException("Bài viết đã bị xóa");
         }
         PostComment comment = PostComment.create(postId, actorId, content);
-        return postCommentRepository.save(comment);
+
+        Outcome outcome = moderationService.enforce(content);
+        if (outcome.softHide()) {
+            comment.hideByAdmin();
+        }
+
+        PostComment saved = postCommentRepository.save(comment);
+        try {
+            moderationService.audit(
+                    TargetType.COMMENT,
+                    saved.getId(),
+                    actorId,
+                    content,
+                    outcome
+            );
+        } catch (Exception ignored) {
+            // audit failure must not break the user's comment
+        }
+        return saved;
     }
 }

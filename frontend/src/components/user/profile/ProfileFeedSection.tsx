@@ -41,6 +41,7 @@ type CommentItem = {
   authorAvatar?: string;
   text: string;
   createdAt: string;
+  createdAtTs?: number;
   parentCommentId?: string;
   likeCount: number;
   likedByMe: boolean;
@@ -57,6 +58,7 @@ function toRelativeDate(input: string): string {
 }
 
 function mapComment(item: PostCommentDto): CommentItem {
+  const createdAtTs = item.createdAt ? Date.parse(item.createdAt) : Number.NaN;
   return {
     id: String(item.id),
     authorId: item.userId,
@@ -64,6 +66,7 @@ function mapComment(item: PostCommentDto): CommentItem {
     authorAvatar: item.authorAvatarUrl ?? undefined,
     text: item.content,
     createdAt: toRelativeDate(item.createdAt),
+    createdAtTs: Number.isNaN(createdAtTs) ? undefined : createdAtTs,
     parentCommentId: item.parentCommentId != null ? String(item.parentCommentId) : undefined,
     likeCount: item.likeCount ?? 0,
     likedByMe: Boolean(item.likedByMe),
@@ -453,7 +456,7 @@ export default function ProfileFeedSection({
         )
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể bình luận");
+      throw new Error(e instanceof Error ? e.message : "Không thể bình luận");
     }
   }
 
@@ -532,7 +535,7 @@ export default function ProfileFeedSection({
         prev.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p))
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể trả lời bình luận");
+      throw new Error(e instanceof Error ? e.message : "Không thể trả lời bình luận");
     }
   }
 
@@ -841,13 +844,11 @@ export default function ProfileFeedSection({
         onReportComment={(id, commentId) => openCommentReportModal(id, commentId)}
         onClose={() => setActivePostId(null)}
         onToggleLike={(id) => void toggleLike(id)}
-        onAddComment={(id, text) => void addComment(id, text)}
+        onAddComment={(id, text) => addComment(id, text)}
         onToggleCommentLike={(postId, commentId) =>
           void toggleCommentLike(postId, commentId)
         }
-        onAddReply={(postId, parentCommentId, text) =>
-          void addReply(postId, parentCommentId, text)
-        }
+        onAddReply={(postId, parentCommentId, text) => addReply(postId, parentCommentId, text)}
       />
 
       <SharePostModal

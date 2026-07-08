@@ -3,7 +3,7 @@
 import { useState } from "react";
 import FriendActionButton from "@/components/friendship/FriendActionButton";
 import { OpenDmBubbleButton } from "@/components/chat/FloatingDmProvider";
-import ProfileFeedSection from "./ProfileFeedSection";
+import ProfileTabs from "./ProfileTabs";
 import ProfileHero from "./ProfileHero";
 import type { FeedPost, ProfileInfo } from "./types";
 
@@ -61,13 +61,13 @@ export default function OtherProfileInfoCard({ profile }: Props) {
           </p>
         </aside>
 
-        <ProfileFeedSection
+        <ProfileTabs
+          profile={profile}
           avatarUrl={avatarUrl}
-          initialPosts={[]}
+          posts={posts}
           onPostsChanged={setPosts}
-          readonly
-          source="user"
-          userId={profile.id}
+          feedSource="user"
+          isOwnProfile={false}
         />
       </div>
     </div>

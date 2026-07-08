@@ -130,6 +130,23 @@ public class Post {
         }
     }
 
+    /**
+     * Mark the post as awaiting moderation review (AI soft-hide).
+     * Only meaningful when the post has not been deleted.
+     */
+    public void markPendingModeration() {
+        if (this.status != PostStatus.DELETED) {
+            this.status = PostStatus.PENDING;
+        }
+    }
+
+    /**
+     * Convenience accessor used by application layer — does not mutate state.
+     */
+    public PostStatus currentStatus() {
+        return this.status;
+    }
+
     public boolean isVisibleToOwner(Long actorId) {
         return authorId.equals(actorId);
     }

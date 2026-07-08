@@ -18,14 +18,16 @@ import {
   incomingRequestToNotification,
 } from "@/lib/notifications/friendshipToNotification";
 import { dueRemindersToNotifications } from "@/lib/notifications/petReminderToNotification";
+import { petWalkEventToNotification } from "@/lib/notifications/petWalkToNotification";
 import {
   loadNotifications,
   mergeNotifications,
   saveNotifications,
 } from "@/lib/notifications/notificationStore";
-import { initChatSocket, subscribeFriendshipUser } from "@/lib/socket/chatSocket";
+import { initChatSocket, subscribeFriendshipUser, subscribePetWalkUser } from "@/lib/socket/chatSocket";
 import { peerUserId } from "@/lib/friendship/peerUserId";
 import type { FriendshipRealtimeEvent } from "@/types/friendship";
+import type { PetWalkRealtimeEvent } from "@/types/petWalkRealtime";
 import type { AppNotification } from "@/types/notification";
 import { markFriendIncomingSeen } from "@/lib/nav/friendBadgeSeen";
 
@@ -45,34 +47,20 @@ type NotificationsContextValue = {
   updateNotification: (id: string, patch: Partial<AppNotification>) => void;
   refreshFromServer: () => Promise<void>;
   ingestFriendshipEvent: (ev: FriendshipRealtimeEvent) => void;
+  ingestPetWalkEvent: (ev: PetWalkRealtimeEvent) => void;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const [myId, setMyId] = useState<number | null>(null);
-  const [items, setItems] = useState<AppNotification[]>([]);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
+  const [myId] = useState<number | null>(() => {
     const t = getAuthTokens()?.accessToken;
-    const id = t ? getUserIdFromAccessToken(t) : null;
-    setMyId(id);
-    if (id != null) {
-      setItems(loadNotifications(id));
-    }
-    setHydrated(true);
-  }, []);
-
-  const persist = useCallback(
-    (next: AppNotification[]) => {
-      if (myId == null) return;
-      saveNotifications(myId, next);
-      setItems(next);
-    },
-    [myId]
+    return t ? getUserIdFromAccessToken(t) : null;
+  });
+  const [items, setItems] = useState<AppNotification[]>(() =>
+    myId == null ? [] : loadNotifications(myId)
   );
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const refreshFromServer = useCallback(async () => {
     if (myId == null) return;
@@ -130,12 +118,34 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     [myId]
   );
 
+  const ingestPetWalkEvent = useCallback(
+    (ev: PetWalkRealtimeEvent) => {
+      if (myId == null) return;
+      const n = petWalkEventToNotification(ev, myId);
+      if (!n) return;
+      setItems((prev) => {
+        const merged = mergeNotifications(prev, [n]);
+        saveNotifications(myId, merged);
+        return merged;
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("notification-ingested", { detail: n }));
+      }
+    },
+    [myId]
+  );
+
   useEffect(() => {
-    if (!hydrated || myId == null) return;
-    void refreshFromServer();
+    if (myId == null) return;
+    const immediate = window.setTimeout(() => {
+      void refreshFromServer();
+    }, 0);
     const interval = window.setInterval(() => void refreshFromServer(), 30 * 60 * 1000);
-    return () => window.clearInterval(interval);
-  }, [hydrated, myId, refreshFromServer]);
+    return () => {
+      window.clearTimeout(immediate);
+      window.clearInterval(interval);
+    };
+  }, [myId, refreshFromServer]);
 
   useEffect(() => {
     if (myId == null) return;
@@ -151,12 +161,19 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (myId == null) return;
     initChatSocket();
-    const unsub = subscribeFriendshipUser(myId, (ev) => {
+    const unsubFriend = subscribeFriendshipUser(myId, (ev) => {
       ingestFriendshipEvent(ev);
       window.dispatchEvent(new CustomEvent("friendship-changed"));
     });
-    return () => unsub();
-  }, [myId, ingestFriendshipEvent]);
+    const unsubWalk = subscribePetWalkUser(myId, (ev) => {
+      ingestPetWalkEvent(ev);
+      window.dispatchEvent(new CustomEvent("pet-walk-changed", { detail: ev }));
+    });
+    return () => {
+      unsubFriend();
+      unsubWalk();
+    };
+  }, [myId, ingestFriendshipEvent, ingestPetWalkEvent]);
 
   const unreadCount = useMemo(() => items.filter((n) => !n.read).length, [items]);
 
@@ -249,6 +266,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       updateNotification,
       refreshFromServer,
       ingestFriendshipEvent,
+      ingestPetWalkEvent,
     }),
     [
       items,
@@ -264,6 +282,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       updateNotification,
       refreshFromServer,
       ingestFriendshipEvent,
+      ingestPetWalkEvent,
     ]
   );
 

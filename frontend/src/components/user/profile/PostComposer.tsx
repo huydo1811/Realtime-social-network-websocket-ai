@@ -34,6 +34,7 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
     }
   }, []);
   const [posting, setPosting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -53,6 +54,7 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
     const content = text.trim();
     if (!hasMedia && !content) return;
     setPosting(true);
+    setNotice(null);
     try {
       await onSubmit({
         content,
@@ -66,6 +68,10 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
       setPetId("");
       setVisibility("PUBLIC");
       if (mediaInputRef.current) mediaInputRef.current.value = "";
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không thể đăng bài viết. Vui lòng thử lại.";
+      setNotice(message);
     } finally {
       setPosting(false);
     }
@@ -98,6 +104,14 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
 
   return (
     <div className="mb-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+      {notice ? (
+        <div
+          role="alert"
+          className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          {notice}
+        </div>
+      ) : null}
       <div className="flex gap-3">
         <Image
           src={avatarUrl}
@@ -110,7 +124,10 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
           <textarea
             ref={textareaRef}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (notice) setNotice(null);
+            }}
             onKeyDown={onKeyDown}
             placeholder={
               hasMedia

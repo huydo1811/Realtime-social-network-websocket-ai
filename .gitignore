@@ -1,2 +1,8 @@
 .env
 PROJECT_GUIDELINES.md
+/results_train_profanity_phoBERT
+/results_train_profanity_xlm-roberta-base
+/ai-service/artifacts/
+/ai-service/.venv/
+/ai-service/__pycache__/
+/ai-service/**/__pycache__/

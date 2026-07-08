@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FriendListModal from "./FriendListModal";
-import ProfileFeedSection from "./ProfileFeedSection";
+import ProfileTabs from "./ProfileTabs";
 import ProfileHero from "./ProfileHero";
 import EditProfileForm from "./EditProfileForm";
 import SecuritySettings from "./SecuritySettings";
@@ -342,14 +342,15 @@ export default function ProfileInfoCard({ profile }: Props) {
             <p className="mt-2 text-sm text-slate-600">{localProfile.bio || "Chưa có mô tả cá nhân."}</p>
           </aside>
 
-          <ProfileFeedSection
+          <ProfileTabs
+            profile={localProfile}
             avatarUrl={avatarPreview}
-            initialPosts={posts}
+            posts={posts}
             onPostsChanged={setPosts}
-            source="me"
-            userId={localProfile.id}
+            feedSource="me"
+            isOwnProfile
             isAdmin={String(localProfile.role).toUpperCase() === "ADMIN"}
-            refreshKey={feedRefreshKey}
+            feedRefreshKey={feedRefreshKey}
           />
         </div>
       )}

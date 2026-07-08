@@ -190,6 +190,14 @@ export const postApi = {
     return (await res.json()) as PostDto;
   },
 
+  async adminHideComment(commentId: number): Promise<PostCommentDto> {
+    const res = await apiAuthFetch(`${API_URL}/posts/admin/comments/${commentId}/hide`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể ẩn bình luận");
+    return (await res.json()) as PostCommentDto;
+  },
+
   async toggleLike(postId: number): Promise<{ likeCount: number }> {
     const res = await apiAuthFetch(`${API_URL}/posts/${postId}/like`, {
       method: "POST",

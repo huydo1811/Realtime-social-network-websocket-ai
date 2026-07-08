@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.social.post.domain.exceptions.PostDomainException;
+import com.social.post.domain.exceptions.PostModerationRejectedException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -31,6 +32,21 @@ public class PostExceptionHandler {
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class, PostDomainException.class})
     public ResponseEntity<?> handleBadRequest(RuntimeException ex, HttpServletRequest req) {
         return response(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage(), req.getRequestURI());
+    }
+
+    @ExceptionHandler(PostModerationRejectedException.class)
+    public ResponseEntity<?> handleModerationReject(PostModerationRejectedException ex, HttpServletRequest req) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", HttpStatus.BAD_REQUEST.value());
+        body.put("error", "Content Moderation Rejected");
+        body.put("message", ex.getMessage());
+        body.put("path", req.getRequestURI());
+        body.put("moderation", Map.of(
+                "score", ex.getScore(),
+                "model", ex.getModelName()
+        ));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(Exception.class)

@@ -201,7 +201,7 @@ export default function NotificationPanel({ anchorRect, placement = "header", on
               </svg>
             </div>
             <p className="text-sm font-semibold text-slate-700">Không có thông báo</p>
-            <p className="mt-1 text-xs text-slate-500">Lời mời kết bạn, nhắc nhở thú cưng và hoạt động khác sẽ hiện ở đây</p>
+            <p className="mt-1 text-xs text-slate-500">Lời mời kết bạn, nhắc nhở thú cưng, đi dạo và hoạt động khác sẽ hiện ở đây</p>
           </div>
         ) : (
           <div className="pb-2">
@@ -285,15 +285,18 @@ function NotificationRow({
   onMarkRead: () => void;
 }) {
   const isPetReminder = n.kind === "pet_reminder";
+  const isPetWalk = n.kind.startsWith("pet_walk");
   const name = isPetReminder
     ? n.title
     : profile?.fullName ?? (n.actorUserId ? `Người dùng #${n.actorUserId}` : "Hệ thống");
   const avatar = profile?.avatarUrl ?? "/hype.png";
   const href = isPetReminder && n.petId != null
     ? `/pets/${n.petId}`
-    : n.actorUserId
-      ? `/profile/${n.actorUserId}`
-      : "/friends";
+    : isPetWalk
+      ? "/pets"
+      : n.actorUserId
+        ? `/profile/${n.actorUserId}`
+        : "/friends";
 
   return (
     <li
@@ -301,14 +304,18 @@ function NotificationRow({
       onMouseEnter={onMarkRead}
     >
       <div className="flex gap-3">
-        {isPetReminder ? (
+        {isPetReminder || isPetWalk ? (
           <Link
             href={href}
             onClick={onClose}
-            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-lg"
+            className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg ${
+              isPetWalk
+                ? "border border-indigo-100 bg-indigo-50"
+                : "border border-amber-100 bg-amber-50"
+            }`}
             aria-hidden
           >
-            🐾
+            {isPetWalk ? "🚶" : "🐾"}
             {!n.read && (
               <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-rose-500" />
             )}

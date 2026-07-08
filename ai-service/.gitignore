@@ -1,0 +1,10 @@
+# Models
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Model artifacts (large; not committed)
+artifacts/*/model.safetensors
+artifacts/*/pytorch_model.bin
+artifacts/*/training_args.bin

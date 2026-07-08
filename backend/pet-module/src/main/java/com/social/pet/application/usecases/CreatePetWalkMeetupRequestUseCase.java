@@ -9,17 +9,22 @@ import com.social.pet.domain.entities.PetWalkSessionStatus;
 import com.social.pet.domain.exceptions.PetDomainException;
 import com.social.pet.domain.repositories.PetWalkMeetupRequestRepository;
 import com.social.pet.domain.repositories.PetWalkSessionRepository;
+import com.social.pet.infrastructure.realtime.PetWalkRealtimeEvent;
+import com.social.pet.infrastructure.realtime.PetWalkRealtimePublisher;
 
 @Service
 public class CreatePetWalkMeetupRequestUseCase {
     private final PetWalkSessionRepository walkSessionRepository;
     private final PetWalkMeetupRequestRepository meetupRequestRepository;
+    private final PetWalkRealtimePublisher realtimePublisher;
 
     public CreatePetWalkMeetupRequestUseCase(
             PetWalkSessionRepository walkSessionRepository,
-            PetWalkMeetupRequestRepository meetupRequestRepository) {
+            PetWalkMeetupRequestRepository meetupRequestRepository,
+            PetWalkRealtimePublisher realtimePublisher) {
         this.walkSessionRepository = walkSessionRepository;
         this.meetupRequestRepository = meetupRequestRepository;
+        this.realtimePublisher = realtimePublisher;
     }
 
     @Transactional
@@ -43,6 +48,20 @@ public class CreatePetWalkMeetupRequestUseCase {
                 message,
                 meetupLatitude,
                 meetupLongitude);
-        return meetupRequestRepository.save(request);
+        PetWalkMeetupRequest saved = meetupRequestRepository.save(request);
+        realtimePublisher.publishToUsers(
+                PetWalkRealtimeEvent.of(
+                        "pet.walk.meetup.sent",
+                        session.getId(),
+                        saved.getId(),
+                        actorId,
+                        session.getCreatedByUserId(),
+                        session.getPetId(),
+                        saved.getStatus().name()
+                ),
+                actorId,
+                session.getCreatedByUserId()
+        );
+        return saved;
     }
 }

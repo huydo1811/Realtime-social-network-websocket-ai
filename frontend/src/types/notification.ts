@@ -5,7 +5,11 @@ export type NotificationKind =
   | "friend_cancelled"
   | "friend_blocked"
   | "friend_unblocked"
-  | "pet_reminder";
+  | "pet_reminder"
+  | "pet_walk_invite"
+  | "pet_walk_invite_accepted"
+  | "pet_walk_invite_declined"
+  | "pet_walk_session_finished";
 
 export type AppNotification = {
   id: string;
@@ -15,6 +19,8 @@ export type AppNotification = {
   actorUserId?: number;
   friendshipId?: number;
   petId?: number;
+  walkSessionId?: number;
+  meetupId?: number;
   reminderId?: number;
   occurredAt: string;
   read: boolean;

@@ -27,6 +27,27 @@ function resolveApiBaseUrl(): string {
 
 export const API_URL = resolveApiBaseUrl();
 
+/**
+ * Try to extract a user-friendly message from a non-2xx response.
+ * Falls back to raw text or a generic default.
+ */
+export async function parseError(res: Response, defaultMessage: string): Promise<Error> {
+  try {
+    const text = await res.text();
+    if (!text) return new Error(defaultMessage);
+    try {
+      const data = JSON.parse(text) as { message?: string; error?: string };
+      if (data.message) return new Error(data.message);
+      if (data.error) return new Error(data.error);
+    } catch {
+      // not JSON — fall through
+    }
+    return new Error(text || defaultMessage);
+  } catch {
+    return new Error(defaultMessage);
+  }
+}
+
 export async function apiAuthFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const tokens = getAuthTokens();
   if (!tokens?.accessToken) throw new Error("Chưa đăng nhập");

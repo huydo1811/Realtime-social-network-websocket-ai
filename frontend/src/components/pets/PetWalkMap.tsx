@@ -46,6 +46,30 @@ function MapSync({ center }: { center: [number, number] }) {
 
 const SESSION_COLORS = ["#f43f5e", "#f59e0b", "#10b981", "#6366f1", "#ec4899", "#06b6d4"];
 
+function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const earthRadiusKm = 6371;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLon = ((bLon - aLon) * Math.PI) / 180;
+  const start =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(start), Math.sqrt(1 - start));
+}
+
+function formatWalkDuration(startedAt: string, endedAt?: string | null) {
+  const start = new Date(startedAt).getTime();
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return "—";
+  const seconds = Math.floor((end - start) / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export default function PetWalkMap({
   centerLatitude,
   centerLongitude,
@@ -113,6 +137,17 @@ export default function PetWalkMap({
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">{session.routeName ?? "Đi dạo tự do"} · {session.visibility}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Quãng đường: {distanceKm(
+                    session.startLatitude,
+                    session.startLongitude,
+                    session.currentLatitude,
+                    session.currentLongitude
+                  ).toFixed(2)} km
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Thời gian: {formatWalkDuration(session.startedAt, session.endedAt)}
+                </p>
                 <p className="mt-0.5 text-xs text-slate-400">
                   {session.currentLatitude.toFixed(5)}, {session.currentLongitude.toFixed(5)}
                 </p>

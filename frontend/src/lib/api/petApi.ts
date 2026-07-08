@@ -211,9 +211,21 @@ export const petApi = {
     return (await res.json()) as PetWalkSessionDto[];
   },
 
+  async listJoinedWalks(): Promise<PetWalkSessionDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/walks/joined`);
+    if (!res.ok) throw await parseError(res, "Không thể tải phiên đi dạo đã tham gia");
+    return (await res.json()) as PetWalkSessionDto[];
+  },
+
   async listWalkMeetups(petId: number): Promise<PetWalkMeetupRequestDto[]> {
     const res = await apiAuthFetch(`${API_URL}/pets/${petId}/walk-meetups`);
     if (!res.ok) throw await parseError(res, "Không thể tải lời mời gặp gỡ");
+    return (await res.json()) as PetWalkMeetupRequestDto[];
+  },
+
+  async listSentWalkMeetups(): Promise<PetWalkMeetupRequestDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/walk-meetups/sent`);
+    if (!res.ok) throw await parseError(res, "Không thể tải lời mời đã gửi");
     return (await res.json()) as PetWalkMeetupRequestDto[];
   },
 

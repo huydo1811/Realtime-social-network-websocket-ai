@@ -12,6 +12,7 @@ type CommentItem = {
   authorAvatar?: string;
   text: string;
   createdAt?: string;
+  createdAtTs?: number;
   parentCommentId?: string;
   likeCount: number;
   likedByMe: boolean;
@@ -27,7 +28,7 @@ type Props = {
   onReportComment?: (postId: string, commentId: string) => void;
   onClose: () => void;
   onToggleLike: (postId: string) => void;
-  onAddComment: (postId: string, text: string) => void;
+  onAddComment: (postId: string, text: string) => Promise<void> | void;
   onToggleCommentLike: (postId: string, commentId: string) => Promise<void> | void;
   onAddReply: (postId: string, parentCommentId: string, text: string) => Promise<void> | void;
 };
@@ -50,6 +51,10 @@ export default function PostDetailModal({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
   const [openReplyFor, setOpenReplyFor] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<"newest" | "top">("newest");
+  const [showAll, setShowAll] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const VISIBLE_LIMIT = 4;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -74,17 +79,47 @@ export default function PostDetailModal({
     return acc;
   }, {});
 
-  function submitComment() {
+  const sortedRootComments = [...rootComments].sort((a, b) => {
+    if (sortMode === "top") {
+      if (b.likeCount !== a.likeCount) return b.likeCount - a.likeCount;
+    }
+    const aTime = Number.isFinite(a.createdAtTs) ? Number(a.createdAtTs) : (a.createdAt ? Date.parse(a.createdAt) : 0);
+    const bTime = Number.isFinite(b.createdAtTs) ? Number(b.createdAtTs) : (b.createdAt ? Date.parse(b.createdAt) : 0);
+    return bTime - aTime;
+  });
+  const sortedRepliesMap: Record<string, CommentItem[]> = {};
+  Object.entries(repliesMap).forEach(([pid, list]) => {
+    sortedRepliesMap[pid] = [...list].sort((a, b) => {
+      if (sortMode === "top") {
+        if (b.likeCount !== a.likeCount) return b.likeCount - a.likeCount;
+      }
+      const aTime = Number.isFinite(a.createdAtTs) ? Number(a.createdAtTs) : (a.createdAt ? Date.parse(a.createdAt) : 0);
+      const bTime = Number.isFinite(b.createdAtTs) ? Number(b.createdAtTs) : (b.createdAt ? Date.parse(b.createdAt) : 0);
+      return bTime - aTime;
+    });
+  });
+  const visibleRootComments = showAll
+    ? sortedRootComments
+    : sortedRootComments.slice(0, VISIBLE_LIMIT);
+  const hiddenCount = sortedRootComments.length - visibleRootComments.length;
+
+  async function submitComment() {
     const value = text.trim();
     if (!value) return;
-    onAddComment(activePost.id, value);
-    setText("");
-    setTimeout(() => {
-      contentRef.current?.scrollTo({
-        top: contentRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }, 120);
+    try {
+      setNotice(null);
+      await onAddComment(activePost.id, value);
+      setText("");
+      setTimeout(() => {
+        contentRef.current?.scrollTo({
+          top: contentRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 120);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Không thể gửi bình luận";
+      setNotice(message);
+    }
   }
 
   return (
@@ -115,7 +150,7 @@ export default function PostDetailModal({
               </div>
             )}
 
-            <div className="flex max-h-[84vh] flex-col bg-white lg:max-h-[90vh]">
+            <div className="flex h-[85vh] max-h-[90vh] min-h-0 flex-col bg-white">
               <div className="border-b border-slate-100 px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -181,28 +216,55 @@ export default function PostDetailModal({
               </div>
 
               <div className="border-b border-slate-100 px-5 py-3">
-                <button
-                  onClick={() => onToggleLike(activePost.id)}
-                  className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                    liked
-                      ? "bg-rose-500 text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {liked ? "Đã thích bài" : "Thích bài"}
-                </button>
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => onToggleLike(activePost.id)}
+                    className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      liked
+                        ? "bg-rose-500 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {liked ? "Đã thích bài" : "Thích bài"}
+                  </button>
+
+                  <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSortMode("newest")}
+                      className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                        sortMode === "newest"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Mới nhất
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSortMode("top")}
+                      className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                        sortMode === "top"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Nhiều like
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-hidden">
-                <div ref={contentRef} className="h-full overflow-y-auto px-5 py-4">
+                <div ref={contentRef} className="h-full overflow-y-auto overscroll-contain px-5 py-4">
                   {comments.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
                       Chưa có bình luận. Hãy là người đầu tiên bình luận.
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {rootComments.map((c, idx) => {
-                        const replies = repliesMap[c.id] || [];
+                      {visibleRootComments.map((c, idx) => {
+                        const replies = sortedRepliesMap[c.id] || [];
                         return (
                           <div
                             key={`${c.id}-${idx}`}
@@ -284,11 +346,20 @@ export default function PostDetailModal({
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => {
+                                      onClick={async () => {
                                         const value = (replyDraft[c.id] ?? "").trim();
                                         if (!value) return;
-                                        void onAddReply(activePost.id, c.id, value);
-                                        setReplyDraft((prev) => ({ ...prev, [c.id]: "" }));
+                                        try {
+                                          setNotice(null);
+                                          await onAddReply(activePost.id, c.id, value);
+                                          setReplyDraft((prev) => ({ ...prev, [c.id]: "" }));
+                                        } catch (err) {
+                                          const message =
+                                            err instanceof Error
+                                              ? err.message
+                                              : "Không thể gửi phản hồi";
+                                          setNotice(message);
+                                        }
                                       }}
                                       className="cursor-pointer rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                                     >
@@ -341,12 +412,38 @@ export default function PostDetailModal({
                           </div>
                         );
                       })}
+                      {hiddenCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAll(true)}
+                          className="cursor-pointer w-full rounded-full border border-slate-200 bg-white py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Xem thêm {hiddenCount} bình luận
+                        </button>
+                      ) : null}
+                      {showAll && sortedRootComments.length > VISIBLE_LIMIT ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAll(false);
+                            contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                          className="cursor-pointer w-full rounded-full border border-slate-200 bg-white py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                        >
+                          Thu gọn
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </div>
               </div>
 
               <div className="border-t border-slate-100 bg-white px-5 py-4">
+                {notice ? (
+                  <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {notice}
+                  </div>
+                ) : null}
                 <div className="flex items-center gap-3">
                   {activePost.authorAvatar ? (
                     <Image
@@ -369,7 +466,7 @@ export default function PostDetailModal({
 
                   <button
                     type="button"
-                    onClick={submitComment}
+                    onClick={() => void submitComment()}
                     className="cursor-pointer rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:from-rose-600 hover:to-pink-600"
                   >
                     Gửi

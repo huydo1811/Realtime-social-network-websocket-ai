@@ -3,6 +3,7 @@ import SockJS from "sockjs-client";
 import { getAuthTokens } from "@/lib/api/authToken";
 import type { FriendshipRealtimeEvent } from "@/types/friendship";
 import { ChatRealtimeEvent } from "@/types/chat";
+import type { PetWalkRealtimeEvent } from "@/types/petWalkRealtime";
 
 function resolveApiBaseUrl(): string {
   const candidate = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -32,6 +33,7 @@ const API_BASE = resolveApiBaseUrl();
 
 type Listener = (event: ChatRealtimeEvent) => void;
 type FriendshipListener = (event: FriendshipRealtimeEvent) => void;
+type PetWalkListener = (event: PetWalkRealtimeEvent) => void;
 
 let client: Client | null = null;
 const roomSubs = new Map<number, StompSubscription>();
@@ -40,6 +42,8 @@ let presenceSub: StompSubscription | null = null;
 const presenceListeners = new Set<Listener>();
 const friendshipUserSubs = new Map<number, StompSubscription>();
 const friendshipUserListeners = new Map<number, Set<FriendshipListener>>();
+const petWalkUserSubs = new Map<number, StompSubscription>();
+const petWalkUserListeners = new Map<number, Set<PetWalkListener>>();
 const connectCallbacks = new Set<() => void>();
 
 function ensureFriendshipUserSub(userId: number) {
@@ -60,6 +64,27 @@ function ensureFriendshipUserSub(userId: number) {
 function rebindFriendshipSubs() {
   for (const userId of friendshipUserListeners.keys()) {
     ensureFriendshipUserSub(userId);
+  }
+}
+
+function ensurePetWalkUserSub(userId: number) {
+  if (!client?.connected || petWalkUserSubs.has(userId)) return;
+
+  const sub = client.subscribe(`/topic/pet-walk/users/${userId}`, (frame: IMessage) => {
+    try {
+      const event = JSON.parse(frame.body) as PetWalkRealtimeEvent;
+      petWalkUserListeners.get(userId)?.forEach((cb) => cb(event));
+    } catch {
+      console.error("[ChatSocket] Failed to parse pet walk event:", frame.body);
+    }
+  });
+
+  petWalkUserSubs.set(userId, sub);
+}
+
+function rebindPetWalkSubs() {
+  for (const userId of petWalkUserListeners.keys()) {
+    ensurePetWalkUserSub(userId);
   }
 }
 
@@ -122,12 +147,14 @@ export function initChatSocket(
       rebindAllConversationSubs();
       ensurePresenceSub();
       rebindFriendshipSubs();
+      rebindPetWalkSubs();
       connectCallbacks.forEach((cb) => cb());
     },
     onDisconnect: () => {
       roomSubs.clear();
       presenceSub = null;
       friendshipUserSubs.clear();
+      petWalkUserSubs.clear();
     },
     onStompError: (frame) => {
       console.error("[ChatSocket] STOMP error:", frame.headers["message"]);
@@ -185,6 +212,8 @@ export function disconnectChatSocket(): void {
   presenceListeners.clear();
   friendshipUserSubs.clear();
   friendshipUserListeners.clear();
+  petWalkUserSubs.clear();
+  petWalkUserListeners.clear();
   connectCallbacks.clear();
   client = null;
 }
@@ -228,6 +257,30 @@ export function subscribeFriendshipUser(userId: number, onEvent: FriendshipListe
       friendshipUserListeners.delete(userId);
       friendshipUserSubs.get(userId)?.unsubscribe();
       friendshipUserSubs.delete(userId);
+    }
+  };
+}
+
+export function subscribePetWalkUser(userId: number, onEvent: PetWalkListener): () => void {
+  initChatSocket();
+  let set = petWalkUserListeners.get(userId);
+  if (!set) {
+    set = new Set<PetWalkListener>();
+    petWalkUserListeners.set(userId, set);
+  }
+  set.add(onEvent);
+
+  ensurePetWalkUserSub(userId);
+
+  return () => {
+    const listeners = petWalkUserListeners.get(userId);
+    if (!listeners) return;
+
+    listeners.delete(onEvent);
+    if (listeners.size === 0) {
+      petWalkUserListeners.delete(userId);
+      petWalkUserSubs.get(userId)?.unsubscribe();
+      petWalkUserSubs.delete(userId);
     }
   };
 }

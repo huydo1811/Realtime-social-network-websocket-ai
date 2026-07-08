@@ -10,5 +10,21 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_REDIS_HOST: localhost
       SPRING_REDIS_PORT: 6379
+      MODERATION_SERVICE_URL: http://moderation:8000
     ports:
       - "8080:8080"
+    depends_on:
+      - moderation
+
+  moderation:
+    build:
+      context: .
+      dockerfile: docker/moderation.Dockerfile
+    container_name: moderation
+    environment:
+      MODEL_DIR: /workspace/artifacts/phobert_v1
+      LOG_LEVEL: INFO
+    volumes:
+      - ./ai-service/artifacts:/workspace/artifacts:ro
+    ports:
+      - "8000:8000"

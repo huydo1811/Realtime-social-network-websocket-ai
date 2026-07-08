@@ -1,24 +1,34 @@
 package com.social.pet.application.usecases;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.social.pet.domain.entities.PetWalkMeetupRequest;
 import com.social.pet.domain.entities.PetWalkSession;
 import com.social.pet.domain.exceptions.PetDomainException;
 import com.social.pet.domain.repositories.PetWalkMeetupRequestRepository;
 import com.social.pet.domain.repositories.PetWalkSessionRepository;
+import com.social.pet.infrastructure.realtime.PetWalkRealtimeEvent;
+import com.social.pet.infrastructure.realtime.PetWalkRealtimePublisher;
 
 @Service
 public class RespondToPetWalkMeetupRequestUseCase {
     private final PetWalkMeetupRequestRepository meetupRequestRepository;
     private final PetWalkSessionRepository walkSessionRepository;
+    private final PetWalkRealtimePublisher realtimePublisher;
 
     public RespondToPetWalkMeetupRequestUseCase(
             PetWalkMeetupRequestRepository meetupRequestRepository,
-            PetWalkSessionRepository walkSessionRepository) {
+            PetWalkSessionRepository walkSessionRepository,
+            PetWalkRealtimePublisher realtimePublisher) {
         this.meetupRequestRepository = meetupRequestRepository;
         this.walkSessionRepository = walkSessionRepository;
+        this.realtimePublisher = realtimePublisher;
     }
 
     @Transactional
@@ -44,6 +54,40 @@ public class RespondToPetWalkMeetupRequestUseCase {
         } else {
             request.decline(actorId);
         }
-        return meetupRequestRepository.save(request);
+        PetWalkMeetupRequest saved = meetupRequestRepository.save(request);
+        PetWalkRealtimeEvent event = PetWalkRealtimeEvent.of(
+                accepted ? "pet.walk.meetup.accepted" : "pet.walk.meetup.declined",
+                session.getId(),
+                saved.getId(),
+                actorId,
+                request.getRequesterUserId(),
+                session.getPetId(),
+                saved.getStatus().name()
+        );
+        Set<Long> recipients = new LinkedHashSet<>();
+        recipients.add(actorId);
+        recipients.add(request.getRequesterUserId());
+        publishAfterCommit(event, recipients);
+        return saved;
+    }
+
+    private void publishAfterCommit(PetWalkRealtimeEvent event, Set<Long> recipients) {
+        if (event == null || recipients == null || recipients.isEmpty()) {
+            return;
+        }
+        Runnable publish = () -> realtimePublisher.publishToUsers(
+                event,
+                recipients.toArray(Long[]::new)
+        );
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publish.run();
+                }
+            });
+            return;
+        }
+        publish.run();
     }
 }

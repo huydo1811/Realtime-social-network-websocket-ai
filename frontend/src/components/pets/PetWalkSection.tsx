@@ -4,12 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
 import { petApi } from "@/lib/api/petApi";
+import { getAuthTokens } from "@/lib/api/authToken";
+import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
+import { initChatSocket, subscribePetWalkUser } from "@/lib/socket/chatSocket";
 import type {
   CreatePetWalkMeetupPayload,
   CreatePetWalkSessionPayload,
   PetWalkMeetupRequestDto,
   PetWalkSessionDto,
 } from "@/types/petWalk";
+import type { PetWalkRealtimeEvent } from "@/types/petWalkRealtime";
 import type { PetVisibility } from "@/types/pet";
 
 type Tab = "map" | "sessions" | "meetups";
@@ -36,6 +40,17 @@ function toFixedOr(input: number | null | undefined, fraction = 4) {
   return input.toFixed(fraction);
 }
 
+function formatWalkDuration(startedAt: string, endedAt?: string | null) {
+  const start = new Date(startedAt).getTime();
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return "—";
+  const seconds = Math.floor((end - start) / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
   const earthRadiusKm = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -47,6 +62,20 @@ function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(start), Math.sqrt(1 - start));
+}
+
+function normalizeDateIso(input: unknown): string {
+  if (typeof input === "string" && input.trim()) return input;
+  if (typeof input === "number" && Number.isFinite(input)) {
+    return new Date(input).toISOString();
+  }
+  if (input && typeof input === "object") {
+    const record = input as { seconds?: number; nanos?: number };
+    if (typeof record.seconds === "number") {
+      return new Date(record.seconds * 1000 + (record.nanos ?? 0) / 1e6).toISOString();
+    }
+  }
+  return new Date().toISOString();
 }
 
 const PetWalkMap = dynamic(() => import("@/components/pets/PetWalkMap"), {
@@ -81,12 +110,14 @@ const MEETUP_STYLES: Record<string, string> = {
 export default function PetWalkSection({ petId, isOwner }: Props) {
   const [tab, setTab] = useState<Tab>("map");
   const [sessions, setSessions] = useState<PetWalkSessionDto[]>([]);
+  const [joinedSessions, setJoinedSessions] = useState<PetWalkSessionDto[]>([]);
   const [nearbySessions, setNearbySessions] = useState<PetWalkSessionDto[]>([]);
   const [meetups, setMeetups] = useState<PetWalkMeetupRequestDto[]>([]);
+  const [sentMeetups, setSentMeetups] = useState<PetWalkMeetupRequestDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoMessage, setGeoMessage] = useState<string | null>(null);
@@ -105,28 +136,53 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
     radiusKm: 5,
   });
 
-  const [meetupDrafts, setMeetupDrafts] = useState<Record<number, CreatePetWalkMeetupPayload>>({});
+  const actorId = useMemo(() => {
+    const token = getAuthTokens()?.accessToken;
+    return token ? getUserIdFromAccessToken(token) : null;
+  }, []);
 
   const activeSessions = useMemo(
-    () => sessions.filter((s) => s.status === "ACTIVE"),
-    [sessions]
+    () => [...sessions, ...joinedSessions].filter((s) => s.status === "ACTIVE"),
+    [joinedSessions, sessions]
   );
+
+  const allSessions = useMemo(() => {
+    const map = new Map<number, PetWalkSessionDto>();
+    sessions.forEach((session) => map.set(session.id, session));
+    joinedSessions.forEach((session) => {
+      if (!map.has(session.id)) map.set(session.id, session);
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    );
+  }, [joinedSessions, sessions]);
+
+  const latestSentMeetupByWalkId = useMemo(() => {
+    const map = new Map<number, PetWalkMeetupRequestDto>();
+    sentMeetups.forEach((meetup) => {
+      if (!map.has(meetup.walkSessionId)) {
+        map.set(meetup.walkSessionId, meetup);
+      }
+    });
+    return map;
+  }, [sentMeetups]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      if (isOwner) {
-        const [ownSessions, incomingMeetups] = await Promise.all([
-          petApi.listWalks(petId).catch(() => [] as PetWalkSessionDto[]),
-          petApi.listWalkMeetups(petId).catch(() => [] as PetWalkMeetupRequestDto[]),
-        ]);
-        setSessions(ownSessions);
-        setMeetups(incomingMeetups);
-      } else {
-        setSessions([]);
-        setMeetups([]);
-      }
+      const [ownSessions, incomingMeetups, outgoingMeetups, joined] = await Promise.all([
+        isOwner ? petApi.listWalks(petId).catch(() => [] as PetWalkSessionDto[]) : Promise.resolve([] as PetWalkSessionDto[]),
+        isOwner
+          ? petApi.listWalkMeetups(petId).catch(() => [] as PetWalkMeetupRequestDto[])
+          : Promise.resolve([] as PetWalkMeetupRequestDto[]),
+        petApi.listSentWalkMeetups().catch(() => [] as PetWalkMeetupRequestDto[]),
+        petApi.listJoinedWalks().catch(() => [] as PetWalkSessionDto[]),
+      ]);
+      setSessions(ownSessions);
+      setMeetups(incomingMeetups);
+      setSentMeetups(outgoingMeetups);
+      setJoinedSessions(joined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tải dữ liệu đi dạo");
     } finally {
@@ -182,7 +238,6 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
   }, [requestCurrentLocation]);
 
   const searchNearby = useCallback(async () => {
-    setSearching(true);
     setError(null);
     try {
       const result = await petApi.listNearbyWalks(searchForm.latitude, searchForm.longitude, searchForm.radiusKm);
@@ -190,10 +245,69 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
       if (!result.length) setGeoMessage("Chưa có phiên đi dạo công khai nào trong bán kính này.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tải phiên đi dạo gần đây.");
-    } finally {
-      setSearching(false);
     }
   }, [searchForm.latitude, searchForm.longitude, searchForm.radiusKm]);
+
+  const handlePetWalkRealtime = useCallback(
+    (ev: PetWalkRealtimeEvent) => {
+      if (ev.eventName === "pet.walk.meetup.accepted" || ev.eventName === "pet.walk.meetup.declined") {
+        setMeetups((prev) =>
+          prev.map((item) =>
+            item.id === ev.meetupId
+              ? {
+                  ...item,
+                  status: ev.eventName === "pet.walk.meetup.accepted" ? "ACCEPTED" : "DECLINED",
+                }
+              : item
+          )
+        );
+        setSentMeetups((prev) =>
+          prev.map((item) =>
+            item.id === ev.meetupId
+              ? {
+                  ...item,
+                  status: ev.eventName === "pet.walk.meetup.accepted" ? "ACCEPTED" : "DECLINED",
+                }
+              : item
+          )
+        );
+      }
+      if (ev.eventName === "pet.walk.session.finished" && ev.walkSessionId) {
+        const endedAt = normalizeDateIso(ev.createdAt);
+        const patchSession = (session: PetWalkSessionDto) =>
+          session.id === ev.walkSessionId
+            ? { ...session, status: "FINISHED" as const, endedAt }
+            : session;
+        setSessions((prev) => prev.map(patchSession));
+        setJoinedSessions((prev) => prev.map(patchSession));
+        setNearbySessions((prev) =>
+          prev.map(patchSession).filter((session) => session.status === "ACTIVE")
+        );
+        if (actorId != null && ev.actorUserId !== actorId) {
+          setNotice("Phiên đi dạo chung đã được kết thúc.");
+        }
+      }
+      void load();
+      void searchNearby();
+    },
+    [actorId, load, searchNearby]
+  );
+
+  useEffect(() => {
+    if (actorId == null) return;
+    initChatSocket();
+    const unsub = subscribePetWalkUser(actorId, handlePetWalkRealtime);
+    return () => unsub();
+  }, [actorId, handlePetWalkRealtime]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.hidden) return;
+      void load();
+      void searchNearby();
+    }, 10000);
+    return () => window.clearInterval(interval);
+  }, [load, searchNearby]);
 
   async function submitWalk(e: React.FormEvent) {
     e.preventDefault();
@@ -219,26 +333,46 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
 
   async function finishWalk(session: PetWalkSessionDto) {
     try {
+      const resolveEndPoint = async () => {
+        if (!navigator.geolocation) {
+          return { latitude: searchForm.latitude, longitude: searchForm.longitude };
+        }
+        return await new Promise<{ latitude: number; longitude: number }>((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) =>
+              resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              }),
+            () => resolve({ latitude: searchForm.latitude, longitude: searchForm.longitude }),
+            { enableHighAccuracy: true, timeout: 8000 }
+          );
+        });
+      };
+      const endPoint = await resolveEndPoint();
       const finished = await petApi.finishWalk(petId, session.id, {
-        endLatitude: searchForm.latitude,
-        endLongitude: searchForm.longitude,
+        endLatitude: endPoint.latitude,
+        endLongitude: endPoint.longitude,
       });
       setSessions((prev) => prev.map((item) => (item.id === session.id ? finished : item)));
+      setJoinedSessions((prev) => prev.map((item) => (item.id === session.id ? finished : item)));
+      setNearbySessions((prev) => prev.filter((item) => item.id !== session.id));
+      setNotice("Đã kết thúc phiên đi dạo.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể kết thúc phiên đi dạo");
     }
   }
 
-  async function submitMeetup(walkId: number) {
-    const payload = meetupDrafts[walkId] ?? {};
+  async function submitMeetup(walkId: number, draft?: CreatePetWalkMeetupPayload) {
+    const payload = draft ?? {};
     try {
       const created = await petApi.createWalkMeetup(walkId, {
         message: payload.message?.trim() || undefined,
         meetupLatitude: payload.meetupLatitude,
         meetupLongitude: payload.meetupLongitude,
       });
-      setMeetups((prev) => [created, ...prev]);
-      setMeetupDrafts((prev) => ({ ...prev, [walkId]: {} }));
+      setSentMeetups((prev) => [created, ...prev]);
+      setNotice("Đã gửi lời mời tham gia phiên đi dạo.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể gửi lời mời gặp gỡ");
     }
@@ -248,6 +382,13 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
     try {
       const updated = accept ? await petApi.acceptWalkMeetup(meetupId) : await petApi.declineWalkMeetup(meetupId);
       setMeetups((prev) => prev.map((item) => (item.id === meetupId ? updated : item)));
+      if (accept) {
+        const joined = await petApi.listJoinedWalks().catch(() => [] as PetWalkSessionDto[]);
+        setJoinedSessions(joined);
+        setNotice("Đã chấp nhận lời mời. Hai bên đang tham gia chung một phiên đi dạo.");
+      } else {
+        setNotice("Đã từ chối lời mời.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể phản hồi lời mời");
     }
@@ -255,11 +396,13 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
 
   const mapCenter = nearbySessions[0] ?? activeSessions[0];
   const activeCount = nearbySessions.filter((s) => s.status === "ACTIVE").length;
+  const pendingIncomingCount = meetups.filter((m) => m.status === "PENDING").length;
+  const pendingOutgoingCount = sentMeetups.filter((m) => m.status === "PENDING").length;
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "map", label: "Bản đồ" },
-    { id: "sessions", label: "Phiên đi dạo", count: sessions.length },
-    ...(isOwner ? [{ id: "meetups" as Tab, label: "Lời mời gặp", count: meetups.filter((m) => m.status === "PENDING").length }] : []),
+    { id: "sessions", label: "Phiên đi dạo", count: allSessions.length },
+    { id: "meetups", label: "Lời mời", count: pendingIncomingCount + pendingOutgoingCount },
   ];
 
   return (
@@ -271,6 +414,14 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           {error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          {notice}
         </div>
       ) : null}
 
@@ -371,6 +522,13 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                   const dist = mapCenter
                     ? distanceKm(searchForm.latitude, searchForm.longitude, session.currentLatitude, session.currentLongitude)
                     : null;
+                  const sentMeetup = latestSentMeetupByWalkId.get(session.id);
+                  const canInvite =
+                    session.status === "ACTIVE" &&
+                    actorId != null &&
+                    session.createdByUserId !== actorId &&
+                    sentMeetup?.status !== "PENDING" &&
+                    sentMeetup?.status !== "ACCEPTED";
                   return (
                     <div key={session.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
                       <div className="min-w-0 flex-1">
@@ -383,11 +541,43 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                         <p className="mt-0.5 truncate text-xs text-slate-400">
                           {session.routeName ?? "Đi dạo tự do"} · {session.visibility}
                         </p>
+                        {sentMeetup ? (
+                          <p className={`mt-1 text-[11px] font-medium ${
+                            sentMeetup.status === "ACCEPTED"
+                              ? "text-emerald-600"
+                              : sentMeetup.status === "PENDING"
+                                ? "text-amber-600"
+                                : sentMeetup.status === "DECLINED"
+                                  ? "text-rose-600"
+                                  : "text-slate-500"
+                          }`}>
+                            Lời mời của bạn: {sentMeetup.status}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="ml-3 shrink-0 text-right">
                         {dist != null && (
                           <p className="text-sm font-semibold text-rose-500">{dist < 1 ? `${(dist * 1000).toFixed(0)}m` : `${dist.toFixed(1)}km`}</p>
                         )}
+                        <button
+                          type="button"
+                          disabled={!canInvite}
+                          onClick={() => {
+                            const draft: CreatePetWalkMeetupPayload = {
+                              message: `Xin tham gia đi dạo cùng ${session.petName ?? "pet của bạn"}!`,
+                              meetupLatitude: searchForm.latitude,
+                              meetupLongitude: searchForm.longitude,
+                            };
+                            void submitMeetup(session.id, draft);
+                          }}
+                          className="mt-1 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {sentMeetup?.status === "PENDING"
+                            ? "Đã mời"
+                            : sentMeetup?.status === "ACCEPTED"
+                              ? "Đã tham gia"
+                              : "Mời tham gia"}
+                        </button>
                       </div>
                     </div>
                   );
@@ -522,7 +712,7 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
               </svg>
             </div>
-          ) : sessions.length === 0 ? (
+          ) : allSessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
               <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -532,24 +722,42 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
             </div>
           ) : (
             <div className="space-y-2">
-              {sessions.map((session) => (
+              {allSessions.map((session) => {
+                const distance = distanceKm(
+                  session.startLatitude,
+                  session.startLongitude,
+                  session.currentLatitude,
+                  session.currentLongitude
+                );
+                const isJoinedSession = actorId != null && session.createdByUserId !== actorId;
+                return (
                 <div key={session.id} className="group rounded-2xl border border-slate-200 bg-white px-4 py-3.5 transition hover:border-slate-300 hover:shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-medium text-slate-900">{session.routeName ?? "Phiên đi dạo"}</p>
+                        {isJoinedSession ? (
+                          <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                            JOINED
+                          </span>
+                        ) : null}
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLES[session.status] ?? "bg-slate-100 text-slate-500"}`}>
                           {session.status}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(session.startedAt)}</p>
                       {session.note ? <p className="mt-1 text-sm text-slate-500">{session.note}</p> : null}
+                      <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+                        <span>Quãng đường: {distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(2)} km`}</span>
+                        <span>•</span>
+                        <span>Thời gian: {formatWalkDuration(session.startedAt, session.endedAt)}</span>
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-xs text-slate-400">{toFixedOr(session.currentLatitude)}, {toFixedOr(session.currentLongitude)}</p>
                     </div>
                   </div>
-                  {isOwner && session.status === "ACTIVE" && (
+                  {isOwner && !isJoinedSession && session.status === "ACTIVE" && (
                     <button
                       type="button"
                       onClick={() => void finishWalk(session)}
@@ -559,33 +767,77 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                     </button>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>
       )}
 
       {/* ── MEETUPS TAB ── */}
-      {tab === "meetups" && isOwner && (
+      {tab === "meetups" && (
         <div className="space-y-2">
-          {meetups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
-              <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              <p className="mt-3 font-medium text-slate-500">Chưa có lời mời nào</p>
-              <p className="mt-1 text-sm text-slate-400">Lời mời gặp từ người đi dạo khác sẽ hiển thị ở đây.</p>
+          {isOwner ? (
+            <>
+              <p className="px-1 text-sm font-semibold text-slate-700">Lời mời nhận được</p>
+              {meetups.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-8 text-center">
+                  <p className="font-medium text-slate-500">Chưa có lời mời đến phiên của bạn.</p>
+                </div>
+              ) : (
+                meetups.map((meetup) => (
+                  <div key={meetup.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-slate-900">{meetup.requesterName ?? `User #${meetup.requesterUserId}`}</p>
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                            {meetup.petName ?? "Pet"}
+                          </span>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${MEETUP_STYLES[meetup.status] ?? "bg-slate-100 text-slate-500"}`}>
+                            {meetup.status}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(meetup.createdAt)}</p>
+                        {meetup.message ? <p className="mt-2 text-sm text-slate-600">{meetup.message}</p> : null}
+                      </div>
+                    </div>
+                    {meetup.status === "PENDING" && (
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void respondMeetup(meetup.id, true)}
+                          className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                        >
+                          Chấp nhận
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void respondMeetup(meetup.id, false)}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                        >
+                          Từ chối
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </>
+          ) : null}
+
+          <p className="px-1 pt-2 text-sm font-semibold text-slate-700">Lời mời bạn đã gửi</p>
+          {sentMeetups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-8 text-center">
+              <p className="font-medium text-slate-500">Bạn chưa gửi lời mời nào.</p>
+              <p className="mt-1 text-sm text-slate-400">Vào tab Bản đồ để mời tham gia phiên đi dạo quanh bạn.</p>
             </div>
           ) : (
-            meetups.map((meetup) => (
-              <div key={meetup.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
+            sentMeetups.map((meetup) => (
+              <div key={`sent-${meetup.id}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-900">{meetup.requesterName ?? `User #${meetup.requesterUserId}`}</p>
-                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                        {meetup.petName ?? "Pet"}
-                      </span>
+                      <p className="font-medium text-slate-900">Phiên #{meetup.walkSessionId}</p>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${MEETUP_STYLES[meetup.status] ?? "bg-slate-100 text-slate-500"}`}>
                         {meetup.status}
                       </span>
@@ -594,24 +846,6 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                     {meetup.message ? <p className="mt-2 text-sm text-slate-600">{meetup.message}</p> : null}
                   </div>
                 </div>
-                {meetup.status === "PENDING" && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void respondMeetup(meetup.id, true)}
-                      className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
-                    >
-                      Chấp nhận
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void respondMeetup(meetup.id, false)}
-                      className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                    >
-                      Từ chối
-                    </button>
-                  </div>
-                )}
               </div>
             ))
           )}

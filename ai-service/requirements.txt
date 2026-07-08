@@ -1,0 +1,11 @@
+torch>=2.2.0,<3.0.0
+transformers>=4.45.0,<5.0.0
+fastapi>=0.110.0,<1.0.0
+uvicorn[standard]>=0.29.0,<1.0.0
+pydantic>=2.5.0,<3.0.0
+# numpy is pulled in transitively by torch; pin upper bound to keep torch 2.x happy
+numpy>=1.26,<2.0
+# underthesea intentionally omitted: its `underthesea-core` distribution only ships as
+# a source distribution requiring the Rust toolchain (maturin) to build. Training still
+# uses underthesea (see results_train_profanity_phoBERT/requirements.txt), but inference
+# only needs the lightweight normalizer in app/main.py.

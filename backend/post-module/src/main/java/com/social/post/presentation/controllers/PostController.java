@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.social.post.application.usecases.AdminHidePostUseCase;
+import com.social.post.application.usecases.AdminHideCommentUseCase;
 import com.social.post.application.usecases.AdminUnhidePostUseCase;
 import com.social.post.application.usecases.CreatePostUseCase;
 import com.social.post.application.usecases.CreatePostCommentUseCase;
@@ -64,6 +65,7 @@ public class PostController {
     private final ListPetPostsUseCase listPetPostsUseCase;
     private final ListFeedPostsUseCase listFeedPostsUseCase;
     private final AdminHidePostUseCase adminHidePostUseCase;
+    private final AdminHideCommentUseCase adminHideCommentUseCase;
     private final AdminUnhidePostUseCase adminUnhidePostUseCase;
     private final TogglePostLikeUseCase togglePostLikeUseCase;
     private final CreatePostCommentUseCase createPostCommentUseCase;
@@ -87,6 +89,7 @@ public class PostController {
             ListPetPostsUseCase listPetPostsUseCase,
             ListFeedPostsUseCase listFeedPostsUseCase,
             AdminHidePostUseCase adminHidePostUseCase,
+            AdminHideCommentUseCase adminHideCommentUseCase,
             AdminUnhidePostUseCase adminUnhidePostUseCase,
             TogglePostLikeUseCase togglePostLikeUseCase,
             CreatePostCommentUseCase createPostCommentUseCase,
@@ -108,6 +111,7 @@ public class PostController {
         this.listPetPostsUseCase = listPetPostsUseCase;
         this.listFeedPostsUseCase = listFeedPostsUseCase;
         this.adminHidePostUseCase = adminHidePostUseCase;
+        this.adminHideCommentUseCase = adminHideCommentUseCase;
         this.adminUnhidePostUseCase = adminUnhidePostUseCase;
         this.togglePostLikeUseCase = togglePostLikeUseCase;
         this.createPostCommentUseCase = createPostCommentUseCase;
@@ -209,6 +213,27 @@ public class PostController {
     public ResponseEntity<PostResponse> adminHidePost(@PathVariable Long postId) {
         var post = adminHidePostUseCase.execute(postId);
         return ResponseEntity.ok(postMapper.toResponse(post));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/admin/comments/{commentId}/hide")
+    public ResponseEntity<PostCommentResponse> adminHideComment(@PathVariable Long commentId) {
+        var comment = adminHideCommentUseCase.execute(commentId);
+        PostCommentResponse response = new PostCommentResponse();
+        response.setId(comment.getId());
+        response.setPostId(comment.getPostId());
+        response.setUserId(comment.getUserId());
+        response.setParentCommentId(comment.getParentCommentId());
+        response.setContent(comment.getContent());
+        userRepository.findById(comment.getUserId()).ifPresent(user -> {
+            response.setAuthorName(user.getFullName());
+            response.setAuthorAvatarUrl(user.getAvatarUrl());
+        });
+        response.setLikeCount(0);
+        response.setLikedByMe(false);
+        response.setCreatedAt(comment.getCreatedAt());
+        response.setUpdatedAt(comment.getUpdatedAt());
+        return ResponseEntity.ok(response);
     }
 
     @PreAuthorize("hasRole('ADMIN')")

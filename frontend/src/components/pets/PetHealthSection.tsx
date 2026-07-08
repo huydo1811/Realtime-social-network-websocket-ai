@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { petApi } from "@/lib/api/petApi";
 import type { PetHealthRecordType } from "@/types/petHealth";
 import {
@@ -26,6 +26,7 @@ import { format, parseISO, startOfDay } from "date-fns";
 import { vi } from "date-fns/locale";
 
 type Tab = "weight" | "appetite" | "activity" | "appointments" | "records";
+type TimeFilter = "7d" | "30d" | "90d" | "all";
 
 type Props = {
   petId: number;
@@ -100,6 +101,38 @@ function getAppetiteBgClass(level: AppetiteEntry["level"]) {
   }
 }
 
+function inTimeRange(input: string, filter: TimeFilter) {
+  if (filter === "all") return true;
+  const date = parseISO(input);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const rangeDays = filter === "7d" ? 7 : filter === "30d" ? 30 : 90;
+  return now - date.getTime() <= rangeDays * day;
+}
+
+function inSpecificDateRange(input: string, fromDate: string, toDate: string) {
+  if (!fromDate && !toDate) return true;
+  const date = parseISO(input);
+  if (Number.isNaN(date.getTime())) return false;
+  const target = startOfDay(date).getTime();
+  if (fromDate) {
+    const fromTs = startOfDay(parseISO(fromDate)).getTime();
+    if (!Number.isNaN(fromTs) && target < fromTs) return false;
+  }
+  if (toDate) {
+    const toTs = startOfDay(parseISO(toDate)).getTime();
+    if (!Number.isNaN(toTs) && target > toTs) return false;
+  }
+  return true;
+}
+
+function paginate<T>(items: T[], page: number, pageSize: number) {
+  const safePage = Math.max(1, page);
+  const start = (safePage - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
 export default function PetHealthSection({ petId, isOwner }: Props) {
   const [tab, setTab] = useState<Tab>("weight");
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
@@ -112,6 +145,18 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
   const [saving, setSaving] = useState(false);
   const [showRecordForm, setShowRecordForm] = useState(false);
   const [showReminderForm, setShowReminderForm] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("30d");
+  const [notesOnly, setNotesOnly] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [pageByTab, setPageByTab] = useState<Record<Tab, number>>({
+    weight: 1,
+    appetite: 1,
+    activity: 1,
+    appointments: 1,
+    records: 1,
+  });
+  const PAGE_SIZE = 6;
 
   const [weightForm, setWeightForm] = useState({ weightKg: "", date: new Date().toISOString().slice(0, 10), note: "" });
   const [appetiteForm, setAppetiteForm] = useState({ level: "NORMAL" as AppetiteEntry["level"], date: new Date().toISOString().slice(0, 10), note: "" });
@@ -241,17 +286,135 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
     } catch (e) { setError(e instanceof Error ? e.message : "Không thể xóa hồ sơ"); }
   }
 
+  useEffect(() => {
+    setPageByTab((prev) => ({ ...prev, [tab]: 1 }));
+  }, [tab, timeFilter, notesOnly, fromDate, toDate]);
+
+  const filteredWeightEntries = useMemo(
+    () =>
+      weightEntries.filter((entry) => {
+        if (!inTimeRange(entry.recordedAt, timeFilter)) return false;
+        if (!inSpecificDateRange(entry.recordedAt, fromDate, toDate)) return false;
+        if (notesOnly && !entry.note?.trim()) return false;
+        return true;
+      }),
+    [weightEntries, timeFilter, notesOnly, fromDate, toDate]
+  );
+
+  const filteredAppetiteEntries = useMemo(
+    () =>
+      appetiteEntries.filter((entry) => {
+        if (!inTimeRange(entry.recordedAt, timeFilter)) return false;
+        if (!inSpecificDateRange(entry.recordedAt, fromDate, toDate)) return false;
+        if (notesOnly && !entry.note?.trim()) return false;
+        return true;
+      }),
+    [appetiteEntries, timeFilter, notesOnly, fromDate, toDate]
+  );
+
+  const filteredActivityEntries = useMemo(
+    () =>
+      activityEntries.filter((entry) => {
+        if (!inTimeRange(entry.recordedAt, timeFilter)) return false;
+        if (!inSpecificDateRange(entry.recordedAt, fromDate, toDate)) return false;
+        if (notesOnly && !entry.note?.trim()) return false;
+        return true;
+      }),
+    [activityEntries, timeFilter, notesOnly, fromDate, toDate]
+  );
+
+  const filteredRecords = useMemo(
+    () =>
+      records.filter((entry) => {
+        if (!inTimeRange(entry.performedAt, timeFilter)) return false;
+        if (!inSpecificDateRange(entry.performedAt, fromDate, toDate)) return false;
+        if (notesOnly && !entry.description?.trim()) return false;
+        return true;
+      }),
+    [records, timeFilter, notesOnly, fromDate, toDate]
+  );
+
+  const filteredReminders = useMemo(
+    () =>
+      reminders.filter((entry) => {
+        if (!inTimeRange(entry.dueDate, timeFilter)) return false;
+        if (!inSpecificDateRange(entry.dueDate, fromDate, toDate)) return false;
+        if (notesOnly && !entry.note?.trim()) return false;
+        return true;
+      }),
+    [reminders, timeFilter, notesOnly, fromDate, toDate]
+  );
+
+  const pagedWeightEntries = useMemo(
+    () => paginate(filteredWeightEntries, pageByTab.weight, PAGE_SIZE),
+    [filteredWeightEntries, pageByTab.weight]
+  );
+  const pagedAppetiteEntries = useMemo(
+    () => paginate(filteredAppetiteEntries, pageByTab.appetite, PAGE_SIZE),
+    [filteredAppetiteEntries, pageByTab.appetite]
+  );
+  const pagedActivityEntries = useMemo(
+    () => paginate(filteredActivityEntries, pageByTab.activity, PAGE_SIZE),
+    [filteredActivityEntries, pageByTab.activity]
+  );
+  const pagedReminders = useMemo(
+    () => paginate(filteredReminders, pageByTab.appointments, PAGE_SIZE),
+    [filteredReminders, pageByTab.appointments]
+  );
+  const pagedRecords = useMemo(
+    () => paginate(filteredRecords, pageByTab.records, PAGE_SIZE),
+    [filteredRecords, pageByTab.records]
+  );
+
+  function renderPager(targetTab: Tab, totalItems: number) {
+    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+    if (totalPages <= 1) return null;
+    const current = Math.min(pageByTab[targetTab], totalPages);
+    return (
+      <div className="flex items-center justify-between px-1 pt-1">
+        <p className="text-xs text-slate-500">
+          Trang {current}/{totalPages}
+        </p>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            disabled={current <= 1}
+            onClick={() =>
+              setPageByTab((prev) => ({ ...prev, [targetTab]: Math.max(1, prev[targetTab] - 1) }))
+            }
+            className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          >
+            Trước
+          </button>
+          <button
+            type="button"
+            disabled={current >= totalPages}
+            onClick={() =>
+              setPageByTab((prev) => ({
+                ...prev,
+                [targetTab]: Math.min(totalPages, prev[targetTab] + 1),
+              }))
+            }
+            className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          >
+            Sau
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Chart data ───────────────────────────────────────────────────────────────
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const weightChartData = weightEntries
+  const weightChartData = filteredWeightEntries
     .filter((e) => parseISO(e.recordedAt) >= thirtyDaysAgo)
     .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
     .map((e) => ({ date: toChartDate(e.recordedAt), weight: e.weightKg }));
 
-  const appetiteChartData = appetiteEntries
+  const appetiteChartData = filteredAppetiteEntries
     .filter((e) => parseISO(e.recordedAt) >= thirtyDaysAgo)
     .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
     .map((e) => ({
@@ -261,7 +424,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
       color: APPETITE_LEVEL_COLORS[e.level],
     }));
 
-  const activityByDay = activityEntries
+  const activityByDay = filteredActivityEntries
     .filter((e) => parseISO(e.recordedAt) >= thirtyDaysAgo)
     .reduce<Record<string, number>>((acc, e) => {
       const key = e.recordedAt.slice(0, 10);
@@ -273,9 +436,8 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, minutes]) => ({ date: toChartDate(date), minutes }));
 
-  const latestWeight = weightEntries[0]?.weightKg;
-  const latestAppetite = appetiteEntries[0];
-  const latestActivity = activityEntries[0];
+  const latestWeight = filteredWeightEntries[0]?.weightKg;
+  const latestAppetite = filteredAppetiteEntries[0];
 
   // ── Tab definitions ─────────────────────────────────────────────────────────
 
@@ -283,8 +445,8 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
     { id: "weight", label: "Cân nặng" },
     { id: "appetite", label: "Ăn uống" },
     { id: "activity", label: "Hoạt động" },
-    { id: "appointments", label: "Lịch khám", count: reminders.filter((r) => r.status === "PENDING").length },
-    { id: "records", label: "Lịch sử", count: records.length },
+    { id: "appointments", label: "Lịch khám", count: filteredReminders.filter((r) => r.status === "PENDING").length },
+    { id: "records", label: "Lịch sử", count: filteredRecords.length },
   ];
 
   if (!isOwner) {
@@ -355,6 +517,72 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
             ) : null}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lọc thời gian</span>
+        {([
+          ["7d", "7 ngày"],
+          ["30d", "30 ngày"],
+          ["90d", "90 ngày"],
+          ["all", "Tất cả"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTimeFilter(value)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              timeFilter === value
+                ? "bg-emerald-500 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={notesOnly}
+            onChange={(e) => setNotesOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-emerald-500"
+          />
+          Chỉ mục có ghi chú
+        </label>
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <label className="flex items-center gap-1.5">
+            <span>Từ ngày</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+              max={toDate || undefined}
+            />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span>Đến ngày</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+              min={fromDate || undefined}
+            />
+          </label>
+          {(fromDate || toDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate("");
+                setToDate("");
+              }}
+              className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
+            >
+              Xóa ngày
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── WEIGHT TAB ── */}
@@ -428,7 +656,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
           {/* History list */}
           <div className="space-y-2">
             <p className="px-1 text-sm font-semibold text-slate-700">Lịch sử</p>
-            {weightEntries.slice(0, 10).map((e) => (
+            {pagedWeightEntries.map((e) => (
               <div key={e.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-500">
@@ -442,6 +670,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                 {e.note && <p className="text-xs text-slate-500">{e.note}</p>}
               </div>
             ))}
+            {renderPager("weight", filteredWeightEntries.length)}
           </div>
         </div>
       )}
@@ -518,7 +747,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
           {/* History */}
           <div className="space-y-2">
             <p className="px-1 text-sm font-semibold text-slate-700">Lịch sử</p>
-            {appetiteEntries.slice(0, 15).map((e) => (
+            {pagedAppetiteEntries.map((e) => (
               <div key={e.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${getAppetiteBgClass(e.level)}`}>
@@ -532,6 +761,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                 {e.note && <p className="text-xs text-slate-500">{e.note}</p>}
               </div>
             ))}
+            {renderPager("appetite", filteredAppetiteEntries.length)}
           </div>
         </div>
       )}
@@ -606,7 +836,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
           {/* History */}
           <div className="space-y-2">
             <p className="px-1 text-sm font-semibold text-slate-700">Lịch sử</p>
-            {activityEntries.slice(0, 15).map((e) => (
+            {pagedActivityEntries.map((e) => (
               <div key={e.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
@@ -623,6 +853,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                 </div>
               </div>
             ))}
+            {renderPager("activity", filteredActivityEntries.length)}
           </div>
         </div>
       )}
@@ -696,7 +927,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
               </svg>
             </div>
-          ) : reminders.length === 0 ? (
+          ) : filteredReminders.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
               <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -706,7 +937,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
             </div>
           ) : (
             <div className="space-y-2">
-              {reminders.map((r) => {
+              {pagedReminders.map((r) => {
                 const days = daysUntil(r.dueDate);
                 const urgent = days <= 7;
                 return (
@@ -733,6 +964,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                   </div>
                 );
               })}
+              {renderPager("appointments", filteredReminders.length)}
             </div>
           )}
         </div>
@@ -821,7 +1053,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
               </svg>
             </div>
-          ) : records.length === 0 ? (
+          ) : filteredRecords.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
               <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -831,7 +1063,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
             </div>
           ) : (
             <div className="space-y-2">
-              {records.map((r) => (
+              {pagedRecords.map((r) => (
                 <div key={r.id} className="flex items-start justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -852,6 +1084,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                   </button>
                 </div>
               ))}
+              {renderPager("records", filteredRecords.length)}
             </div>
           )}
         </div>

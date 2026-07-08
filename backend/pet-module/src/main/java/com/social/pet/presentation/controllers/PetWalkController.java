@@ -17,8 +17,10 @@ import com.social.pet.application.usecases.CreatePetWalkMeetupRequestUseCase;
 import com.social.pet.application.usecases.CreatePetWalkSessionUseCase;
 import com.social.pet.application.usecases.FinishPetWalkSessionUseCase;
 import com.social.pet.application.usecases.ListNearbyPetWalkSessionsUseCase;
+import com.social.pet.application.usecases.ListJoinedPetWalkSessionsUseCase;
 import com.social.pet.application.usecases.ListPetWalkMeetupRequestsUseCase;
 import com.social.pet.application.usecases.ListPetWalkSessionsUseCase;
+import com.social.pet.application.usecases.ListSentPetWalkMeetupRequestsUseCase;
 import com.social.pet.application.usecases.RespondToPetWalkMeetupRequestUseCase;
 import com.social.pet.presentation.dto.CreatePetWalkMeetupRequestDto;
 import com.social.pet.presentation.dto.CreatePetWalkSessionRequest;
@@ -36,9 +38,11 @@ public class PetWalkController {
     private final FinishPetWalkSessionUseCase finishPetWalkSessionUseCase;
     private final ListPetWalkSessionsUseCase listPetWalkSessionsUseCase;
     private final ListNearbyPetWalkSessionsUseCase listNearbyPetWalkSessionsUseCase;
+    private final ListJoinedPetWalkSessionsUseCase listJoinedPetWalkSessionsUseCase;
     private final CreatePetWalkMeetupRequestUseCase createPetWalkMeetupRequestUseCase;
     private final RespondToPetWalkMeetupRequestUseCase respondToPetWalkMeetupRequestUseCase;
     private final ListPetWalkMeetupRequestsUseCase listPetWalkMeetupRequestsUseCase;
+    private final ListSentPetWalkMeetupRequestsUseCase listSentPetWalkMeetupRequestsUseCase;
     private final PetWalkMapper petWalkMapper;
 
     public PetWalkController(
@@ -46,17 +50,21 @@ public class PetWalkController {
             FinishPetWalkSessionUseCase finishPetWalkSessionUseCase,
             ListPetWalkSessionsUseCase listPetWalkSessionsUseCase,
             ListNearbyPetWalkSessionsUseCase listNearbyPetWalkSessionsUseCase,
+            ListJoinedPetWalkSessionsUseCase listJoinedPetWalkSessionsUseCase,
             CreatePetWalkMeetupRequestUseCase createPetWalkMeetupRequestUseCase,
             RespondToPetWalkMeetupRequestUseCase respondToPetWalkMeetupRequestUseCase,
             ListPetWalkMeetupRequestsUseCase listPetWalkMeetupRequestsUseCase,
+            ListSentPetWalkMeetupRequestsUseCase listSentPetWalkMeetupRequestsUseCase,
             PetWalkMapper petWalkMapper) {
         this.createPetWalkSessionUseCase = createPetWalkSessionUseCase;
         this.finishPetWalkSessionUseCase = finishPetWalkSessionUseCase;
         this.listPetWalkSessionsUseCase = listPetWalkSessionsUseCase;
         this.listNearbyPetWalkSessionsUseCase = listNearbyPetWalkSessionsUseCase;
+        this.listJoinedPetWalkSessionsUseCase = listJoinedPetWalkSessionsUseCase;
         this.createPetWalkMeetupRequestUseCase = createPetWalkMeetupRequestUseCase;
         this.respondToPetWalkMeetupRequestUseCase = respondToPetWalkMeetupRequestUseCase;
         this.listPetWalkMeetupRequestsUseCase = listPetWalkMeetupRequestsUseCase;
+        this.listSentPetWalkMeetupRequestsUseCase = listSentPetWalkMeetupRequestsUseCase;
         this.petWalkMapper = petWalkMapper;
     }
 
@@ -109,10 +117,26 @@ public class PetWalkController {
         return ResponseEntity.ok(sessions);
     }
 
+    @GetMapping("/walks/joined")
+    public ResponseEntity<List<PetWalkSessionResponse>> listJoinedSessions() {
+        List<PetWalkSessionResponse> sessions = listJoinedPetWalkSessionsUseCase.execute(currentUserId()).stream()
+                .map(petWalkMapper::toSessionResponse)
+                .toList();
+        return ResponseEntity.ok(sessions);
+    }
+
     @GetMapping("/{petId:\\d+}/walk-meetups")
     public ResponseEntity<List<PetWalkMeetupRequestResponse>> listMeetups(@PathVariable Long petId) {
         List<PetWalkMeetupRequestResponse> requests = listPetWalkMeetupRequestsUseCase.execute(currentUserId(), petId)
                 .stream()
+                .map(petWalkMapper::toMeetupResponse)
+                .toList();
+        return ResponseEntity.ok(requests);
+    }
+
+    @GetMapping("/walk-meetups/sent")
+    public ResponseEntity<List<PetWalkMeetupRequestResponse>> listSentMeetups() {
+        List<PetWalkMeetupRequestResponse> requests = listSentPetWalkMeetupRequestsUseCase.execute(currentUserId()).stream()
                 .map(petWalkMapper::toMeetupResponse)
                 .toList();
         return ResponseEntity.ok(requests);

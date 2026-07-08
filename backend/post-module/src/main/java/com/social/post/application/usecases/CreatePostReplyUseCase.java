@@ -3,6 +3,9 @@ package com.social.post.application.usecases;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.social.moderation.domain.entities.ModerationAudit.TargetType;
+import com.social.post.application.services.PostModerationService;
+import com.social.post.application.services.PostModerationService.Outcome;
 import com.social.post.domain.entities.PostComment;
 import com.social.post.domain.entities.PostStatus;
 import com.social.post.domain.exceptions.PostDomainException;
@@ -15,14 +18,17 @@ public class CreatePostReplyUseCase {
     private final PostRepository postRepository;
     private final PostCommentRepository postCommentRepository;
     private final UserRepository userRepository;
+    private final PostModerationService moderationService;
 
     public CreatePostReplyUseCase(
             PostRepository postRepository,
             PostCommentRepository postCommentRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            PostModerationService moderationService) {
         this.postRepository = postRepository;
         this.postCommentRepository = postCommentRepository;
         this.userRepository = userRepository;
+        this.moderationService = moderationService;
     }
 
     @Transactional
@@ -37,6 +43,25 @@ public class CreatePostReplyUseCase {
         if (!parent.getPostId().equals(postId)) {
             throw new PostDomainException("Bình luận không thuộc bài viết này");
         }
-        return postCommentRepository.save(PostComment.createReply(postId, actorId, parentCommentId, content));
+        PostComment reply = PostComment.createReply(postId, actorId, parentCommentId, content);
+
+        Outcome outcome = moderationService.enforce(content);
+        if (outcome.softHide()) {
+            reply.hideByAdmin();
+        }
+
+        PostComment saved = postCommentRepository.save(reply);
+        try {
+            moderationService.audit(
+                    TargetType.COMMENT,
+                    saved.getId(),
+                    actorId,
+                    content,
+                    outcome
+            );
+        } catch (Exception ignored) {
+            // audit failure must not break the user's reply
+        }
+        return saved;
     }
 }

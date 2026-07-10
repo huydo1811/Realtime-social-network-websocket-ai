@@ -93,18 +93,18 @@ export default function PetsPage() {
 
   return (
     <UserLayout>
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-6 flex items-center justify-between gap-3">
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-rose-100 bg-gradient-to-br from-white via-rose-50/40 to-violet-50/40 px-5 py-5 shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Thú cưng của tôi</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Thú cưng của tôi</h1>
+            <p className="mt-1 text-sm text-slate-600">
               Quản lý hồ sơ thú cưng và gắn vào bài viết khi đăng.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowForm((v) => !v)}
-            className="cursor-pointer rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
+            className="cursor-pointer rounded-xl bg-gradient-to-r from-rose-500 to-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-95"
           >
             {showForm ? "Đóng" : "+ Thêm thú cưng"}
           </button>
@@ -212,12 +212,12 @@ export default function PetsPage() {
             <p className="text-sm text-slate-500">Chưa có thú cưng nào. Hãy thêm hồ sơ đầu tiên!</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pets.map((pet) => (
               <Link
                 key={pet.id}
                 href={`/pets/${pet.id}`}
-                className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-rose-200 hover:shadow-md"
+                className="group flex items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-md"
               >
                 {pet.avatarUrl ? (
                   <Image
@@ -225,10 +225,10 @@ export default function PetsPage() {
                     alt={pet.name}
                     width={56}
                     height={56}
-                    className="h-14 w-14 rounded-full object-cover"
+                    className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white"
                   />
                 ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-100 text-lg font-bold text-rose-600">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-lg font-bold text-rose-600">
                     {pet.name[0]?.toUpperCase() ?? "P"}
                   </div>
                 )}
@@ -237,6 +237,9 @@ export default function PetsPage() {
                   <p className="truncate text-sm text-slate-500">
                     {[pet.species, pet.breed].filter(Boolean).join(" · ")}
                   </p>
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 transition group-hover:bg-rose-100 group-hover:text-rose-600">
+                    Xem chi tiết
+                  </span>
                 </div>
               </Link>
             ))}

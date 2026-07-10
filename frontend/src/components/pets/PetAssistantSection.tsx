@@ -178,7 +178,7 @@ function createReply(
 
     if (/thú y|phòng khám|liên hệ|đặt lịch thú y/.test(lower)) {
       return {
-        text: `Bạn có thể dùng tab "Lịch khám" để lưu thông tin phòng khám, ngày hẹn và ghi chú. Nếu bé đang có triệu chứng cấp cứu, hãy đi thú y ngay.`,
+        text: `Bạn có thể qua tab "Sức khỏe" để tạo lịch khám và chọn thú y gần đây. Nếu bé đang có triệu chứng cấp cứu, hãy đi thú y ngay.`,
         suggestions: QUICK_PROMPTS,
         newCtx: ctx,
         isDone: false,
@@ -346,7 +346,6 @@ function createReply(
 }
 
 export default function PetAssistantSection({ petId, petName, species, isOwner }: Props) {
-  const [tab, setTab] = useState<"chat" | "appointment">("chat");
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>(QUICK_PROMPTS);
   const [draft, setDraft] = useState("");
@@ -356,23 +355,13 @@ export default function PetAssistantSection({ petId, petName, species, isOwner }
     vomiting: false, diarrhea: false, cough: false, breathingDifficulty: false, skinRash: false, fever: false,
   });
   const [diagnosisLoading, setDiagnosisLoading] = useState(false);
-  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
-  const [appointmentSaved, setAppointmentSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [aptForm, setAptForm] = useState({
-    vetName: "",
-    vetPhone: "",
-    date: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
-    note: "",
-  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const speciesLabel = SPECIES_LABELS[species];
 
   const intro = useMemo(
-    () => `Chào ${petName}. Mình là trợ lý ảo cho hệ sinh thái pet. Bạn có thể bắt đầu chẩn đoán, hỏi về ${speciesLabel}, vaccine, đặt lịch thú y hoặc hỏi cách chăm sóc.`,
+    () => `Chào ${petName}. Mình là trợ lý ảo cho hệ sinh thái pet. Bạn có thể bắt đầu chẩn đoán, hỏi về ${speciesLabel}, vaccine hoặc hỏi cách chăm sóc.`,
     [petName, speciesLabel]
   );
 
@@ -451,22 +440,6 @@ export default function PetAssistantSection({ petId, petName, species, isOwner }
     setDraft("");
   }, [diagnosisCtx, latestDiagnosis, petId, petName, species]);
 
-  function saveAppointment() {
-    if (!aptForm.vetName.trim() && !aptForm.vetPhone.trim() && !aptForm.note.trim()) return;
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      setAppointmentSaved(true);
-      setShowAppointmentForm(false);
-      setTimeout(() => setAppointmentSaved(false), 3000);
-    }, 500);
-  }
-
-  const TABS = [
-    { id: "chat" as const, label: "Trợ lý AI" },
-    { id: "appointment" as const, label: "Lịch khám" },
-  ];
-
   return (
     <div className="space-y-5">
 
@@ -502,21 +475,7 @@ export default function PetAssistantSection({ petId, petName, species, isOwner }
         )}
       </div>
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50/80 p-1">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-              tab === t.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-            }`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── CHAT TAB ── */}
-      {tab === "chat" && (
-        <div className="space-y-4">
+      <div className="space-y-4">
           {/* Chat card */}
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
             {/* Chat header */}
@@ -619,149 +578,7 @@ export default function PetAssistantSection({ petId, petName, species, isOwner }
               <p>Bắt đầu chẩn đoán để AI thu thập triệu chứng và gợi ý bệnh tiềm năng cho {petName}.</p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── APPOINTMENT TAB ── */}
-      {tab === "appointment" && (
-        <div className="space-y-4">
-          {/* Saved confirmation toast */}
-          {appointmentSaved && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Đã lưu lịch khám thú y thành công!
-            </div>
-          )}
-
-          {/* Appointment form card */}
-          <div className="rounded-2xl border border-slate-200 bg-white">
-            <button type="button" onClick={() => setShowAppointmentForm((v) => !v)}
-              className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-500 text-white">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </span>
-                <div>
-                  <p className="font-semibold text-slate-900">Đặt lịch khám thú y</p>
-                  <p className="text-sm text-slate-500">Lưu thông tin phòng khám và ngày hẹn</p>
-                </div>
-              </div>
-              <svg className={`h-5 w-5 text-slate-400 transition-transform ${showAppointmentForm ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {showAppointmentForm && (
-              <form onSubmit={(e) => { e.preventDefault(); saveAppointment(); }}
-                className="border-t border-slate-100 px-5 py-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-slate-600">Tên phòng khám</span>
-                    <input type="text" value={aptForm.vetName}
-                      onChange={(e) => setAptForm((f) => ({ ...f, vetName: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                      placeholder="VD: Phòng khám Thú Y PetCare" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-slate-600">Số điện thoại</span>
-                    <input type="tel" value={aptForm.vetPhone}
-                      onChange={(e) => setAptForm((f) => ({ ...f, vetPhone: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                      placeholder="0901 xxx xxx" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-slate-600">Ngày hẹn</span>
-                    <input type="date" value={aptForm.date}
-                      onChange={(e) => setAptForm((f) => ({ ...f, date: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-slate-600">Ghi chú</span>
-                    <input type="text" value={aptForm.note}
-                      onChange={(e) => setAptForm((f) => ({ ...f, note: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                      placeholder="VD: Mang sổ tiêm, khám tai..." />
-                  </label>
-                </div>
-                <div className="flex gap-2">
-                  <button type="submit" disabled={saving}
-                    className="flex-1 rounded-full bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-600 disabled:opacity-60">
-                    {saving ? "Đang lưu..." : "Lưu lịch khám"}
-                  </button>
-                  <button type="button" onClick={() => setShowAppointmentForm(false)}
-                    className="rounded-full border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
-                    Hủy
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-
-          {/* Saved appointment summary */}
-          {(aptForm.vetName || aptForm.vetPhone || aptForm.note) && (
-            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
-              <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-                <p className="text-sm font-semibold text-slate-900">Lịch đã lưu</p>
-              </div>
-              <div className="space-y-2">
-                {aptForm.vetName && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    <span className="font-medium text-slate-700">{aptForm.vetName}</span>
-                  </div>
-                )}
-                {aptForm.vetPhone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    <span className="font-medium text-slate-700">{aptForm.vetPhone}</span>
-                  </div>
-                )}
-                {aptForm.date && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span className="font-medium text-rose-600">
-                      {new Date(aptForm.date + "T00:00:00").toLocaleDateString("vi-VN", { day: "2-digit", month: "long", year: "numeric" })}
-                    </span>
-                  </div>
-                )}
-                {aptForm.note && (
-                  <div className="flex items-start gap-2 text-sm">
-                    <svg className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    <span className="text-slate-600">{aptForm.note}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          { !aptForm.vetName && !aptForm.vetPhone && !aptForm.note && !showAppointmentForm && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
-              <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <p className="mt-3 font-medium text-slate-500">Chưa có lịch khám nào</p>
-              <p className="mt-1 text-sm text-slate-400">Nhấn "Đặt lịch khám" để lưu thông tin phòng khám thú y.</p>
-            </div>
-          )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

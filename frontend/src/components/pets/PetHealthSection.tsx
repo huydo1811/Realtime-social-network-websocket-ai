@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { petApi } from "@/lib/api/petApi";
 import type { PetHealthRecordType } from "@/types/petHealth";
+import type { VetClinicDto } from "@/types/petVet";
 import {
   HEALTH_RECORD_TYPE_LABELS,
   type PetHealthRecordDto,
@@ -27,6 +28,7 @@ import { vi } from "date-fns/locale";
 
 type Tab = "weight" | "appetite" | "activity" | "appointments" | "records";
 type TimeFilter = "7d" | "30d" | "90d" | "all";
+type AppointmentStatusFilter = "pending" | "done" | "all";
 
 type Props = {
   petId: number;
@@ -73,6 +75,85 @@ const RECORD_TYPE_COLORS: Record<PetHealthRecordType, string> = {
   MEDICATION: "bg-amber-100 text-amber-700",
   OTHER: "bg-slate-100 text-slate-600",
 };
+
+const VET_POSITIVE_KEYWORDS = [
+  "thu y",
+  "thú y",
+  "veterinary",
+  "vet",
+  "clinic",
+  "hospital",
+  "animal hospital",
+  "benh vien thu y",
+  "bệnh viện thú y",
+  "phong kham thu y",
+  "phòng khám thú y",
+  "chẩn trị",
+  "animal clinic",
+];
+
+const VET_NEGATIVE_KEYWORDS = [
+  "pet shop",
+  "petshop",
+  "cửa hàng thú cưng",
+  "phụ kiện",
+  "spa",
+  "groom",
+  "grooming",
+  "tắm cắt",
+  "hotel",
+  "boarding",
+  "coffee",
+  "cafe",
+  "siêu thị",
+  "shop",
+  "thức ăn",
+  "pet mart",
+];
+
+function normalizeText(input: string) {
+  return input.toLowerCase().trim();
+}
+
+function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const earthRadiusKm = 6371;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLon = ((bLon - aLon) * Math.PI) / 180;
+  const start =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(start), Math.sqrt(1 - start));
+}
+
+function vetRelevanceScore(input: {
+  name: string;
+  address?: string;
+  category?: string;
+  type?: string;
+}) {
+  const name = normalizeText(input.name || "");
+  const address = normalizeText(input.address || "");
+  const category = normalizeText(input.category || "");
+  const type = normalizeText(input.type || "");
+  const haystack = `${name} ${address}`;
+
+  let score = 0;
+  if (category === "amenity" || category === "healthcare") score += 2;
+  if (type.includes("veterinary")) score += 8;
+  if (type.includes("clinic") || type.includes("hospital")) score += 3;
+  if (category === "shop" || type.includes("pet") || type.includes("grooming")) score -= 6;
+
+  for (const keyword of VET_POSITIVE_KEYWORDS) {
+    if (haystack.includes(keyword)) score += 2;
+  }
+  for (const keyword of VET_NEGATIVE_KEYWORDS) {
+    if (haystack.includes(keyword)) score -= 4;
+  }
+  return score;
+}
 
 function formatDate(input: string) {
   const dt = parseISO(input);
@@ -149,6 +230,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
   const [notesOnly, setNotesOnly] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<AppointmentStatusFilter>("pending");
   const [pageByTab, setPageByTab] = useState<Record<Tab, number>>({
     weight: 1,
     appetite: 1,
@@ -162,7 +244,12 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
   const [appetiteForm, setAppetiteForm] = useState({ level: "NORMAL" as AppetiteEntry["level"], date: new Date().toISOString().slice(0, 10), note: "" });
   const [activityForm, setActivityForm] = useState({ minutes: "", activityType: "Đi dạo", date: new Date().toISOString().slice(0, 10), note: "" });
   const [recordForm, setRecordForm] = useState({ recordType: "VACCINE" as PetHealthRecordType, title: "", description: "", performedAt: new Date().toISOString().slice(0, 10), clinicName: "" });
-  const [reminderForm, setReminderForm] = useState({ reminderType: "VACCINE" as PetHealthRecordType, title: "", dueDate: "", note: "" });
+  const [reminderForm, setReminderForm] = useState({ reminderType: "VACCINE" as PetHealthRecordType, title: "", dueDate: "", clinicName: "", note: "" });
+  const [vetGeo, setVetGeo] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [vetRadiusKm, setVetRadiusKm] = useState(5);
+  const [vetSearching, setVetSearching] = useState(false);
+  const [vetSearchError, setVetSearchError] = useState<string | null>(null);
+  const [vetResults, setVetResults] = useState<VetClinicDto[]>([]);
 
   const load = useCallback(async () => {
     if (!isOwner) { setLoading(false); return; }
@@ -259,23 +346,168 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
     if (!reminderForm.title.trim() || !reminderForm.dueDate) return;
     setSaving(true);
     try {
+      const noteParts = [
+        reminderForm.clinicName.trim() ? `Nơi khám: ${reminderForm.clinicName.trim()}` : null,
+        reminderForm.note.trim() ? reminderForm.note.trim() : null,
+      ].filter(Boolean) as string[];
       const created = await petApi.createReminder(petId, {
         reminderType: reminderForm.reminderType,
         title: reminderForm.title.trim(),
         dueDate: reminderForm.dueDate,
-        note: reminderForm.note.trim() || undefined,
+        note: noteParts.length ? noteParts.join(" • ") : undefined,
       });
       setReminders((prev) => [...prev, created].sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
-      setReminderForm({ reminderType: "VACCINE", title: "", dueDate: "", note: "" });
+      window.dispatchEvent(new CustomEvent("pet-reminder-changed"));
+      setReminderForm({ reminderType: "VACCINE", title: "", dueDate: "", clinicName: "", note: "" });
       setShowReminderForm(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Không thể tạo nhắc nhở"); }
     finally { setSaving(false); }
   }
 
+  const requestVetLocation = useCallback(async (): Promise<{ latitude: number; longitude: number } | null> => {
+    if (!navigator.geolocation) {
+      setVetSearchError("Trình duyệt không hỗ trợ GPS.");
+      return null;
+    }
+    return await new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const loc = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+          setVetGeo(loc);
+          setVetSearchError(null);
+          resolve(loc);
+        },
+        () => {
+          setVetSearchError("Không lấy được vị trí hiện tại.");
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+  }, []);
+
+  const searchNearbyVets = useCallback(async () => {
+    setVetSearching(true);
+    setVetSearchError(null);
+    try {
+      const loc = vetGeo ?? (await requestVetLocation());
+      if (!loc) return;
+      const cacheKey = `health-vet-search:${loc.latitude.toFixed(3)}:${loc.longitude.toFixed(3)}:${vetRadiusKm}`;
+      const cachedRaw = typeof window !== "undefined" ? sessionStorage.getItem(cacheKey) : null;
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw) as { ts: number; items: VetClinicDto[] };
+          if (Date.now() - cached.ts <= 5 * 60 * 1000 && Array.isArray(cached.items)) {
+            setVetResults(cached.items);
+            if (!cached.items.length) {
+              setVetSearchError("Không tìm thấy thú y phù hợp trong bán kính đã chọn.");
+            }
+            return;
+          }
+        } catch {
+          // ignore invalid cache
+        }
+      }
+
+      const latDelta = vetRadiusKm / 111;
+      const lonDelta = vetRadiusKm / (111 * Math.max(Math.cos((loc.latitude * Math.PI) / 180), 0.2));
+      const viewBox = `${loc.longitude - lonDelta},${loc.latitude + latDelta},${loc.longitude + lonDelta},${loc.latitude - latDelta}`;
+      const nominatimQueries = [
+        "phong kham thu y",
+        "thú y",
+        "benh vien thu y",
+        "animal hospital",
+        "veterinary clinic",
+        "vet clinic",
+      ];
+
+      const queryResults = await Promise.allSettled(
+        nominatimQueries.map(async (q) => {
+          const controller = new AbortController();
+          const timer = window.setTimeout(() => controller.abort(), 4500);
+          try {
+            const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=80&bounded=1&q=${encodeURIComponent(
+              q
+            )}&viewbox=${encodeURIComponent(viewBox)}&countrycodes=vn&addressdetails=1&extratags=1`;
+            const res = await fetch(url, {
+              signal: controller.signal,
+              headers: { Accept: "application/json" },
+            });
+            if (!res.ok) return [] as VetClinicDto[];
+            const data = (await res.json()) as Array<{
+              lat: string;
+              lon: string;
+              display_name: string;
+              name?: string;
+              place_id: number;
+              category?: string;
+              type?: string;
+            }>;
+            return data
+              .map((row) => {
+                const lat = Number(row.lat);
+                const lon = Number(row.lon);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+                const distance = distanceKm(loc.latitude, loc.longitude, lat, lon);
+                if (distance > vetRadiusKm + 0.25) return null;
+                const candidateName = row.name || row.display_name.split(",")[0] || "Phòng khám thú y";
+                const relevance = vetRelevanceScore({
+                  name: candidateName,
+                  address: row.display_name,
+                  category: row.category,
+                  type: row.type,
+                });
+                if (relevance < 5) return null;
+                return {
+                  id: `nominatim-${row.place_id}`,
+                  name: candidateName,
+                  latitude: lat,
+                  longitude: lon,
+                  distanceKm: distance,
+                  address: row.display_name,
+                  phone: null,
+                  website: null,
+                  openingHours: null,
+                } as VetClinicDto;
+              })
+              .filter((item): item is VetClinicDto => item != null);
+          } finally {
+            window.clearTimeout(timer);
+          }
+        })
+      );
+
+      const merged = queryResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+      const seen = new Set<string>();
+      const vets = merged
+        .filter((item) => {
+          const key = `${item.name.toLowerCase()}-${item.latitude.toFixed(5)}-${item.longitude.toFixed(5)}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, 120);
+
+      setVetResults(vets);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), items: vets }));
+      }
+      if (!vets.length) setVetSearchError("Không tìm thấy thú y phù hợp trong bán kính đã chọn.");
+    } catch (err) {
+      setVetSearchError(err instanceof Error ? err.message : "Không thể tìm thú y gần đây.");
+    } finally {
+      setVetSearching(false);
+    }
+  }, [requestVetLocation, vetGeo, vetRadiusKm]);
+
   async function handleCompleteReminder(reminderId: number) {
     try {
-      await petApi.completeReminder(petId, reminderId);
-      setReminders((prev) => prev.filter((r) => r.id !== reminderId));
+      const updated = await petApi.completeReminder(petId, reminderId);
+      setReminders((prev) =>
+        prev.map((r) => (r.id === reminderId ? updated : r))
+      );
+      window.dispatchEvent(new CustomEvent("pet-reminder-changed"));
     } catch (e) { setError(e instanceof Error ? e.message : "Không thể cập nhật nhắc nhở"); }
   }
 
@@ -337,12 +569,14 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
   const filteredReminders = useMemo(
     () =>
       reminders.filter((entry) => {
+        if (appointmentStatusFilter === "pending" && entry.status !== "PENDING") return false;
+        if (appointmentStatusFilter === "done" && entry.status === "PENDING") return false;
         if (!inTimeRange(entry.dueDate, timeFilter)) return false;
         if (!inSpecificDateRange(entry.dueDate, fromDate, toDate)) return false;
         if (notesOnly && !entry.note?.trim()) return false;
         return true;
       }),
-    [reminders, timeFilter, notesOnly, fromDate, toDate]
+    [reminders, appointmentStatusFilter, timeFilter, notesOnly, fromDate, toDate]
   );
 
   const pagedWeightEntries = useMemo(
@@ -440,12 +674,39 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
   const latestAppetite = filteredAppetiteEntries[0];
 
   // ── Tab definitions ─────────────────────────────────────────────────────────
+  const tabIcons: Record<Tab, JSX.Element> = {
+    weight: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M12 7v10m-4 0h8" />
+      </svg>
+    ),
+    appetite: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21c4.418 0 8-3.582 8-8S16.418 3 12 3 4 6.582 4 11c0 2.89 1.532 5.422 3.828 6.828L12 21Z" />
+      </svg>
+    ),
+    activity: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="m3 12 4-4 4 8 4-6 2 2h4" />
+      </svg>
+    ),
+    appointments: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+      </svg>
+    ),
+    records: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5h6m-6 4h6m-6 4h4m-7 8h12a2 2 0 0 0 2-2V5l-4-2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z" />
+      </svg>
+    ),
+  };
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "weight", label: "Cân nặng" },
     { id: "appetite", label: "Ăn uống" },
     { id: "activity", label: "Hoạt động" },
-    { id: "appointments", label: "Lịch khám", count: filteredReminders.filter((r) => r.status === "PENDING").length },
+    { id: "appointments", label: "Lịch khám", count: filteredReminders.length },
     { id: "records", label: "Lịch sử", count: filteredRecords.length },
   ];
 
@@ -497,21 +758,22 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50/80 p-1">
+      <div className="rounded-2xl border border-slate-200 bg-white/90 p-1.5 shadow-sm">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+            className={`mr-1 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all last:mr-0 ${
               tab === t.id
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             }`}
           >
+            {tabIcons[t.id]}
             {t.label}
             {t.count !== undefined && t.count > 0 ? (
-              <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${tab === t.id ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"}`}>
+              <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${tab === t.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"}`}>
                 {t.count}
               </span>
             ) : null}
@@ -861,6 +1123,28 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
       {/* ── APPOINTMENTS TAB ── */}
       {tab === "appointments" && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lọc trạng thái</span>
+            {([
+              ["pending", "Chưa xong"],
+              ["done", "Đã xong"],
+              ["all", "Tất cả"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setAppointmentStatusFilter(value)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  appointmentStatusFilter === value
+                    ? "bg-rose-500 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Add reminder form */}
           <div className="rounded-2xl border border-slate-200 bg-white">
             <button type="button" onClick={() => setShowReminderForm((v) => !v)}
@@ -904,6 +1188,79 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition focus:border-rose-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-100"
                       required />
                   </label>
+                  <label className="block sm:col-span-2">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">Nơi khám thú y</span>
+                    <input value={reminderForm.clinicName}
+                      onChange={(e) => setReminderForm((f) => ({ ...f, clinicName: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition placeholder:text-slate-400 focus:border-rose-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-100"
+                      placeholder="VD: Bệnh viện thú y PetCare" />
+                  </label>
+                  <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs font-medium text-slate-600">
+                        Bán kính
+                        <select
+                          value={vetRadiusKm}
+                          onChange={(e) => setVetRadiusKm(Number(e.target.value))}
+                          className="ml-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                        >
+                          {[1, 3, 5, 10, 15].map((km) => (
+                            <option key={km} value={km}>
+                              {km} km
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void requestVetLocation()}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                      >
+                        Lấy GPS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void searchNearbyVets()}
+                        disabled={vetSearching}
+                        className="rounded-full bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
+                      >
+                        {vetSearching ? "Đang quét..." : "Quét thú y gần đây"}
+                      </button>
+                    </div>
+                    {vetSearchError ? <p className="mt-2 text-xs text-rose-600">{vetSearchError}</p> : null}
+                    {vetResults.length > 0 ? (
+                      <div className="mt-2 max-h-44 space-y-2 overflow-y-auto">
+                        {vetResults.slice(0, 12).map((vet) => (
+                          <button
+                            key={vet.id}
+                            type="button"
+                            onClick={() =>
+                              setReminderForm((f) => ({
+                                ...f,
+                                clinicName: vet.name,
+                                note: f.note || (vet.address ?? ""),
+                                reminderType: "CHECKUP",
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50"
+                          >
+                            <p className="text-xs font-semibold text-slate-900">{vet.name}</p>
+                            <p className="text-[11px] text-slate-600">
+                              {vet.distanceKm < 1 ? `${(vet.distanceKm * 1000).toFixed(0)} m` : `${vet.distanceKm.toFixed(2)} km`}
+                              {vet.address ? ` · ${vet.address}` : ""}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <label className="block sm:col-span-2">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">Ghi chú</span>
+                    <input value={reminderForm.note}
+                      onChange={(e) => setReminderForm((f) => ({ ...f, note: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition placeholder:text-slate-400 focus:border-rose-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-100"
+                      placeholder="VD: Tiêm mũi nhắc lại, mang sổ tiêm" />
+                  </label>
                 </div>
                 <div className="flex gap-2">
                   <button type="submit" disabled={saving}
@@ -932,14 +1289,14 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
               <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <p className="mt-3 font-medium text-slate-500">Chưa có lịch nhắc nhở nào</p>
-              <p className="mt-1 text-sm text-slate-400">Thêm lịch để không bỏ lỡ các mốc chăm sóc quan trọng.</p>
+              <p className="mt-3 font-medium text-slate-500">Không có lịch phù hợp bộ lọc</p>
+              <p className="mt-1 text-sm text-slate-400">Đổi bộ lọc hoặc thêm lịch mới để xem dữ liệu.</p>
             </div>
           ) : (
             <div className="space-y-2">
               {pagedReminders.map((r) => {
                 const days = daysUntil(r.dueDate);
-                const urgent = days <= 7;
+                const urgent = r.status === "PENDING" && days <= 7;
                 return (
                   <div key={r.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3.5 ${
                     urgent ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
@@ -949,6 +1306,17 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${RECORD_TYPE_COLORS[r.reminderType]}`}>
                           {HEALTH_RECORD_TYPE_LABELS[r.reminderType]}
                         </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            r.status === "PENDING"
+                              ? "bg-amber-100 text-amber-700"
+                              : r.status === "COMPLETED"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {r.status}
+                        </span>
                         {urgent && <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">Sắp tới</span>}
                       </div>
                       <p className="mt-1 font-medium text-slate-900">{r.title}</p>
@@ -957,10 +1325,16 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                         {days === 0 ? " · Hôm nay" : days > 0 ? ` · Còn ${days} ngày` : ` · Quá ${Math.abs(days)} ngày`}
                       </p>
                     </div>
-                    <button type="button" onClick={() => void handleCompleteReminder(r.id)}
-                      className="ml-3 shrink-0 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600">
-                      Đã xong
-                    </button>
+                    {r.status === "PENDING" ? (
+                      <button type="button" onClick={() => void handleCompleteReminder(r.id)}
+                        className="ml-3 shrink-0 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600">
+                        Đã xong
+                      </button>
+                    ) : (
+                      <span className="ml-3 shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+                        Đã lưu lịch sử
+                      </span>
+                    )}
                   </div>
                 );
               })}

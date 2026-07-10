@@ -398,6 +398,23 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
   const activeCount = nearbySessions.filter((s) => s.status === "ACTIVE").length;
   const pendingIncomingCount = meetups.filter((m) => m.status === "PENDING").length;
   const pendingOutgoingCount = sentMeetups.filter((m) => m.status === "PENDING").length;
+  const tabIcons: Record<Tab, JSX.Element> = {
+    map: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2V6Z" />
+      </svg>
+    ),
+    sessions: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h10" />
+      </svg>
+    ),
+    meetups: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a6 6 0 0 1 12 0m8 0a6 6 0 0 0-9-5.2" />
+      </svg>
+    ),
+  };
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "map", label: "Bản đồ" },
@@ -455,21 +472,22 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50/80 p-1">
+      <div className="rounded-2xl border border-slate-200 bg-white/90 p-1.5 shadow-sm">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+            className={`mr-1 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all last:mr-0 ${
               tab === t.id
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             }`}
           >
+            {tabIcons[t.id]}
             {t.label}
             {t.count !== undefined && t.count > 0 ? (
-              <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${tab === t.id ? "bg-rose-500 text-white" : "bg-slate-200 text-slate-600"}`}>
+              <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${tab === t.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"}`}>
                 {t.count}
               </span>
             ) : null}

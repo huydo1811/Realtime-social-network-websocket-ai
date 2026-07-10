@@ -13,6 +13,8 @@ import com.social.pet.domain.entities.PetHealthReminder;
 import com.social.pet.domain.entities.PetReminderStatus;
 
 public interface JpaPetHealthReminderRepository extends JpaRepository<PetHealthReminder, Long> {
+    List<PetHealthReminder> findByPetIdOrderByDueDateDesc(Long petId);
+
     List<PetHealthReminder> findByPetIdAndStatusOrderByDueDateAsc(Long petId, PetReminderStatus status);
 
     @Query("""

@@ -193,9 +193,8 @@ export default function LeftSidebar() {
         </Link>
 
         <Link href="/pets" className={`${base} ${isActive("/pets") ? active : inactive}`}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M14.121 14.121a3 3 0 10-4.242-4.242m11.314 0a9 9 0 11-12.728 0 9 9 0 0112.728 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 11c0-1.657 1.343-3 3-3s3 1.343 3 3" />
+          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M4.5 9C3.67 9 3 10.12 3 11.5S3.67 14 4.5 14 6 12.88 6 11.5 5.33 9 4.5 9Zm4.5-4c-1.1 0-2 1.34-2 3s.9 3 2 3 2-1.34 2-3-.9-3-2-3Zm6 0c-1.1 0-2 1.34-2 3s.9 3 2 3 2-1.34 2-3-.9-3-2-3Zm4.5 4c-.83 0-1.5 1.12-1.5 2.5s.67 2.5 1.5 2.5 1.5-1.12 1.5-2.5-.67-2.5-1.5-2.5ZM12 13c-4 0-7 2-7 4.5C5 19.43 6.57 21 8.5 21c1.34 0 2.5-.78 3.5-1.5 1 .72 2.16 1.5 3.5 1.5 1.93 0 3.5-1.57 3.5-3.5C19 15 16 13 12 13Z" />
           </svg>
           Thú cưng
         </Link>

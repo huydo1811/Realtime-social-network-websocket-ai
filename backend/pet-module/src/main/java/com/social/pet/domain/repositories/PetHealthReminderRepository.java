@@ -17,6 +17,8 @@ public interface PetHealthReminderRepository {
 
     void delete(PetHealthReminder reminder);
 
+    List<PetHealthReminder> findByPetIdOrderByDueDateDesc(Long petId);
+
     List<PetHealthReminder> findByPetIdAndStatusOrderByDueDateAsc(Long petId, PetReminderStatus status);
 
     List<PetHealthReminder> findUpcomingByOwnerUserId(Long ownerUserId, LocalDate fromDate, PetReminderStatus status);

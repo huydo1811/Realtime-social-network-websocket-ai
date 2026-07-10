@@ -25,6 +25,8 @@ public class PetHealthReminderRepositoryImpl implements PetHealthReminderReposit
 
     @Override public void delete(PetHealthReminder reminder) { jpaRepository.delete(reminder); }
 
+    @Override public List<PetHealthReminder> findByPetIdOrderByDueDateDesc(Long petId) { return jpaRepository.findByPetIdOrderByDueDateDesc(Objects.requireNonNull(petId)); }
+
     @Override public List<PetHealthReminder> findByPetIdAndStatusOrderByDueDateAsc(Long petId, PetReminderStatus status) { return jpaRepository.findByPetIdAndStatusOrderByDueDateAsc(petId, status); }
 
     @Override public List<PetHealthReminder> findUpcomingByOwnerUserId(Long ownerUserId, LocalDate fromDate, PetReminderStatus status) { return jpaRepository.findUpcomingByOwnerUserId(ownerUserId, fromDate, status); }

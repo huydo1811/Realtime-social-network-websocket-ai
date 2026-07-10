@@ -19,7 +19,12 @@ import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import type { PostDto } from "@/types/post";
 import type { PetDto } from "@/types/pet";
 
-type Tab = "posts" | "health" | "walk" | "assistant" | "diagnosis";
+type Tab = "posts" | "health" | "walk" | "assistant";
+type TabMeta = {
+  id: Tab;
+  label: string;
+  icon: JSX.Element;
+};
 
 function toRelativeDate(input: string): string {
   const dt = new Date(input);
@@ -69,6 +74,44 @@ export default function PetDetailPage() {
   }, []);
 
   const isOwner = pet != null && actorId != null && pet.ownerUserId === actorId;
+  const tabs: TabMeta[] = [
+    {
+      id: "posts",
+      label: "Bài viết",
+      icon: (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+        </svg>
+      ),
+    },
+    {
+      id: "health",
+      label: "Sức khỏe",
+      icon: (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h4l2-4 4 8 2-4h4" />
+        </svg>
+      ),
+    },
+    {
+      id: "walk",
+      label: "Đi dạo",
+      icon: (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM5 22l3-7 3 2 2-5 3 2 3 8" />
+        </svg>
+      ),
+    },
+    {
+      id: "assistant",
+      label: "Trợ lý & AI",
+      icon: (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2M5 12H3m18 0h-2M6.5 6.5 5 5m14 14-1.5-1.5M6.5 17.5 5 19m14-14-1.5 1.5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+        </svg>
+      ),
+    },
+  ];
 
   const load = useCallback(async () => {
     if (!Number.isFinite(petId)) {
@@ -122,92 +165,54 @@ export default function PetDetailPage() {
           </div>
         ) : pet ? (
           <>
-            <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex items-start gap-4 p-5">
+            <div className="mb-6 overflow-hidden rounded-3xl border border-rose-100 bg-gradient-to-br from-white via-rose-50/40 to-violet-50/40 shadow-sm">
+              <div className="flex items-start gap-4 p-6">
                 {pet.avatarUrl ? (
                   <Image
                     src={pet.avatarUrl}
                     alt={pet.name}
                     width={80}
                     height={80}
-                    className="h-20 w-20 rounded-full object-cover"
+                    className="h-24 w-24 rounded-2xl object-cover shadow-sm ring-2 ring-white"
                   />
                 ) : (
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-rose-100 text-2xl font-bold text-rose-600">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-rose-100 text-2xl font-bold text-rose-600">
                     {pet.name[0]?.toUpperCase() ?? "P"}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-2xl font-bold text-slate-900">{pet.name}</h1>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <h1 className="text-3xl font-bold tracking-tight text-slate-900">{pet.name}</h1>
+                  <p className="mt-1 text-sm text-slate-600">
                     {[pet.species, pet.breed, pet.gender !== "UNKNOWN" ? pet.gender : null]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
-                  {pet.bio ? <p className="mt-3 text-sm text-slate-700">{pet.bio}</p> : null}
+                  {pet.bio ? <p className="mt-3 text-sm leading-relaxed text-slate-700">{pet.bio}</p> : null}
                   {pet.ownerName ? (
-                    <p className="mt-2 text-xs text-slate-500">Chủ nuôi: {pet.ownerName}</p>
+                    <p className="mt-2 inline-flex rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-slate-500">Chủ nuôi: {pet.ownerName}</p>
                   ) : null}
                 </div>
               </div>
             </div>
 
-            <div className="mb-4 flex gap-2 border-b border-slate-200">
-              <button
-                type="button"
-                onClick={() => setTab("posts")}
-                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
-                  tab === "posts"
-                    ? "border-b-2 border-rose-500 text-rose-600"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Bài viết
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("health")}
-                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
-                  tab === "health"
-                    ? "border-b-2 border-rose-500 text-rose-600"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Sức khỏe
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("walk")}
-                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
-                  tab === "walk"
-                    ? "border-b-2 border-rose-500 text-rose-600"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Đi dạo
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("assistant")}
-                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
-                  tab === "assistant"
-                    ? "border-b-2 border-rose-500 text-rose-600"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Trợ lý & thú y
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("diagnosis")}
-                className={`cursor-pointer px-4 py-2 text-sm font-semibold ${
-                  tab === "diagnosis"
-                    ? "border-b-2 border-rose-500 text-rose-600"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                AI chẩn đoán
-              </button>
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white/90 p-1.5 shadow-sm backdrop-blur">
+              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+                {tabs.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTab(item.id)}
+                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                      tab === item.id
+                        ? "bg-gradient-to-r from-rose-500 to-violet-500 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {tab === "posts" ? (
@@ -232,10 +237,11 @@ export default function PetDetailPage() {
               <PetHealthSection petId={petId} isOwner={isOwner} />
             ) : tab === "walk" ? (
               <PetWalkSection petId={petId} isOwner={isOwner} />
-            ) : tab === "assistant" ? (
-              <PetAssistantSection petId={petId} petName={pet?.name ?? "Thú cưng"} species={pet?.species ?? "OTHER"} isOwner={isOwner} />
             ) : (
-              <PetDiagnosisSection petId={petId} isOwner={isOwner} />
+              <div className="space-y-6">
+                <PetAssistantSection petId={petId} petName={pet?.name ?? "Thú cưng"} species={pet?.species ?? "OTHER"} isOwner={isOwner} />
+                <PetDiagnosisSection petId={petId} isOwner={isOwner} />
+              </div>
             )}
           </>
         ) : null}

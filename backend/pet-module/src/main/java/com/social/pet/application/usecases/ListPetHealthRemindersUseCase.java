@@ -7,7 +7,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.social.pet.application.services.PetOwnerService;
 import com.social.pet.domain.entities.PetHealthReminder;
-import com.social.pet.domain.entities.PetReminderStatus;
 import com.social.pet.domain.repositories.PetHealthReminderRepository;
 
 @Service
@@ -25,6 +24,6 @@ public class ListPetHealthRemindersUseCase {
     @Transactional(readOnly = true)
     public List<PetHealthReminder> execute(Long actorId, Long petId) {
         petOwnerService.requireOwnedPet(actorId, petId);
-        return reminderRepository.findByPetIdAndStatusOrderByDueDateAsc(petId, PetReminderStatus.PENDING);
+        return reminderRepository.findByPetIdOrderByDueDateDesc(petId);
     }
 }

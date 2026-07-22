@@ -34,6 +34,11 @@ export default function ModerationQueueCard({ items }: Props) {
             <p className="mt-2 text-xs text-slate-500">Tạo lúc {item.createdAt}</p>
           </div>
         ))}
+        {items.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-500">
+            Không có mục cần xử lý trong hàng chờ.
+          </div>
+        ) : null}
       </div>
     </article>
   );

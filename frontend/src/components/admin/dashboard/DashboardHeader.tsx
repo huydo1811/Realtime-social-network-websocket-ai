@@ -7,9 +7,10 @@ import { useRouter } from "next/navigation";
 type Props = {
   query?: string;
   setQuery?: (v: string) => void;
+  onRefresh?: () => void;
 };
 
-export default function DashboardHeader({ query = "", setQuery }: Props) {
+export default function DashboardHeader({ query = "", setQuery, onRefresh }: Props) {
   const router = useRouter();
   const [openAccountMenu, setOpenAccountMenu] = useState(false);
 
@@ -35,10 +36,16 @@ export default function DashboardHeader({ query = "", setQuery }: Props) {
                 placeholder="Tìm báo cáo..."
                 className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-rose-100 md:w-64"
               />
-              <button className="cursor-pointer h-10 rounded-xl bg-rose-500 px-4 text-sm font-medium text-white hover:bg-rose-600 transition-colors">
-                Làm mới
-              </button>
             </>
+          )}
+          {setQuery && onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="cursor-pointer h-10 rounded-xl bg-rose-500 px-4 text-sm font-medium text-white transition-colors hover:bg-rose-600"
+            >
+                Làm mới
+            </button>
           )}
 
           <div className="relative ml-auto md:ml-1">

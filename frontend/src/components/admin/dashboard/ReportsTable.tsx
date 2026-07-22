@@ -1,7 +1,12 @@
+import type { ReactNode } from "react";
 import type { ReportItem } from "./types";
 
 type Props = {
   reports: ReportItem[];
+  onExportCsv?: () => void;
+  onToggleAdvancedFilters?: () => void;
+  advancedFiltersOpen?: boolean;
+  children?: ReactNode;
 };
 
 function statusClass(status: ReportItem["status"]) {
@@ -10,16 +15,35 @@ function statusClass(status: ReportItem["status"]) {
   return "bg-emerald-100 text-emerald-700";
 }
 
-export default function ReportsTable({ reports }: Props) {
+export default function ReportsTable({
+  reports,
+  onExportCsv,
+  onToggleAdvancedFilters,
+  advancedFiltersOpen = false,
+  children,
+}: Props) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-base font-semibold">Danh sách báo cáo gần đây</h3>
         <div className="flex gap-2">
-          <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-100">Xuất CSV</button>
-          <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-100">Bộ lọc nâng cao</button>
+          <button
+            type="button"
+            onClick={onExportCsv}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-100"
+          >
+            Xuất CSV
+          </button>
+          <button
+            type="button"
+            onClick={onToggleAdvancedFilters}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-100"
+          >
+            {advancedFiltersOpen ? "Ẩn bộ lọc nâng cao" : "Bộ lọc nâng cao"}
+          </button>
         </div>
       </div>
+      {advancedFiltersOpen ? <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">{children}</div> : null}
 
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">

@@ -12,6 +12,9 @@ export type ReportItem = {
   reason: string;
   status: "New" | "Reviewing" | "Resolved";
   createdAt: string;
+  createdAtIso?: string;
+  reporterUserId?: number;
+  targetAuthorUserId?: number;
 };
 
 export type QueueItem = {

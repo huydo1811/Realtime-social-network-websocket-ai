@@ -2,6 +2,7 @@ import { API_URL, apiAuthFetch } from "@/lib/api/userApi";
 import type {
   ContentReportDto,
   CreatePostPayload,
+  PetPostSocialSummaryDto,
   PostCommentDto,
   PostDto,
   PostPage,
@@ -172,6 +173,12 @@ export const postApi = {
     if (!res.ok) throw await parseError(res, "Không thể tải bài viết của thú cưng");
     const data = (await res.json()) as BackendPage<PostDto>;
     return mapPage(data);
+  },
+
+  async getPetSocialSummary(petId: number): Promise<PetPostSocialSummaryDto> {
+    const res = await apiAuthFetch(`${API_URL}/posts/pet/${petId}/social-summary`);
+    if (!res.ok) throw await parseError(res, "Không thể tải tổng quan social của thú cưng");
+    return (await res.json()) as PetPostSocialSummaryDto;
   },
 
   async adminHide(postId: number): Promise<PostDto> {

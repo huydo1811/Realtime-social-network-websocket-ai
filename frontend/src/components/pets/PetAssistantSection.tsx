@@ -348,6 +348,7 @@ function createReply(
 export default function PetAssistantSection({ petId, petName, species, isOwner }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>(QUICK_PROMPTS);
+  const [showQuickSuggestions, setShowQuickSuggestions] = useState(false);
   const [draft, setDraft] = useState("");
   const [latestDiagnosis, setLatestDiagnosis] = useState<PetDiagnosisDto | null>(null);
   const [diagnosisCtx, setDiagnosisCtx] = useState<DiagnosisContext>({
@@ -541,7 +542,16 @@ export default function PetAssistantSection({ petId, petName, species, isOwner }
             </div>
 
             {/* Suggestions */}
-            {suggestions.length > 0 && (
+            <div className="px-5 pb-3">
+              <button
+                type="button"
+                onClick={() => setShowQuickSuggestions((v) => !v)}
+                className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/15"
+              >
+                {showQuickSuggestions ? "Ẩn gợi ý nhanh" : "Hiện gợi ý nhanh"}
+              </button>
+            </div>
+            {showQuickSuggestions && suggestions.length > 0 && (
               <div className="flex flex-wrap gap-2 px-5 pb-3">
                 {suggestions.map((prompt) => (
                   <button key={prompt} type="button" onClick={() => sendMessage(prompt)} disabled={diagnosisLoading}
@@ -576,6 +586,7 @@ export default function PetAssistantSection({ petId, petName, species, isOwner }
               <p className="font-medium text-slate-900">Mẹo sử dụng</p>
               <p>Nếu bé có dấu hiệu cấp cứu (khó thở, co giật, sốt rất cao), đi thẳng thú y thay vì chờ chat.</p>
               <p>Bắt đầu chẩn đoán để AI thu thập triệu chứng và gợi ý bệnh tiềm năng cho {petName}.</p>
+              <p>Hiện tại trợ lý chạy theo luồng hỏi đáp triage + dữ liệu chẩn đoán đã lưu, chưa fine-tune mô hình riêng.</p>
             </div>
           </div>
       </div>

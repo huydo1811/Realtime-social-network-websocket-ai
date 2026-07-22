@@ -14,9 +14,10 @@ type Props = {
     visibility: "PUBLIC" | "FRIENDS" | "PRIVATE";
     petId?: number;
   }) => Promise<void> | void;
+  initialPetId?: number;
 };
 
-export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) {
+export default function PostComposer({ avatarUrl, pets = [], onSubmit, initialPetId }: Props) {
   const [text, setText] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | undefined>(undefined);
   const [mediaName, setMediaName] = useState("");
@@ -25,7 +26,7 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
   const [visibility, setVisibility] = useState<"PUBLIC" | "FRIENDS" | "PRIVATE">(
     "PUBLIC"
   );
-  const [petId, setPetId] = useState<string>("");
+  const [selectedPetId, setSelectedPetId] = useState<number | "">("");
 
   useEffect(() => {
     const saved = localStorage.getItem("defaultPostVisibility");
@@ -33,6 +34,12 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
       setVisibility(saved);
     }
   }, []);
+  useEffect(() => {
+    if (!pets.length) return;
+    if (initialPetId && pets.some((pet) => pet.id === initialPetId)) {
+      setSelectedPetId(initialPetId);
+    }
+  }, [initialPetId, pets]);
   const [posting, setPosting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -56,16 +63,21 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
     setPosting(true);
     setNotice(null);
     try {
+      const selectedPet = pets.find((pet) => pet.id === selectedPetId);
+      const petTags = selectedPet
+        ? `🐾 Cùng bé: @pet_${selectedPet.id}_${selectedPet.name.replace(/\s+/g, "_")}`
+        : "";
+      const finalContent = [content, petTags].filter(Boolean).join("\n\n");
       await onSubmit({
-        content,
+        content: finalContent,
         mediaUrl,
         visibility,
-        petId: petId ? Number(petId) : undefined,
+        petId: selectedPet?.id,
       });
       setText("");
       setMediaUrl(undefined);
       setMediaName("");
-      setPetId("");
+      setSelectedPetId("");
       setVisibility("PUBLIC");
       if (mediaInputRef.current) mediaInputRef.current.value = "";
     } catch (err) {
@@ -166,11 +178,13 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit }: Props) 
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500">Thú cưng:</span>
                     <select
-                      value={petId}
-                      onChange={(e) => setPetId(e.target.value)}
-                      className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 outline-none focus:ring-2 focus:ring-rose-100"
+                      value={selectedPetId}
+                      onChange={(e) =>
+                        setSelectedPetId(e.target.value ? Number(e.target.value) : "")
+                      }
+                      className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-rose-100"
                     >
-                      <option value="">Không gắn</option>
+                      <option value="">Không gắn thẻ thú cưng</option>
                       {pets.map((pet) => (
                         <option key={pet.id} value={pet.id}>
                           {pet.name}

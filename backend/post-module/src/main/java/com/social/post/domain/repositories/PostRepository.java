@@ -17,4 +17,12 @@ public interface PostRepository {
     Page<Post> findFeed(Long actorId, Pageable pageable);
 
     Page<Post> findByPetId(Long petId, Pageable pageable);
+
+    long countVisibleByPetId(Long petId, boolean ownerView, boolean friendView);
+
+    long countVisibleByPetIdSince(Long petId, boolean ownerView, boolean friendView, java.time.LocalDateTime since);
+
+    long countVisibleMediaByPetId(Long petId, boolean ownerView, boolean friendView);
+
+    java.time.LocalDateTime latestVisibleCreatedAtByPetId(Long petId, boolean ownerView, boolean friendView);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { postApi } from "@/lib/api/postApi";
 import { petApi } from "@/lib/api/petApi";
@@ -122,6 +122,7 @@ export default function ProfileFeedSection({
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [posts, setPosts] = useState<FeedPost[]>(initialPosts ?? []);
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
   const [commentsMap, setCommentsMap] = useState<Record<string, CommentItem[]>>({});
@@ -155,6 +156,12 @@ export default function ProfileFeedSection({
     details: string[];
   }>({ open: false, title: "", details: [] });
   const [myPets, setMyPets] = useState<PetDto[]>([]);
+  const preselectedPetId = useMemo(() => {
+    const raw = searchParams.get("petId");
+    if (!raw) return undefined;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }, [searchParams]);
 
   const activePost = useMemo(
     () => posts.find((p) => p.id === activePostId) || null,
@@ -673,7 +680,7 @@ export default function ProfileFeedSection({
     <section className="mx-auto mb-8 w-full max-w-3xl space-y-4">
       {!readonly && (
         <div>
-          <PostComposer avatarUrl={avatarUrl} pets={myPets} onSubmit={createPost} />
+          <PostComposer avatarUrl={avatarUrl} pets={myPets} onSubmit={createPost} initialPetId={preselectedPetId} />
         </div>
       )}
 

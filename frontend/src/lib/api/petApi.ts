@@ -3,6 +3,9 @@ import type {
   CreatePetPayload,
   PetBreedDto,
   PetDto,
+  PetSocialBadgeDto,
+  PetSocialPromptDto,
+  PetSocialHealthSummaryDto,
   PetSpecies,
   UpdatePetPayload,
 } from "@/types/pet";
@@ -58,6 +61,24 @@ export const petApi = {
     const res = await apiAuthFetch(`${API_URL}/pets/${petId}`);
     if (!res.ok) throw await parseError(res, "Không thể tải hồ sơ thú cưng");
     return (await res.json()) as PetDto;
+  },
+
+  async getSocialHealthSummary(petId: number): Promise<PetSocialHealthSummaryDto> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/social-health-summary`);
+    if (!res.ok) throw await parseError(res, "Không thể tải tổng quan sức khỏe xã hội");
+    return (await res.json()) as PetSocialHealthSummaryDto;
+  },
+
+  async getSocialPrompts(petId: number): Promise<PetSocialPromptDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/social-prompts`);
+    if (!res.ok) throw await parseError(res, "Không thể tải gợi ý chia sẻ xã hội");
+    return (await res.json()) as PetSocialPromptDto[];
+  },
+
+  async getSocialBadges(petId: number): Promise<PetSocialBadgeDto[]> {
+    const res = await apiAuthFetch(`${API_URL}/pets/${petId}/social-badges`);
+    if (!res.ok) throw await parseError(res, "Không thể tải huy hiệu thú cưng");
+    return (await res.json()) as PetSocialBadgeDto[];
   },
 
   async create(payload: CreatePetPayload): Promise<PetDto> {

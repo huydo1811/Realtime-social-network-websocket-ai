@@ -92,3 +92,10 @@ export interface ContentReportDto {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface PetPostSocialSummaryDto {
+  totalPostCount: number;
+  recentPost7dCount: number;
+  mediaPostCount: number;
+  latestPostAt?: string | null;
+}

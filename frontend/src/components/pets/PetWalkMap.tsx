@@ -45,6 +45,17 @@ function MapSync({ center }: { center: [number, number] }) {
 }
 
 const SESSION_COLORS = ["#f43f5e", "#f59e0b", "#10b981", "#6366f1", "#ec4899", "#06b6d4"];
+const WALK_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Đang đi dạo",
+  PLANNED: "Đã lên lịch",
+  FINISHED: "Đã kết thúc",
+  CANCELLED: "Đã hủy",
+};
+const VISIBILITY_LABELS: Record<string, string> = {
+  PUBLIC: "Công khai",
+  FRIENDS: "Bạn bè",
+  PRIVATE: "Riêng tư",
+};
 
 function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
   const earthRadiusKm = 6371;
@@ -123,20 +134,22 @@ export default function PetWalkMap({
             position={[session.currentLatitude, session.currentLongitude]}
             icon={createPin(
               SESSION_COLORS[index % SESSION_COLORS.length],
-              session.petName ?? `Pet`
+              session.petName ?? "Thú cưng"
             )}
           >
             <Popup>
               <div className="min-w-[180px]">
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-slate-900">{session.petName ?? `Pet #${session.petId}`}</p>
+                  <p className="font-semibold text-slate-900">{session.petName ?? `Thú cưng #${session.petId}`}</p>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                     session.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
                   }`}>
-                    {session.status}
+                    {WALK_STATUS_LABELS[session.status] ?? session.status}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">{session.routeName ?? "Đi dạo tự do"} · {session.visibility}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {session.routeName ?? "Đi dạo tự do"} · {VISIBILITY_LABELS[session.visibility] ?? session.visibility}
+                </p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   Quãng đường: {distanceKm(
                     session.startLatitude,

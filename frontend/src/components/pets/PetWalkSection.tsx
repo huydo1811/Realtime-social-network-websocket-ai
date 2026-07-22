@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
 import { petApi } from "@/lib/api/petApi";
+import { postApi } from "@/lib/api/postApi";
+import { getUserById } from "@/lib/api/userApi";
+import { uploadToCloudinary } from "@/lib/cloudinary/upload";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { initChatSocket, subscribePetWalkUser } from "@/lib/socket/chatSocket";
@@ -17,6 +20,14 @@ import type { PetWalkRealtimeEvent } from "@/types/petWalkRealtime";
 import type { PetVisibility } from "@/types/pet";
 
 type Tab = "map" | "sessions" | "meetups";
+type ShareTone = "friendly" | "expert" | "fun";
+type ShareTemplate = "diary" | "alert" | "milestone";
+type WalkShareDraft = {
+  sessionId: number;
+  title: string;
+  content: string;
+  visibility: "PUBLIC" | "FRIENDS" | "PRIVATE";
+};
 
 type Props = {
   petId: number;
@@ -78,6 +89,15 @@ function normalizeDateIso(input: unknown): string {
   return new Date().toISOString();
 }
 
+function normalizePetTag(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
 const PetWalkMap = dynamic(() => import("@/components/pets/PetWalkMap"), {
   ssr: false,
   loading: () => (
@@ -99,12 +119,29 @@ const STATUS_STYLES: Record<string, string> = {
   FINISHED: "bg-slate-100 text-slate-500",
   CANCELLED: "bg-rose-100 text-rose-600",
 };
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Đang đi dạo",
+  PLANNED: "Đã lên lịch",
+  FINISHED: "Đã kết thúc",
+  CANCELLED: "Đã hủy",
+};
 
 const MEETUP_STYLES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-700",
   ACCEPTED: "bg-emerald-100 text-emerald-700",
   DECLINED: "bg-rose-100 text-rose-600",
   CANCELLED: "bg-slate-100 text-slate-400",
+};
+const MEETUP_LABELS: Record<string, string> = {
+  PENDING: "Đang chờ",
+  ACCEPTED: "Đã đồng ý",
+  DECLINED: "Đã từ chối",
+  CANCELLED: "Đã hủy",
+};
+const VISIBILITY_LABELS: Record<PetVisibility, string> = {
+  PUBLIC: "Công khai",
+  FRIENDS: "Bạn bè",
+  PRIVATE: "Riêng tư",
 };
 
 export default function PetWalkSection({ petId, isOwner }: Props) {
@@ -118,6 +155,18 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sharingSessionId, setSharingSessionId] = useState<number | null>(null);
+  const [shareTone, setShareTone] = useState<ShareTone>("friendly");
+  const [shareTemplate, setShareTemplate] = useState<ShareTemplate>("diary");
+  const [usernamesByUserId, setUsernamesByUserId] = useState<Record<number, string>>({});
+  const [finishShareSession, setFinishShareSession] = useState<PetWalkSessionDto | null>(null);
+  const [finishShareText, setFinishShareText] = useState("");
+  const [finishShareMediaUrl, setFinishShareMediaUrl] = useState<string | undefined>(undefined);
+  const [finishShareMediaName, setFinishShareMediaName] = useState("");
+  const [finishShareUploading, setFinishShareUploading] = useState(false);
+  const [finishSharePosting, setFinishSharePosting] = useState(false);
+  const [finishShareVisibility, setFinishShareVisibility] = useState<"PUBLIC" | "FRIENDS" | "PRIVATE">("FRIENDS");
+  const [walkShareDraft, setWalkShareDraft] = useState<WalkShareDraft | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoMessage, setGeoMessage] = useState<string | null>(null);
@@ -358,6 +407,11 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
       setJoinedSessions((prev) => prev.map((item) => (item.id === session.id ? finished : item)));
       setNearbySessions((prev) => prev.filter((item) => item.id !== session.id));
       setNotice("Đã kết thúc phiên đi dạo.");
+      setFinishShareSession(finished);
+      setFinishShareText(buildWalkShareText(finished));
+      setFinishShareMediaUrl(undefined);
+      setFinishShareMediaName("");
+      setFinishShareVisibility("FRIENDS");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể kết thúc phiên đi dạo");
     }
@@ -391,6 +445,198 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể phản hồi lời mời");
+    }
+  }
+
+  const acceptedPartnerIdsByWalkId = useMemo(() => {
+    const map = new Map<number, number[]>();
+    const pushId = (walkId: number, userId: number) => {
+      const list = map.get(walkId) ?? [];
+      if (!list.includes(userId)) list.push(userId);
+      map.set(walkId, list);
+    };
+    meetups.forEach((item) => {
+      if (item.status !== "ACCEPTED") return;
+      pushId(item.walkSessionId, item.requesterUserId);
+    });
+    sentMeetups.forEach((item) => {
+      if (item.status !== "ACCEPTED") return;
+      pushId(item.walkSessionId, item.targetUserId);
+    });
+    return map;
+  }, [meetups, sentMeetups]);
+
+  const acceptedPetNamesByWalkId = useMemo(() => {
+    const map = new Map<number, string[]>();
+    const pushPet = (walkId: number, petName?: string | null) => {
+      const clean = petName?.trim();
+      if (!clean) return;
+      const list = map.get(walkId) ?? [];
+      if (!list.includes(clean)) list.push(clean);
+      map.set(walkId, list);
+    };
+    meetups.forEach((item) => {
+      if (item.status !== "ACCEPTED") return;
+      pushPet(item.walkSessionId, item.petName);
+    });
+    sentMeetups.forEach((item) => {
+      if (item.status !== "ACCEPTED") return;
+      pushPet(item.walkSessionId, item.petName);
+    });
+    return map;
+  }, [meetups, sentMeetups]);
+
+  useEffect(() => {
+    const uniqueIds = new Set<number>();
+    meetups.forEach((item) => {
+      if (item.requesterUserId) uniqueIds.add(item.requesterUserId);
+    });
+    sentMeetups.forEach((item) => {
+      if (item.targetUserId) uniqueIds.add(item.targetUserId);
+    });
+    if (!uniqueIds.size) return;
+
+    let cancelled = false;
+    void Promise.all(
+      Array.from(uniqueIds).map(async (id) => {
+        if (usernamesByUserId[id]) return null;
+        try {
+          const profile = await getUserById(String(id));
+          return { id, username: profile.username };
+        } catch {
+          return null;
+        }
+      })
+    ).then((items) => {
+      if (cancelled) return;
+      const next: Record<number, string> = {};
+      items.forEach((item) => {
+        if (item?.username) next[item.id] = item.username;
+      });
+      if (Object.keys(next).length) {
+        setUsernamesByUserId((prev) => ({ ...prev, ...next }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [meetups, sentMeetups, usernamesByUserId]);
+
+  function formatPartnerTags(walkId: number): string {
+    const ids = acceptedPartnerIdsByWalkId.get(walkId) ?? [];
+    const tags = ids.map((id) => {
+      const username = usernamesByUserId[id];
+      return username ? `@${username}` : `@user_${id}`;
+    });
+    return tags.join(" ");
+  }
+
+  function formatPartnerPetTags(walkId: number): string {
+    const names = acceptedPetNamesByWalkId.get(walkId) ?? [];
+    return names.map((name) => `@pet_${normalizePetTag(name)}`).join(" ");
+  }
+
+  function buildWalkShareText(session: PetWalkSessionDto): string {
+    const distance = distanceKm(
+      session.startLatitude,
+      session.startLongitude,
+      session.currentLatitude,
+      session.currentLongitude
+    );
+    const partnerTags = formatPartnerTags(session.id);
+    const partnerPetTags = formatPartnerPetTags(session.id);
+    const base =
+      shareTemplate === "alert"
+        ? `📣 Vừa hoàn thành phiên đi dạo: ${session.routeName ?? "Route tự do"}`
+        : shareTemplate === "milestone"
+          ? `🏅 Thành tích đi dạo mới của ${session.petName ?? "pet"}`
+          : `📔 Nhật ký đi dạo của ${session.petName ?? "pet"}`;
+    const toneLine =
+      shareTone === "expert"
+        ? "Dữ liệu vận động đã được cập nhật vào hồ sơ sức khỏe."
+        : shareTone === "fun"
+          ? "Một buổi cardio vui vẻ cho boss 🐾"
+          : "Hôm nay tụi mình vừa có một buổi đi dạo rất ổn.";
+
+    return [
+      base,
+      toneLine,
+      `Quãng đường: ${distance < 1 ? `${(distance * 1000).toFixed(0)}m` : `${distance.toFixed(2)}km`}`,
+      `Thời gian: ${formatWalkDuration(session.startedAt, session.endedAt)}`,
+      partnerTags ? `Đi dạo cùng: ${partnerTags}` : null,
+      partnerPetTags ? `Pet tham gia: ${partnerPetTags}` : null,
+      "#PetWalk #PetSocial",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function shareWalkSession(session: PetWalkSessionDto) {
+    setWalkShareDraft({
+      sessionId: session.id,
+      title: "Xem trước chia sẻ phiên đi dạo",
+      content: buildWalkShareText(session),
+      visibility: "FRIENDS",
+    });
+  }
+
+  async function confirmWalkShareDraft() {
+    if (!walkShareDraft) return;
+    setSharingSessionId(walkShareDraft.sessionId);
+    setError(null);
+    try {
+      await postApi.create({
+        content: walkShareDraft.content,
+        visibility: walkShareDraft.visibility,
+        petId,
+      });
+      setNotice("Đã chia sẻ phiên đi dạo lên bảng tin.");
+      setWalkShareDraft(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể chia sẻ phiên đi dạo.");
+    } finally {
+      setSharingSessionId(null);
+    }
+  }
+
+  async function handleFinishShareMedia(file?: File) {
+    if (!file) return;
+    setFinishShareUploading(true);
+    setError(null);
+    try {
+      const uploaded = await uploadToCloudinary(file);
+      setFinishShareMediaUrl(uploaded.secureUrl);
+      setFinishShareMediaName(file.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể tải ảnh/video.");
+    } finally {
+      setFinishShareUploading(false);
+    }
+  }
+
+  async function submitFinishShare() {
+    if (!finishShareSession) return;
+    const content = finishShareText.trim();
+    if (!content && !finishShareMediaUrl) return;
+    setFinishSharePosting(true);
+    setError(null);
+    try {
+      await postApi.create({
+        content,
+        mediaUrl: finishShareMediaUrl,
+        visibility: finishShareVisibility,
+        petId,
+      });
+      setNotice("Đã đăng bài đi dạo lên bảng tin.");
+      setFinishShareSession(null);
+      setFinishShareText("");
+      setFinishShareMediaUrl(undefined);
+      setFinishShareMediaName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể đăng bài đi dạo.");
+    } finally {
+      setFinishSharePosting(false);
     }
   }
 
@@ -495,6 +741,34 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Template chia sẻ</span>
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <span>Template</span>
+          <select
+            value={shareTemplate}
+            onChange={(e) => setShareTemplate(e.target.value as ShareTemplate)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+          >
+            <option value="diary">Nhật ký</option>
+            <option value="alert">Thông báo</option>
+            <option value="milestone">Thành tích</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <span>Giọng văn</span>
+          <select
+            value={shareTone}
+            onChange={(e) => setShareTone(e.target.value as ShareTone)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+          >
+            <option value="friendly">Thân thiện</option>
+            <option value="expert">Chuyên nghiệp</option>
+            <option value="fun">Vui vẻ</option>
+          </select>
+        </label>
+      </div>
+
       {/* ── MAP TAB ── */}
       {tab === "map" && (
         <div className="space-y-4">
@@ -551,13 +825,13 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                     <div key={session.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-medium text-slate-900">{session.petName ?? `Pet #${session.petId}`}</p>
+                          <p className="truncate font-medium text-slate-900">{session.petName ?? `Thú cưng #${session.petId}`}</p>
                           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLES[session.status] ?? "bg-slate-100 text-slate-500"}`}>
-                            {session.status}
+                            {STATUS_LABELS[session.status] ?? session.status}
                           </span>
                         </div>
                         <p className="mt-0.5 truncate text-xs text-slate-400">
-                          {session.routeName ?? "Đi dạo tự do"} · {session.visibility}
+                          {session.routeName ?? "Đi dạo tự do"} · {VISIBILITY_LABELS[session.visibility]}
                         </p>
                         {sentMeetup ? (
                           <p className={`mt-1 text-[11px] font-medium ${
@@ -569,7 +843,7 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                                   ? "text-rose-600"
                                   : "text-slate-500"
                           }`}>
-                            Lời mời của bạn: {sentMeetup.status}
+                            Lời mời của bạn: {MEETUP_LABELS[sentMeetup.status] ?? sentMeetup.status}
                           </p>
                         ) : null}
                       </div>
@@ -620,6 +894,59 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
       {/* ── SESSIONS TAB ── */}
       {tab === "sessions" && (
         <div className="space-y-4">
+          {finishShareSession && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/50 px-4 py-4">
+              <p className="mb-2 text-sm font-semibold text-violet-900">Đăng nhanh sau khi kết thúc phiên đi dạo</p>
+              <textarea
+                value={finishShareText}
+                onChange={(e) => setFinishShareText(e.target.value)}
+                rows={4}
+                className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-violet-100"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  {finishShareUploading ? "Đang tải..." : "Thêm ảnh/video"}
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={(e) => void handleFinishShareMedia(e.target.files?.[0])}
+                  />
+                </label>
+                {finishShareMediaName ? <span className="text-xs text-slate-500">{finishShareMediaName}</span> : null}
+                <label className="text-xs text-slate-600">
+                  Quyền xem
+                  <select
+                    value={finishShareVisibility}
+                    onChange={(e) => setFinishShareVisibility(e.target.value as "PUBLIC" | "FRIENDS" | "PRIVATE")}
+                    className="ml-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                  >
+                    <option value="PUBLIC">Công khai</option>
+                    <option value="FRIENDS">Bạn bè</option>
+                    <option value="PRIVATE">Riêng tư</option>
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void submitFinishShare()}
+                  disabled={finishSharePosting || finishShareUploading}
+                  className="rounded-full bg-violet-500 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-600 disabled:opacity-60"
+                >
+                  {finishSharePosting ? "Đang đăng..." : "Đăng lên bảng tin"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFinishShareSession(null)}
+                  className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Bỏ qua
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Create form */}
           {isOwner && (
             <div className="rounded-2xl border border-slate-200 bg-white">
@@ -748,6 +1075,8 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                   session.currentLongitude
                 );
                 const isJoinedSession = actorId != null && session.createdByUserId !== actorId;
+                const partnerTags = formatPartnerTags(session.id);
+                const partnerPetTags = formatPartnerPetTags(session.id);
                 return (
                 <div key={session.id} className="group rounded-2xl border border-slate-200 bg-white px-4 py-3.5 transition hover:border-slate-300 hover:shadow-sm">
                   <div className="flex items-start justify-between gap-3">
@@ -756,15 +1085,17 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                         <p className="truncate font-medium text-slate-900">{session.routeName ?? "Phiên đi dạo"}</p>
                         {isJoinedSession ? (
                           <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
-                            JOINED
+                            ĐÃ THAM GIA
                           </span>
                         ) : null}
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLES[session.status] ?? "bg-slate-100 text-slate-500"}`}>
-                          {session.status}
+                          {STATUS_LABELS[session.status] ?? session.status}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(session.startedAt)}</p>
                       {session.note ? <p className="mt-1 text-sm text-slate-500">{session.note}</p> : null}
+                      {partnerTags ? <p className="mt-1 text-xs font-medium text-indigo-600">Đi dạo cùng: {partnerTags}</p> : null}
+                      {partnerPetTags ? <p className="mt-1 text-xs font-medium text-fuchsia-600">Pet tham gia: {partnerPetTags}</p> : null}
                       <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
                         <span>Quãng đường: {distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(2)} km`}</span>
                         <span>•</span>
@@ -775,15 +1106,25 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                       <p className="text-xs text-slate-400">{toFixedOr(session.currentLatitude)}, {toFixedOr(session.currentLongitude)}</p>
                     </div>
                   </div>
-                  {isOwner && !isJoinedSession && session.status === "ACTIVE" && (
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => void finishWalk(session)}
-                      className="mt-3 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                      onClick={() => void shareWalkSession(session)}
+                      disabled={sharingSessionId === session.id}
+                      className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
                     >
-                      Kết thúc phiên
+                      {sharingSessionId === session.id ? "Đang chia sẻ..." : "Chia sẻ lên bảng tin"}
                     </button>
-                  )}
+                    {isOwner && !isJoinedSession && session.status === "ACTIVE" && (
+                      <button
+                        type="button"
+                        onClick={() => void finishWalk(session)}
+                        className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        Kết thúc phiên
+                      </button>
+                    )}
+                  </div>
                 </div>
               )})}
             </div>
@@ -809,10 +1150,10 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-slate-900">{meetup.requesterName ?? `User #${meetup.requesterUserId}`}</p>
                           <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                            {meetup.petName ?? "Pet"}
+                            {meetup.petName ?? "Thú cưng"}
                           </span>
                           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${MEETUP_STYLES[meetup.status] ?? "bg-slate-100 text-slate-500"}`}>
-                            {meetup.status}
+                            {MEETUP_LABELS[meetup.status] ?? meetup.status}
                           </span>
                         </div>
                         <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(meetup.createdAt)}</p>
@@ -857,7 +1198,7 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-slate-900">Phiên #{meetup.walkSessionId}</p>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${MEETUP_STYLES[meetup.status] ?? "bg-slate-100 text-slate-500"}`}>
-                        {meetup.status}
+                        {MEETUP_LABELS[meetup.status] ?? meetup.status}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(meetup.createdAt)}</p>
@@ -867,6 +1208,69 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {walkShareDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{walkShareDraft.title}</p>
+                <p className="text-xs text-slate-500">Bạn có thể sửa text và chọn quyền xem trước khi đăng.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWalkShareDraft(null)}
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              value={walkShareDraft.content}
+              onChange={(e) =>
+                setWalkShareDraft((prev) => (prev ? { ...prev, content: e.target.value } : prev))
+              }
+              rows={8}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-sky-100"
+            />
+            <div className="mt-2">
+              <label className="text-xs text-slate-600">
+                Quyền xem
+                <select
+                  value={walkShareDraft.visibility}
+                  onChange={(e) =>
+                    setWalkShareDraft((prev) =>
+                      prev ? { ...prev, visibility: e.target.value as "PUBLIC" | "FRIENDS" | "PRIVATE" } : prev
+                    )
+                  }
+                  className="ml-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                >
+                  <option value="PUBLIC">Công khai</option>
+                  <option value="FRIENDS">Bạn bè</option>
+                  <option value="PRIVATE">Riêng tư</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setWalkShareDraft(null)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmWalkShareDraft()}
+                disabled={sharingSessionId === walkShareDraft.sessionId}
+                className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+              >
+                {sharingSessionId === walkShareDraft.sessionId ? "Đang đăng..." : "Đăng lên bảng tin"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@ package com.social.post.infrastructure.repositories;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,5 +52,29 @@ public class PostRepositoryImpl implements PostRepository {
     @Override
     public Page<Post> findByPetId(Long petId, Pageable pageable) {
         return jpaPostRepository.findByPetId(Objects.requireNonNull(petId), Objects.requireNonNull(pageable));
+    }
+
+    @Override
+    public long countVisibleByPetId(Long petId, boolean ownerView, boolean friendView) {
+        return jpaPostRepository.countVisibleByPetId(Objects.requireNonNull(petId), ownerView, friendView);
+    }
+
+    @Override
+    public long countVisibleByPetIdSince(Long petId, boolean ownerView, boolean friendView, LocalDateTime since) {
+        return jpaPostRepository.countVisibleByPetIdSince(
+                Objects.requireNonNull(petId),
+                ownerView,
+                friendView,
+                Objects.requireNonNull(since));
+    }
+
+    @Override
+    public long countVisibleMediaByPetId(Long petId, boolean ownerView, boolean friendView) {
+        return jpaPostRepository.countVisibleMediaByPetId(Objects.requireNonNull(petId), ownerView, friendView);
+    }
+
+    @Override
+    public LocalDateTime latestVisibleCreatedAtByPetId(Long petId, boolean ownerView, boolean friendView) {
+        return jpaPostRepository.latestVisibleCreatedAtByPetId(Objects.requireNonNull(petId), ownerView, friendView);
     }
 }

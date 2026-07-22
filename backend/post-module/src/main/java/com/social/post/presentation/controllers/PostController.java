@@ -31,6 +31,7 @@ import com.social.post.application.usecases.GetPostByIdUseCase;
 import com.social.post.application.usecases.GetPostCommentLikeCountUseCase;
 import com.social.post.application.usecases.GetPostCommentLikeStateUseCase;
 import com.social.post.application.usecases.GetPostLikeStateUseCase;
+import com.social.post.application.usecases.GetPetPostSocialSummaryUseCase;
 import com.social.post.application.usecases.ListFeedPostsUseCase;
 import com.social.post.application.usecases.ListPetPostsUseCase;
 import com.social.post.application.usecases.ListPostCommentsUseCase;
@@ -46,6 +47,7 @@ import com.social.post.presentation.dto.PostCommentResponse;
 import com.social.post.presentation.dto.PostReplyRequest;
 import com.social.post.presentation.dto.PostResponse;
 import com.social.post.presentation.dto.PostShareRequest;
+import com.social.post.presentation.dto.PetPostSocialSummaryResponse;
 import com.social.post.presentation.dto.UpdatePostRequest;
 import com.social.post.presentation.dto.UpdatePostVisibilityRequest;
 import com.social.post.presentation.mapper.PostMapper;
@@ -73,6 +75,7 @@ public class PostController {
     private final ListPostCommentsUseCase listPostCommentsUseCase;
     private final SharePostUseCase sharePostUseCase;
     private final GetPostLikeStateUseCase getPostLikeStateUseCase;
+    private final GetPetPostSocialSummaryUseCase getPetPostSocialSummaryUseCase;
     private final TogglePostCommentLikeUseCase togglePostCommentLikeUseCase;
     private final GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase;
     private final GetPostCommentLikeCountUseCase getPostCommentLikeCountUseCase;
@@ -97,6 +100,7 @@ public class PostController {
             ListPostCommentsUseCase listPostCommentsUseCase,
             SharePostUseCase sharePostUseCase,
             GetPostLikeStateUseCase getPostLikeStateUseCase,
+            GetPetPostSocialSummaryUseCase getPetPostSocialSummaryUseCase,
             TogglePostCommentLikeUseCase togglePostCommentLikeUseCase,
             GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase,
             GetPostCommentLikeCountUseCase getPostCommentLikeCountUseCase,
@@ -119,6 +123,7 @@ public class PostController {
         this.listPostCommentsUseCase = listPostCommentsUseCase;
         this.sharePostUseCase = sharePostUseCase;
         this.getPostLikeStateUseCase = getPostLikeStateUseCase;
+        this.getPetPostSocialSummaryUseCase = getPetPostSocialSummaryUseCase;
         this.togglePostCommentLikeUseCase = togglePostCommentLikeUseCase;
         this.getPostCommentLikeStateUseCase = getPostCommentLikeStateUseCase;
         this.getPostCommentLikeCountUseCase = getPostCommentLikeCountUseCase;
@@ -195,6 +200,12 @@ public class PostController {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         Page<PostResponse> response = listPetPostsUseCase.execute(actorId, petId, pageable).map(postMapper::toResponse);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/pet/{petId}/social-summary")
+    public ResponseEntity<PetPostSocialSummaryResponse> getPetSocialSummary(@PathVariable Long petId) {
+        Long actorId = currentUserId();
+        return ResponseEntity.ok(getPetPostSocialSummaryUseCase.execute(actorId, petId));
     }
 
     @GetMapping("/users/{userId}")

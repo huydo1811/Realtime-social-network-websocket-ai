@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { petApi } from "@/lib/api/petApi";
+import { postApi } from "@/lib/api/postApi";
 import type { PetHealthRecordType } from "@/types/petHealth";
 import type { VetClinicDto } from "@/types/petVet";
 import {
@@ -29,6 +30,14 @@ import { vi } from "date-fns/locale";
 type Tab = "weight" | "appetite" | "activity" | "appointments" | "records";
 type TimeFilter = "7d" | "30d" | "90d" | "all";
 type AppointmentStatusFilter = "pending" | "done" | "all";
+type ShareTone = "friendly" | "expert" | "fun";
+type ShareTemplate = "diary" | "alert" | "milestone";
+type ShareDraft = {
+  key: string;
+  title: string;
+  content: string;
+  visibility: "PUBLIC" | "FRIENDS" | "PRIVATE";
+};
 
 type Props = {
   petId: number;
@@ -74,6 +83,12 @@ const RECORD_TYPE_COLORS: Record<PetHealthRecordType, string> = {
   SURGERY: "bg-rose-100 text-rose-700",
   MEDICATION: "bg-amber-100 text-amber-700",
   OTHER: "bg-slate-100 text-slate-600",
+};
+
+const REMINDER_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Chưa xong",
+  COMPLETED: "Đã xong",
+  DISMISSED: "Đã bỏ qua",
 };
 
 const VET_POSITIVE_KEYWORDS = [
@@ -223,7 +238,12 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
   const [reminders, setReminders] = useState<PetHealthReminderDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sharingKey, setSharingKey] = useState<string | null>(null);
+  const [shareTone, setShareTone] = useState<ShareTone>("friendly");
+  const [shareTemplate, setShareTemplate] = useState<ShareTemplate>("diary");
+  const [shareDraft, setShareDraft] = useState<ShareDraft | null>(null);
   const [showRecordForm, setShowRecordForm] = useState(false);
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("30d");
@@ -518,6 +538,167 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
     } catch (e) { setError(e instanceof Error ? e.message : "Không thể xóa hồ sơ"); }
   }
 
+  function buildReminderShareContent(reminder: PetHealthReminderDto): string {
+    const base =
+      shareTemplate === "alert"
+        ? `🔔 Nhắc lịch chăm sóc: ${reminder.title}`
+        : shareTemplate === "milestone"
+          ? `🏆 Mốc chăm sóc sắp tới của pet: ${reminder.title}`
+          : `📔 Nhật ký chăm sóc pet: ${reminder.title}`;
+    const toneLine =
+      shareTone === "expert"
+        ? "Cập nhật theo dõi sức khỏe thú cưng theo lịch định kỳ."
+        : shareTone === "fun"
+          ? "Team nuôi pet nhớ lịch để boss luôn khỏe nhen 🐾"
+          : "Mình vừa lên lịch chăm sóc để không bỏ lỡ mốc quan trọng.";
+    return [base, toneLine, `Loại: ${HEALTH_RECORD_TYPE_LABELS[reminder.reminderType]}`, `Ngày: ${formatDate(reminder.dueDate)}`, reminder.note?.trim() ? `Ghi chú: ${reminder.note.trim()}` : null]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function buildRecordShareContent(record: PetHealthRecordDto): string {
+    const base =
+      shareTemplate === "alert"
+        ? `🚨 Cập nhật sức khỏe cần lưu ý: ${record.title}`
+        : shareTemplate === "milestone"
+          ? `🎉 Vừa hoàn thành một mốc chăm sóc: ${record.title}`
+          : `🩺 Nhật ký sức khỏe mới: ${record.title}`;
+    const toneLine =
+      shareTone === "expert"
+        ? "Thông tin theo dõi sức khỏe thú cưng được cập nhật chi tiết."
+        : shareTone === "fun"
+          ? "Boss vừa có update sức khỏe mới, cả nhà cổ vũ nào!"
+          : "Mình vừa cập nhật hồ sơ sức khỏe cho pet.";
+    return [base, toneLine, `Danh mục: ${HEALTH_RECORD_TYPE_LABELS[record.recordType]}`, `Ngày thực hiện: ${formatDate(record.performedAt)}`, record.clinicName?.trim() ? `Phòng khám: ${record.clinicName.trim()}` : null, record.description?.trim() ? `Chi tiết: ${record.description.trim()}` : null]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function buildWeightShareContent(entry: WeightEntry): string {
+    const base =
+      shareTemplate === "alert"
+        ? `⚠️ Cập nhật cân nặng cần theo dõi: ${entry.weightKg} kg`
+        : shareTemplate === "milestone"
+          ? `🎯 Mốc cân nặng mới của pet: ${entry.weightKg} kg`
+          : `⚖️ Nhật ký cân nặng mới: ${entry.weightKg} kg`;
+    const toneLine =
+      shareTone === "expert"
+        ? "Mình đang theo dõi chỉ số cân nặng để kiểm soát sức khỏe tốt hơn."
+        : shareTone === "fun"
+          ? "Boss vừa cân xong, cả nhà vào xem thành tích nha!"
+          : "Mình vừa cập nhật cân nặng mới cho pet.";
+    return [base, toneLine, `Ngày: ${formatDate(entry.recordedAt)}`, entry.note?.trim() ? `Ghi chú: ${entry.note.trim()}` : null]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function buildAppetiteShareContent(entry: AppetiteEntry): string {
+    const appetiteLabel = APPETITE_LEVEL_LABELS[entry.level];
+    const base =
+      shareTemplate === "alert"
+        ? `🔔 Cập nhật ăn uống cần lưu ý: ${appetiteLabel}`
+        : shareTemplate === "milestone"
+          ? `🏅 Mốc ăn uống hôm nay của pet: ${appetiteLabel}`
+          : `🍽️ Nhật ký ăn uống: ${appetiteLabel}`;
+    const toneLine =
+      shareTone === "expert"
+        ? "Theo dõi khẩu phần và mức ăn để đánh giá tình trạng sức khỏe."
+        : shareTone === "fun"
+          ? "Hôm nay boss ăn uống thế này nè, mọi người xem thử!"
+          : "Mình vừa cập nhật tình hình ăn uống của pet.";
+    return [base, toneLine, `Ngày: ${formatDate(entry.recordedAt)}`, entry.note?.trim() ? `Ghi chú: ${entry.note.trim()}` : null]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function buildActivityShareContent(entry: ActivityEntry): string {
+    const base =
+      shareTemplate === "alert"
+        ? `📣 Hoạt động hôm nay cần lưu ý: ${entry.activityType}`
+        : shareTemplate === "milestone"
+          ? `🏃 Hoàn thành mốc vận động mới: ${entry.minutes} phút`
+          : `🐾 Nhật ký vận động: ${entry.activityType}`;
+    const toneLine =
+      shareTone === "expert"
+        ? "Dữ liệu hoạt động giúp theo dõi thể lực và nhịp chăm sóc."
+        : shareTone === "fun"
+          ? "Boss vừa vận động cực sung, khoe nhẹ với mọi người!"
+          : "Mình vừa ghi lại hoạt động mới của pet.";
+    return [
+      base,
+      toneLine,
+      `Thời lượng: ${entry.minutes} phút`,
+      `Ngày: ${formatDate(entry.recordedAt)}`,
+      entry.note?.trim() ? `Ghi chú: ${entry.note.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function shareWeightToFeed(entry: WeightEntry) {
+    setShareDraft({
+      key: `weight-${entry.id}`,
+      title: "Xem trước chia sẻ cân nặng",
+      content: buildWeightShareContent(entry),
+      visibility: "FRIENDS",
+    });
+  }
+
+  function shareAppetiteToFeed(entry: AppetiteEntry) {
+    setShareDraft({
+      key: `appetite-${entry.id}`,
+      title: "Xem trước chia sẻ ăn uống",
+      content: buildAppetiteShareContent(entry),
+      visibility: "FRIENDS",
+    });
+  }
+
+  function shareActivityToFeed(entry: ActivityEntry) {
+    setShareDraft({
+      key: `activity-${entry.id}`,
+      title: "Xem trước chia sẻ hoạt động",
+      content: buildActivityShareContent(entry),
+      visibility: "FRIENDS",
+    });
+  }
+
+  function shareReminderToFeed(reminder: PetHealthReminderDto) {
+    setShareDraft({
+      key: `reminder-${reminder.id}`,
+      title: "Xem trước chia sẻ lịch chăm sóc",
+      content: buildReminderShareContent(reminder),
+      visibility: "FRIENDS",
+    });
+  }
+
+  function shareRecordToFeed(record: PetHealthRecordDto) {
+    setShareDraft({
+      key: `record-${record.id}`,
+      title: "Xem trước chia sẻ cập nhật sức khỏe",
+      content: buildRecordShareContent(record),
+      visibility: "FRIENDS",
+    });
+  }
+
+  async function confirmShareDraft() {
+    if (!shareDraft) return;
+    setSharingKey(shareDraft.key);
+    setError(null);
+    try {
+      await postApi.create({
+        content: shareDraft.content,
+        visibility: shareDraft.visibility,
+        petId,
+      });
+      setShareDraft(null);
+      setNotice("Đã chia sẻ lên bảng tin. Vào Trang chủ để xem bài vừa đăng.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể chia sẻ cập nhật sức khỏe.");
+    } finally {
+      setSharingKey(null);
+    }
+  }
+
   useEffect(() => {
     setPageByTab((prev) => ({ ...prev, [tab]: 1 }));
   }, [tab, timeFilter, notesOnly, fromDate, toDate]);
@@ -733,6 +914,15 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
           <button onClick={() => setError(null)} className="ml-auto text-rose-400 hover:text-rose-600">✕</button>
         </div>
       ) : null}
+      {notice ? (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          {notice}
+          <button onClick={() => setNotice(null)} className="ml-auto text-emerald-400 hover:text-emerald-600">✕</button>
+        </div>
+      ) : null}
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -847,6 +1037,34 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chia sẻ social</span>
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <span>Template</span>
+          <select
+            value={shareTemplate}
+            onChange={(e) => setShareTemplate(e.target.value as ShareTemplate)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+          >
+            <option value="diary">Nhật ký</option>
+            <option value="alert">Thông báo</option>
+            <option value="milestone">Thành tích</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <span>Giọng văn</span>
+          <select
+            value={shareTone}
+            onChange={(e) => setShareTone(e.target.value as ShareTone)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+          >
+            <option value="friendly">Thân thiện</option>
+            <option value="expert">Chuyên nghiệp</option>
+            <option value="fun">Vui vẻ</option>
+          </select>
+        </label>
+      </div>
+
       {/* ── WEIGHT TAB ── */}
       {tab === "weight" && (
         <div className="space-y-4">
@@ -929,7 +1147,17 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                     <p className="text-xs text-slate-400">{formatDate(e.recordedAt)}</p>
                   </div>
                 </div>
-                {e.note && <p className="text-xs text-slate-500">{e.note}</p>}
+                <div className="flex items-center gap-2">
+                  {e.note && <p className="max-w-[180px] truncate text-xs text-slate-500">{e.note}</p>}
+                  <button
+                    type="button"
+                    onClick={() => shareWeightToFeed(e)}
+                    disabled={sharingKey === `weight-${e.id}`}
+                    className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                  >
+                    {sharingKey === `weight-${e.id}` ? "Đang chia sẻ..." : "Chia sẻ lên bảng tin"}
+                  </button>
+                </div>
               </div>
             ))}
             {renderPager("weight", filteredWeightEntries.length)}
@@ -1020,7 +1248,17 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                     <p className="text-xs text-slate-400">{formatDate(e.recordedAt)}</p>
                   </div>
                 </div>
-                {e.note && <p className="text-xs text-slate-500">{e.note}</p>}
+                <div className="flex items-center gap-2">
+                  {e.note && <p className="max-w-[180px] truncate text-xs text-slate-500">{e.note}</p>}
+                  <button
+                    type="button"
+                    onClick={() => shareAppetiteToFeed(e)}
+                    disabled={sharingKey === `appetite-${e.id}`}
+                    className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                  >
+                    {sharingKey === `appetite-${e.id}` ? "Đang chia sẻ..." : "Chia sẻ lên bảng tin"}
+                  </button>
+                </div>
               </div>
             ))}
             {renderPager("appetite", filteredAppetiteEntries.length)}
@@ -1113,6 +1351,14 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                   <p className="text-sm font-semibold text-emerald-600">{e.minutes} phút</p>
                   {e.note && <p className="text-xs text-slate-400">{e.note}</p>}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => shareActivityToFeed(e)}
+                  disabled={sharingKey === `activity-${e.id}`}
+                  className="ml-3 rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                >
+                  {sharingKey === `activity-${e.id}` ? "Đang chia sẻ..." : "Chia sẻ lên bảng tin"}
+                </button>
               </div>
             ))}
             {renderPager("activity", filteredActivityEntries.length)}
@@ -1143,6 +1389,9 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                 {label}
               </button>
             ))}
+          </div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            Muốn chia sẻ nhanh? Bấm <span className="font-semibold">Chia sẻ lên bảng tin</span> dưới từng mục, xem trước rồi đăng.
           </div>
 
           {/* Add reminder form */}
@@ -1315,7 +1564,7 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                                 : "bg-slate-100 text-slate-500"
                           }`}
                         >
-                          {r.status}
+                          {REMINDER_STATUS_LABELS[r.status] ?? r.status}
                         </span>
                         {urgent && <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">Sắp tới</span>}
                       </div>
@@ -1325,16 +1574,26 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                         {days === 0 ? " · Hôm nay" : days > 0 ? ` · Còn ${days} ngày` : ` · Quá ${Math.abs(days)} ngày`}
                       </p>
                     </div>
-                    {r.status === "PENDING" ? (
-                      <button type="button" onClick={() => void handleCompleteReminder(r.id)}
-                        className="ml-3 shrink-0 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600">
-                        Đã xong
+                    <div className="ml-3 shrink-0 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        onClick={() => shareReminderToFeed(r)}
+                        disabled={sharingKey === `reminder-${r.id}`}
+                        className="rounded-full border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                      >
+                        {sharingKey === `reminder-${r.id}` ? "Đang chia sẻ..." : "Chia sẻ lên bảng tin"}
                       </button>
-                    ) : (
-                      <span className="ml-3 shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
-                        Đã lưu lịch sử
-                      </span>
-                    )}
+                      {r.status === "PENDING" ? (
+                        <button type="button" onClick={() => void handleCompleteReminder(r.id)}
+                          className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600">
+                          Đã xong
+                        </button>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+                          Đã lưu lịch sử
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1452,15 +1711,86 @@ export default function PetHealthSection({ petId, isOwner }: Props) {
                     </p>
                     {r.description && <p className="mt-1.5 text-sm text-slate-600">{r.description}</p>}
                   </div>
-                  <button type="button" onClick={() => void handleDeleteRecord(r.id)}
-                    className="ml-3 shrink-0 text-xs font-medium text-rose-500 transition hover:text-rose-700">
-                    Xóa
-                  </button>
+                  <div className="ml-3 shrink-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => shareRecordToFeed(r)}
+                      disabled={sharingKey === `record-${r.id}`}
+                      className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                    >
+                      {sharingKey === `record-${r.id}` ? "Đang chia sẻ..." : "Chia sẻ lên bảng tin"}
+                    </button>
+                    <button type="button" onClick={() => void handleDeleteRecord(r.id)}
+                      className="text-xs font-medium text-rose-500 transition hover:text-rose-700">
+                      Xóa
+                    </button>
+                  </div>
                 </div>
               ))}
               {renderPager("records", filteredRecords.length)}
             </div>
           )}
+        </div>
+      )}
+
+      {shareDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{shareDraft.title}</p>
+                <p className="text-xs text-slate-500">Bạn có thể sửa nội dung và chọn quyền xem trước khi đăng.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShareDraft(null)}
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              value={shareDraft.content}
+              onChange={(e) => setShareDraft((prev) => (prev ? { ...prev, content: e.target.value } : prev))}
+              rows={8}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-sky-100"
+            />
+            <div className="mt-2">
+              <label className="text-xs text-slate-600">
+                Quyền xem
+                <select
+                  value={shareDraft.visibility}
+                  onChange={(e) =>
+                    setShareDraft((prev) =>
+                      prev ? { ...prev, visibility: e.target.value as "PUBLIC" | "FRIENDS" | "PRIVATE" } : prev
+                    )
+                  }
+                  className="ml-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                >
+                  <option value="PUBLIC">Công khai</option>
+                  <option value="FRIENDS">Bạn bè</option>
+                  <option value="PRIVATE">Riêng tư</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShareDraft(null)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmShareDraft()}
+                disabled={sharingKey === shareDraft.key}
+                className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+              >
+                {sharingKey === shareDraft.key ? "Đang đăng..." : "Đăng lên bảng tin"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

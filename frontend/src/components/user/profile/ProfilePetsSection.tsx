@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { petApi } from "@/lib/api/petApi";
-import type { PetDto } from "@/types/pet";
+import { getPetBadgeMeta } from "@/lib/pets/petBadgeMeta";
+import type { PetDto, PetSocialBadgeDto } from "@/types/pet";
 
 type Props = {
   userId: number;
@@ -28,6 +29,12 @@ const STATUS_STYLES: Record<string, string> = {
   ADOPTED_OUT: "bg-amber-100 text-amber-700",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Đang chăm sóc",
+  DECEASED: "Đã mất",
+  ADOPTED_OUT: "Đã cho nhận nuôi",
+};
+
 function calcAge(birthDate?: string | null): string {
   if (!birthDate) return "";
   const d = new Date(birthDate);
@@ -45,6 +52,7 @@ function calcAge(birthDate?: string | null): string {
 
 export default function ProfilePetsSection({ userId, isOwnProfile = false, refreshKey = 0 }: Props) {
   const [pets, setPets] = useState<PetDto[]>([]);
+  const [badgesByPetId, setBadgesByPetId] = useState<Record<number, PetSocialBadgeDto[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +66,15 @@ export default function ProfilePetsSection({ userId, isOwnProfile = false, refre
       .then((rows) => {
         if (cancelled) return;
         setPets(rows);
+        void Promise.all(
+          rows.map(async (item) => ({
+            petId: item.id,
+            badges: await petApi.getSocialBadges(item.id).catch(() => [] as PetSocialBadgeDto[]),
+          }))
+        ).then((entries) => {
+          if (cancelled) return;
+          setBadgesByPetId(Object.fromEntries(entries.map((entry) => [entry.petId, entry.badges])));
+        });
       })
       .catch((e) => {
         if (cancelled) return;
@@ -157,13 +174,33 @@ export default function ProfilePetsSection({ userId, isOwnProfile = false, refre
                   {SPECIES_LABELS[pet.species] ?? pet.species}
                   {pet.breed ? ` · ${pet.breed}` : ""}
                 </p>
+                {(badgesByPetId[pet.id] ?? []).filter((badge) => badge.unlocked).length > 0 ? (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {(badgesByPetId[pet.id] ?? [])
+                      .filter((badge) => badge.unlocked)
+                      .slice(0, 2)
+                      .map((badge) => {
+                        const meta = getPetBadgeMeta(badge.key);
+                        return (
+                          <span
+                            key={`${pet.id}-${badge.key}`}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.colorClass}`}
+                            title={badge.title}
+                          >
+                            <span>{meta.icon}</span>
+                            <span>{meta.shortLabel}</span>
+                          </span>
+                        );
+                      })}
+                  </div>
+                ) : null}
               </div>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                   STATUS_STYLES[pet.status] ?? "bg-slate-100 text-slate-600"
                 }`}
               >
-                {pet.status}
+                {STATUS_LABELS[pet.status] ?? pet.status}
               </span>
             </div>
 

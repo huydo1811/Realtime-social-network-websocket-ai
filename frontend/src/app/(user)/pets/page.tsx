@@ -8,7 +8,9 @@ import { useRouter } from "next/navigation";
 import UserLayout from "@/components/layout/UserLayout";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
-import type { CreatePetPayload, PetDto, PetSpecies } from "@/types/pet";
+import { uploadToCloudinary } from "@/lib/cloudinary/upload";
+import { getPetBadgeMeta } from "@/lib/pets/petBadgeMeta";
+import type { CreatePetPayload, PetDto, PetSocialBadgeDto, PetSpecies } from "@/types/pet";
 import type { PetHealthReminderDto } from "@/types/petHealth";
 
 const SPECIES_OPTIONS: { value: PetSpecies; label: string }[] = [
@@ -21,6 +23,17 @@ const SPECIES_OPTIONS: { value: PetSpecies; label: string }[] = [
   { value: "REPTILE", label: "Bò sát" },
   { value: "OTHER", label: "Khác" },
 ];
+
+const SPECIES_LABELS: Record<PetSpecies, string> = {
+  DOG: "Chó",
+  CAT: "Mèo",
+  BIRD: "Chim",
+  RABBIT: "Thỏ",
+  HAMSTER: "Hamster",
+  FISH: "Cá",
+  REPTILE: "Bò sát",
+  OTHER: "Khác",
+};
 
 export default function PetsPage() {
   const router = useRouter();
@@ -36,6 +49,10 @@ export default function PetsPage() {
     visibility: "PUBLIC",
   });
   const [upcomingReminders, setUpcomingReminders] = useState<PetHealthReminderDto[]>([]);
+  const [badgesByPetId, setBadgesByPetId] = useState<Record<number, PetSocialBadgeDto[]>>({});
+  const [petImageName, setPetImageName] = useState("");
+  const [uploadingPetImage, setUploadingPetImage] = useState(false);
+  const [uploadPetImageError, setUploadPetImageError] = useState<string | null>(null);
 
   const loadPets = useCallback(async () => {
     const tokens = getAuthTokens();
@@ -52,6 +69,13 @@ export default function PetsPage() {
       ]);
       setPets(petList);
       setUpcomingReminders(reminders);
+      const badgeResults = await Promise.all(
+        petList.map(async (item) => ({
+          petId: item.id,
+          badges: await petApi.getSocialBadges(item.id).catch(() => [] as PetSocialBadgeDto[]),
+        }))
+      );
+      setBadgesByPetId(Object.fromEntries(badgeResults.map((row) => [row.petId, row.badges])));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Không thể tải thú cưng";
       if (msg.toLowerCase().includes("unauthorized")) {
@@ -88,6 +112,21 @@ export default function PetsPage() {
       setError(e instanceof Error ? e.message : "Không thể tạo thú cưng");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUploadPetImage(file?: File) {
+    if (!file) return;
+    setUploadPetImageError(null);
+    setUploadingPetImage(true);
+    try {
+      const uploaded = await uploadToCloudinary(file);
+      setForm((f) => ({ ...f, avatarUrl: uploaded.secureUrl }));
+      setPetImageName(file.name);
+    } catch (e) {
+      setUploadPetImageError(e instanceof Error ? e.message : "Không thể tải ảnh thú cưng.");
+    } finally {
+      setUploadingPetImage(false);
     }
   }
 
@@ -192,6 +231,39 @@ export default function PetsPage() {
                   placeholder="Tính cách, sở thích..."
                 />
               </label>
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">Ảnh thú cưng</span>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="truncate text-xs text-slate-600">
+                      {petImageName || (form.avatarUrl ? "Đã có ảnh" : "Chưa chọn ảnh")}
+                    </p>
+                    <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                      {uploadingPetImage ? "Đang tải..." : "Chọn ảnh"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => void handleUploadPetImage(e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                  {form.avatarUrl ? (
+                    <div className="mt-2">
+                      <Image
+                        src={form.avatarUrl}
+                        alt="pet preview"
+                        width={64}
+                        height={64}
+                        className="h-16 w-16 rounded-xl object-cover"
+                      />
+                    </div>
+                  ) : null}
+                  {uploadPetImageError ? (
+                    <p className="mt-2 text-xs text-rose-600">{uploadPetImageError}</p>
+                  ) : null}
+                </div>
+              </label>
             </div>
             <div className="mt-4 flex justify-end">
               <button
@@ -235,11 +307,44 @@ export default function PetsPage() {
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-slate-900">{pet.name}</p>
                   <p className="truncate text-sm text-slate-500">
-                    {[pet.species, pet.breed].filter(Boolean).join(" · ")}
+                    {[SPECIES_LABELS[pet.species], pet.breed].filter(Boolean).join(" · ")}
                   </p>
-                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 transition group-hover:bg-rose-100 group-hover:text-rose-600">
-                    Xem chi tiết
-                  </span>
+                  {(badgesByPetId[pet.id] ?? []).filter((badge) => badge.unlocked).length > 0 ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {(badgesByPetId[pet.id] ?? [])
+                        .filter((badge) => badge.unlocked)
+                        .slice(0, 2)
+                        .map((badge) => {
+                          const meta = getPetBadgeMeta(badge.key);
+                          return (
+                            <span
+                              key={`${pet.id}-${badge.key}`}
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.colorClass}`}
+                              title={badge.title}
+                            >
+                              <span>{meta.icon}</span>
+                              <span>{meta.shortLabel}</span>
+                            </span>
+                          );
+                        })}
+                    </div>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 transition group-hover:bg-rose-100 group-hover:text-rose-600">
+                      Xem chi tiết
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        router.push(`/?petId=${pet.id}`);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700 hover:bg-sky-200"
+                    >
+                      Đăng bài cho bé
+                    </button>
+                  </div>
                 </div>
               </Link>
             ))}

@@ -29,6 +29,13 @@ const SEVERITY_COLORS: Record<PetDiagnosisDto["severity"], string> = {
   EMERGENCY: "bg-rose-700",
 };
 
+const SEVERITY_LABELS: Record<PetDiagnosisDto["severity"], string> = {
+  LOW: "Thấp",
+  MODERATE: "Trung bình",
+  HIGH: "Cao",
+  EMERGENCY: "Khẩn cấp",
+};
+
 export default function PetDiagnosisSection({ petId, isOwner }: Props) {
   const [diagnoses, setDiagnoses] = useState<PetDiagnosisDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +119,7 @@ export default function PetDiagnosisSection({ petId, isOwner }: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rose-500">AI Diagnosis</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rose-500">AI chẩn đoán</p>
           <h2 className="mt-0.5 text-2xl font-semibold text-slate-900">Chẩn đoán triệu chứng</h2>
         </div>
         {diagnoses.length > 0 && (
@@ -230,7 +237,7 @@ export default function PetDiagnosisSection({ petId, isOwner }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${SEVERITY_STYLES[d.severity]}`}>
-                      {d.severity}
+                      {SEVERITY_LABELS[d.severity]}
                     </span>
                     <span className="text-xs text-slate-400">{formatDateTime(d.createdAt)}</span>
                   </div>

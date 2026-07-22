@@ -53,3 +53,28 @@ export interface CreatePetPayload {
 export interface UpdatePetPayload extends CreatePetPayload {
   status?: PetStatus;
 }
+
+export interface PetSocialHealthSummaryDto {
+  healthRecordCount: number;
+  reminderTotalCount: number;
+  reminderPendingCount: number;
+  reminderCompletedCount: number;
+  walkTotalCount: number;
+  walkFinishedCount: number;
+  walkActiveCount: number;
+}
+
+export interface PetSocialPromptDto {
+  key: string;
+  title: string;
+  content: string;
+}
+
+export interface PetSocialBadgeDto {
+  key: string;
+  title: string;
+  description: string;
+  unlocked: boolean;
+  progressText: string;
+  shareText: string;
+}

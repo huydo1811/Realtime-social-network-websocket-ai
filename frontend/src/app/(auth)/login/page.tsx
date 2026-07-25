@@ -248,10 +248,10 @@ export default function LoginPage() {
            <div className="relative z-10 mb-8">
              <Link href="/" className="inline-flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
                <div className="h-12 w-12 overflow-hidden rounded-xl bg-white p-[2px] shadow-lg shadow-white/20">
-                 <Image src="/hype.png" alt="Hype logo" width={48} height={48} className="h-full w-full rounded-[10px] object-cover" unoptimized/>
+                <Image src="/hype.png" alt="PetHype logo" width={48} height={48} className="h-full w-full rounded-[10px] object-cover" unoptimized/>
                </div>
                <span className="text-3xl font-extrabold tracking-tight text-white drop-shadow-md">
-                 Hype
+                PetHype
                </span>
              </Link>
            </div>
@@ -261,7 +261,7 @@ export default function LoginPage() {
                Chào mừng <br/>trở lại!
              </h2>
              <p className="text-[1.05rem] text-white/90 leading-relaxed max-w-sm">
-               Đăng nhập để kết nối với bạn bè, trò chuyện thời gian thực và tiếp tục khám phá thế giới của bạn.
+               Đăng nhập để theo dõi bạn bè, khoe hoạt động thú cưng và khám phá cộng đồng pet quanh bạn.
              </p>
            </div>
 
@@ -273,7 +273,7 @@ export default function LoginPage() {
                   ))}
                   <div className="w-9 h-9 rounded-full border-2 border-rose-400 bg-white/20 flex items-center justify-center text-[11px] font-bold">+99</div>
                 </div>
-                <div className="text-sm font-semibold ml-2">Đang tìm bạn trực tuyến</div>
+                <div className="text-sm font-semibold ml-2">Đang hoạt động với thú cưng</div>
              </div>
            </div>
         </div>

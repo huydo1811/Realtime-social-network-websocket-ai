@@ -8,8 +8,10 @@ import FloatingChatWindow from "@/components/chat/FloatingChatWindow";
 import { useRouter } from "next/navigation";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 import { getUserById } from "@/lib/api/userApi";
+import { followUser, listFollowSuggestions } from "@/lib/api/friendshipApi";
 import { UserPresenceResponse } from "@/types/chat";
 import { formatLastActiveSubtitle } from "@/lib/chat/presenceLabels";
+import type { FollowSuggestion } from "@/types/friendship";
 
 const GRADS = [
   "from-rose-400 to-pink-500",
@@ -52,6 +54,8 @@ export default function RightSidebar() {
   const [presenceMap, setPresenceMap] = useState<Record<number, UserPresenceResponse>>({});
   const [isDesktop, setIsDesktop] = useState(false);
   const [loadSeq, setLoadSeq] = useState(0);
+  const [followSuggestions, setFollowSuggestions] = useState<FollowSuggestion[]>([]);
+  const [followBusyId, setFollowBusyId] = useState<number | null>(null);
 
   const openIds = useMemo(() => openChats.map((c) => c.id), [openChats]);
   const openIdsRef = useRef<number[]>([]);
@@ -110,6 +114,15 @@ export default function RightSidebar() {
     }
   }, []);
 
+  const loadFollowSuggestions = useCallback(async () => {
+    try {
+      const rows = await listFollowSuggestions(6);
+      setFollowSuggestions(rows);
+    } catch {
+      setFollowSuggestions([]);
+    }
+  }, []);
+
   useEffect(() => {
     setLoadSeq((seq) => seq + 1);
   }, []);
@@ -119,7 +132,7 @@ export default function RightSidebar() {
     const run = async () => {
       setLoading(true);
       try {
-        await fetchSidebarData();
+        await Promise.all([fetchSidebarData(), loadFollowSuggestions()]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -128,7 +141,7 @@ export default function RightSidebar() {
     return () => {
       cancelled = true;
     };
-  }, [fetchSidebarData, loadSeq]);
+  }, [fetchSidebarData, loadFollowSuggestions, loadSeq]);
 
   useEffect(() => {
     return onPrivateThreadsSync(() => {
@@ -285,6 +298,18 @@ export default function RightSidebar() {
     });
   };
 
+  async function followSuggestedUser(userId: number) {
+    setFollowBusyId(userId);
+    try {
+      await followUser(userId);
+      setFollowSuggestions((prev) => prev.filter((item) => item.userId !== userId));
+    } catch {
+      // noop
+    } finally {
+      setFollowBusyId(null);
+    }
+  }
+
   const closeChat = (id: number) => {
     setOpenChats((prev) => prev.filter((c) => c.id !== id));
   };
@@ -397,6 +422,37 @@ export default function RightSidebar() {
                 );
               })
             )}
+          </div>
+
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Gợi ý theo dõi</h3>
+            <div className="space-y-2">
+              {followSuggestions.length === 0 ? (
+                <p className="text-xs text-slate-400">Không có gợi ý mới.</p>
+              ) : (
+                followSuggestions.map((item) => (
+                  <div key={item.userId} className="rounded-xl border border-slate-100 bg-slate-50/70 px-2.5 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${grad(item.fullName || String(item.userId))} flex items-center justify-center text-xs font-bold text-white`}>
+                        {(item.fullName || "U").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-slate-800">{item.fullName || `Người dùng #${item.userId}`}</p>
+                        <p className="truncate text-[11px] text-slate-500">@{item.username || `user_${item.userId}`}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void followSuggestedUser(item.userId)}
+                        disabled={followBusyId === item.userId}
+                        className="rounded-full bg-sky-500 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-600 disabled:opacity-60"
+                      >
+                        {followBusyId === item.userId ? "..." : "Theo dõi"}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </section>
       </aside>

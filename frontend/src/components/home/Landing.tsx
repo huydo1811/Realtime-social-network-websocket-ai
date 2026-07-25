@@ -12,8 +12,6 @@ export default function Landing() {
     return () => clearTimeout(timer);
   }, []);
 
-  const [showForgot, setShowForgot] = useState(false);
-
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50 font-sans flex flex-col">
       <style dangerouslySetInnerHTML={{__html: `
@@ -56,7 +54,7 @@ export default function Landing() {
             <Image src="/hype.png" alt="Logo" width={40} height={40} className="h-full w-full object-cover rounded-[10px] bg-white" />
           </div>
           <span className="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-rose-400 cursor-default">
-            Hype
+            PetHype
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -85,17 +83,22 @@ export default function Landing() {
   style={{ animationDelay: "0.1s" }}
 >
   <span className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 md:whitespace-nowrap">
-    Chia sẻ khoảnh khắc,
+    Cuộc sống thú cưng,
   </span>
   <br />
   <span className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-orange-400 drop-shadow-sm md:whitespace-nowrap">
-    kết nối thế giới.
+    kết nối cộng đồng yêu pet.
   </span>
 </h1>
             
             <p className="text-lg text-slate-600 max-w-lg leading-relaxed animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
-              Mạng xã hội thế hệ mới giúp bạn trò chuyện thời gian thực, khám phá cộng đồng và thể hiện cá tính riêng. Trải nghiệm sự mượt mà chưa từng có ngay hôm nay.
+              Chia sẻ ảnh đi dạo, nhật ký sức khỏe, khoe khoảnh khắc của bé và tìm bạn đồng hành cho thú cưng. Tất cả trong một mạng xã hội dành riêng cho pet lovers.
             </p>
+            <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">🐾 Feed thú cưng cá nhân hóa</span>
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">🩺 Sổ sức khỏe & lịch nhắc</span>
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">🎯 Theo dõi & nhóm cộng đồng</span>
+            </div>
             
             <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
               <Link
@@ -126,7 +129,7 @@ export default function Landing() {
                 ))}
               </div>
               <div className="text-sm font-medium text-slate-500">
-                Tham gia cùng <span className="font-bold text-slate-800">10,000+</span> người dùng
+                Tham gia cùng <span className="font-bold text-slate-800">10,000+</span> chủ nuôi thú cưng
               </div>
             </div>
           </div>
@@ -180,7 +183,7 @@ export default function Landing() {
                </div>
                <div className="flex-1">
                   <div className="text-sm font-bold text-slate-800">Trần Ngọc</div>
-                  <div className="text-xs text-slate-500 mt-0.5">Ê tối nay đi cafe...</div>
+                  <div className="text-xs text-slate-500 mt-0.5">Mai cho bé đi dạo công viên nha...</div>
                </div>
             </div>
 
@@ -190,7 +193,7 @@ export default function Landing() {
                  <svg className="w-5 h-5 text-rose-500 fill-current" viewBox="0 0 20 20"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>
                </div>
                <div>
-                  <div className="text-[13px] text-slate-700"><span className="font-bold">Hoàng</span> đã thả tim</div>
+                  <div className="text-[13px] text-slate-700"><span className="font-bold">Lan</span> vừa theo dõi bé Misa</div>
                </div>
             </div>
 

@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import com.social.friendship.domain.entities.FriendshipStatus;
 import com.social.friendship.domain.repositories.FriendshipRepository;
+import com.social.friendship.domain.repositories.UserFollowRepository;
 import com.social.post.domain.entities.Post;
 import com.social.post.domain.repositories.PostRepository;
 
@@ -18,10 +21,15 @@ import com.social.post.domain.repositories.PostRepository;
 public class PostRepositoryImpl implements PostRepository {
     private final JpaPostRepository jpaPostRepository;
     private final FriendshipRepository friendshipRepository;
+    private final UserFollowRepository userFollowRepository;
 
-    public PostRepositoryImpl(JpaPostRepository jpaPostRepository, FriendshipRepository friendshipRepository) {
+    public PostRepositoryImpl(
+            JpaPostRepository jpaPostRepository,
+            FriendshipRepository friendshipRepository,
+            UserFollowRepository userFollowRepository) {
         this.jpaPostRepository = jpaPostRepository;
         this.friendshipRepository = friendshipRepository;
+        this.userFollowRepository = userFollowRepository;
     }
 
     @Override
@@ -46,7 +54,13 @@ public class PostRepositoryImpl implements PostRepository {
                 .stream()
                 .map(friendship -> friendship.getOtherUserId(actorId))
                 .toList();
-        return jpaPostRepository.findFeed(actorId, friendIds, pageable);
+        List<Long> followingIds = userFollowRepository.findFolloweeIdsByFollowerUserId(actorId);
+        Set<Long> networkIds = new LinkedHashSet<>();
+        networkIds.addAll(friendIds);
+        networkIds.addAll(followingIds);
+        networkIds.add(actorId);
+        List<Long> safeFriendIds = friendIds.isEmpty() ? List.of(-1L) : friendIds;
+        return jpaPostRepository.findFeed(actorId, safeFriendIds, networkIds, pageable);
     }
 
     @Override

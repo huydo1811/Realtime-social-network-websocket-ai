@@ -147,20 +147,20 @@ export default function RegisterPage() {
            <div className="relative z-10 mb-8">
              <Link href="/" className="inline-flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
                <div className="h-12 w-12 overflow-hidden rounded-xl bg-white p-[2px] shadow-lg shadow-white/20">
-                 <Image src="/hype.png" alt="Hype logo" width={48} height={48} className="h-full w-full rounded-[10px] object-cover" unoptimized/>
+                <Image src="/hype.png" alt="PetHype logo" width={48} height={48} className="h-full w-full rounded-[10px] object-cover" unoptimized/>
                </div>
                <span className="text-3xl font-extrabold tracking-tight text-white drop-shadow-md">
-                 Hype
+                PetHype
                </span>
              </Link>
            </div>
 
            <div className="relative z-10 space-y-6">
              <h2 className="text-[2.5rem] leading-[1.15] font-extrabold tracking-tight drop-shadow-sm">
-               Tham gia <br/>cộng đồng mới!
+               Tham gia <br/>cộng đồng pet!
              </h2>
              <p className="text-[1.05rem] text-white/90 leading-relaxed max-w-sm">
-               Tạo tài khoản ngay hôm nay để không bỏ lỡ những câu chuyện thú vị và tận hưởng trải nghiệm mượt mà.
+               Tạo tài khoản để chia sẻ nhật ký thú cưng, kết nối nhóm yêu pet và theo dõi người bạn quan tâm.
              </p>
            </div>
 
@@ -172,7 +172,7 @@ export default function RegisterPage() {
                   ))}
                   <div className="w-9 h-9 rounded-full border-2 border-rose-400 bg-white/20 flex items-center justify-center text-[11px] font-bold">+2k</div>
                 </div>
-                <div className="text-sm font-semibold ml-2">Thành viên mới tuần này</div>
+                <div className="text-sm font-semibold ml-2">Chủ nuôi mới tuần này</div>
              </div>
            </div>
         </div>

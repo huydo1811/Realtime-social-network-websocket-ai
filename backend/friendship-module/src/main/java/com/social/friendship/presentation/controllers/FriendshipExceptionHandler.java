@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-@ControllerAdvice(basePackageClasses = FriendshipController.class)
+@ControllerAdvice(basePackageClasses = { FriendshipController.class, FollowController.class, GroupController.class })
 public class FriendshipExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

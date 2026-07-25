@@ -3,10 +3,14 @@ import type { PostStatus, PostVisibility } from "@/types/post";
 export type FeedPost = {
   id: string;
   postId?: number;
+  source?: "POST" | "GROUP_POST";
+  groupId?: number;
+  groupName?: string;
   sharedPostId?: number;
   authorId?: number;
   content: string;
   createdAt: string;
+  createdAtIso?: string;
   likes: number;
   comments: number;
   shares?: number;

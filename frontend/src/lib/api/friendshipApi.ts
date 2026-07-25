@@ -1,7 +1,14 @@
 import { API_URL, apiAuthFetch } from "@/lib/api/userApi";
 import type {
-  FriendshipRealtimeEvent,
+  FollowResponse,
+  FollowSuggestion,
   FriendshipResponse,
+  GroupMembershipResponse,
+  GroupPostResponse,
+  GroupPostStatus,
+  GroupResponse,
+  GroupVisibility,
+  GroupMembershipStatus,
   RelationshipStatusResponse,
 } from "@/types/friendship";
 
@@ -115,4 +122,136 @@ export async function listBlockedUsers(): Promise<FriendshipResponse[]> {
   const res = await apiAuthFetch(`${API_URL}/friendships/blocks`);
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as FriendshipResponse[];
+}
+
+export async function followUser(targetUserId: number): Promise<FollowResponse> {
+  const res = await apiAuthFetch(`${API_URL}/follows`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targetUserId }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as FollowResponse;
+}
+
+export async function unfollowUser(targetUserId: number): Promise<void> {
+  const res = await apiAuthFetch(`${API_URL}/follows`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targetUserId }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function getFollowStatus(targetUserId: number): Promise<{ following: boolean }> {
+  const res = await apiAuthFetch(`${API_URL}/follows/status?targetUserId=${targetUserId}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as { following: boolean };
+}
+
+export async function listFollowing(): Promise<FollowResponse[]> {
+  const res = await apiAuthFetch(`${API_URL}/follows/following`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as FollowResponse[];
+}
+
+export async function listFollowSuggestions(limit = 8): Promise<FollowSuggestion[]> {
+  const res = await apiAuthFetch(`${API_URL}/follows/suggestions?limit=${limit}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as FollowSuggestion[];
+}
+
+export async function createGroup(payload: {
+  name: string;
+  description?: string;
+  visibility: GroupVisibility;
+  requireApproval: boolean;
+}): Promise<GroupResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupResponse;
+}
+
+export async function discoverGroups(params?: { query?: string; visibility?: GroupVisibility }): Promise<GroupResponse[]> {
+  const qs = new URLSearchParams();
+  if (params?.query?.trim()) qs.set("q", params.query.trim());
+  if (params?.visibility) qs.set("visibility", params.visibility);
+  const res = await apiAuthFetch(`${API_URL}/groups/discover${qs.toString() ? `?${qs.toString()}` : ""}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupResponse[];
+}
+
+export async function getGroup(groupId: number): Promise<GroupResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupResponse;
+}
+
+export async function listMyGroupMemberships(): Promise<GroupMembershipResponse[]> {
+  const res = await apiAuthFetch(`${API_URL}/groups/mine`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupMembershipResponse[];
+}
+
+export async function joinGroup(groupId: number): Promise<GroupMembershipResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/join`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupMembershipResponse;
+}
+
+export async function listGroupMembers(groupId: number, status: GroupMembershipStatus = "APPROVED"): Promise<GroupMembershipResponse[]> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/members?status=${status}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupMembershipResponse[];
+}
+
+export async function approveGroupMembership(groupId: number, membershipId: number): Promise<GroupMembershipResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/members/${membershipId}/approve`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupMembershipResponse;
+}
+
+export async function rejectGroupMembership(groupId: number, membershipId: number): Promise<GroupMembershipResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/members/${membershipId}/reject`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupMembershipResponse;
+}
+
+export async function createGroupPost(groupId: number, payload: { content: string; mediaUrl?: string }): Promise<GroupPostResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostResponse;
+}
+
+export async function listGroupPosts(groupId: number, status: GroupPostStatus = "APPROVED"): Promise<GroupPostResponse[]> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts?status=${status}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostResponse[];
+}
+
+export async function approveGroupPost(groupId: number, postId: number): Promise<GroupPostResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts/${postId}/approve`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostResponse;
+}
+
+export async function rejectGroupPost(groupId: number, postId: number): Promise<GroupPostResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts/${postId}/reject`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostResponse;
+}
+
+export async function listGroupFeed(limit = 30): Promise<GroupPostResponse[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const res = await apiAuthFetch(`${API_URL}/groups/feed?limit=${safeLimit}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostResponse[];
 }

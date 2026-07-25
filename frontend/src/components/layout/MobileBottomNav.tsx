@@ -63,6 +63,16 @@ const items = [
     ),
   },
   {
+    href: "/groups",
+    label: "Nhóm",
+    badge: null,
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h10M7 12h10m-7 5h7M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+      </svg>
+    ),
+  },
+  {
     href: "/profile",
     label: "Hồ sơ",
     badge: null,
@@ -96,7 +106,7 @@ export default function MobileBottomNav() {
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur">
-      <div className="grid grid-cols-6">
+      <div className="grid grid-cols-7">
         {items.map((item) => {
           const active = isActive(pathname, item.href);
           const badgeCount =

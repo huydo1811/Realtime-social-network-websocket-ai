@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { postApi } from "@/lib/api/postApi";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens } from "@/lib/api/authToken";
-import { blockUser } from "@/lib/api/friendshipApi";
+import { blockUser, listGroupFeed } from "@/lib/api/friendshipApi";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
 import type {
@@ -15,6 +15,7 @@ import type {
   PostVisibility,
 } from "@/types/post";
 import type { PetDto } from "@/types/pet";
+import type { GroupPostResponse } from "@/types/friendship";
 
 import PostCard from "./PostCard";
 import PostComposer from "./PostComposer";
@@ -77,6 +78,7 @@ function mapPostToFeed(post: PostDto): FeedPost {
   return {
     id: String(post.id),
     postId: post.id,
+    source: "POST",
     sharedPostId: post.sharedPostId ?? undefined,
     authorId: post.authorId,
     authorName: post.authorName ?? undefined,
@@ -88,6 +90,7 @@ function mapPostToFeed(post: PostDto): FeedPost {
     mediaUrl: post.mediaUrl ?? undefined,
     visibility: post.visibility,
     status: post.status,
+    createdAtIso: post.createdAt,
     createdAt: toRelativeDate(post.createdAt),
     likes: post.likeCount ?? 0,
     comments: post.commentCount ?? 0,
@@ -107,6 +110,27 @@ function mapPostToFeed(post: PostDto): FeedPost {
           createdAt: toRelativeDate(post.sharedPost.createdAt),
         }
       : undefined,
+  };
+}
+
+function mapGroupPostToFeed(post: GroupPostResponse): FeedPost {
+  return {
+    id: `group-${post.id}`,
+    source: "GROUP_POST",
+    groupId: post.groupId,
+    groupName: post.groupName ?? undefined,
+    authorId: post.authorUserId,
+    authorName: post.authorName ?? undefined,
+    authorAvatar: post.authorAvatarUrl ?? undefined,
+    content: post.content,
+    mediaUrl: post.mediaUrl ?? undefined,
+    visibility: "PUBLIC",
+    status: "APPROVED",
+    createdAtIso: post.createdAt ?? undefined,
+    createdAt: toRelativeDate(post.createdAt ?? ""),
+    likes: 0,
+    comments: 0,
+    shares: 0,
   };
 }
 
@@ -208,10 +232,31 @@ export default function ProfileFeedSection({
         setError("Không xác định được người dùng để tải bài viết.");
         return;
       }
-      const result =
-        source === "feed"
-          ? await postApi.getFeed(page, 10)
-          : await postApi.listUserPosts(userId as number, page, 10);
+      if (source === "feed") {
+        const result = await postApi.getFeed(page, 10);
+        const mapped = result.content.map(mapPostToFeed);
+        if (!append && page === 0) {
+          const groups = await listGroupFeed(20).catch(() => [] as GroupPostResponse[]);
+          const groupMapped = groups.map(mapGroupPostToFeed);
+          const merged = [...mapped, ...groupMapped].sort((a, b) => {
+            const ta = Date.parse(a.createdAtIso || "") || 0;
+            const tb = Date.parse(b.createdAtIso || "") || 0;
+            return tb - ta;
+          });
+          syncWith(merged);
+          await hydrateLikeState(mapped);
+        } else if (append) {
+          updatePosts((prev) => [...prev, ...mapped]);
+          await hydrateLikeState(mapped);
+        } else {
+          syncWith(mapped);
+          await hydrateLikeState(mapped);
+        }
+        setCurrentPage(result.page);
+        setHasMore(!result.last);
+        return;
+      }
+      const result = await postApi.listUserPosts(userId as number, page, 10);
       const mapped = result.content.map(mapPostToFeed);
       if (append) updatePosts((prev) => [...prev, ...mapped]);
       else syncWith(mapped);
@@ -367,6 +412,11 @@ export default function ProfileFeedSection({
   }
 
   async function openPostDetail(postId: string) {
+    const target = posts.find((p) => p.id === postId);
+    if (target?.source === "GROUP_POST" && target.groupId) {
+      router.push(`/groups/${target.groupId}`);
+      return;
+    }
     setOpeningPostId(postId);
     setActivePostId(postId);
     const postNum = Number(postId);
@@ -414,6 +464,8 @@ export default function ProfileFeedSection({
   }
 
   async function toggleLike(postId: string) {
+    const target = posts.find((p) => p.id === postId);
+    if (target?.source === "GROUP_POST") return;
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) return;
     const oldLiked = Boolean(likedMap[postId]);
@@ -448,6 +500,8 @@ export default function ProfileFeedSection({
   }
 
   async function addComment(postId: string, text: string) {
+    const target = posts.find((p) => p.id === postId);
+    if (target?.source === "GROUP_POST") return;
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) return;
     try {
@@ -547,6 +601,8 @@ export default function ProfileFeedSection({
   }
 
   async function sharePost(postId: string, payload?: { content?: string; visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE" }) {
+    const target = posts.find((p) => p.id === postId);
+    if (target?.source === "GROUP_POST") return;
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) return;
     try {
@@ -823,7 +879,11 @@ export default function ProfileFeedSection({
             <svg className="mb-3 h-12 w-12 text-slate-200" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
-            <p className="font-medium text-slate-500">Chưa có bài viết nào.</p>
+            <p className="font-medium text-slate-500">
+              {source === "feed"
+                ? "Feed đang trống. Hãy theo dõi thêm người dùng hoặc kết bạn để xem bài viết phù hợp hơn."
+                : "Chưa có bài viết nào."}
+            </p>
           </div>
         )}
       </div>

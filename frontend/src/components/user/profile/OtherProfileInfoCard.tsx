@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import FriendActionButton from "@/components/friendship/FriendActionButton";
+import FollowActionButton from "@/components/friendship/FollowActionButton";
 import { OpenDmBubbleButton } from "@/components/chat/FloatingDmProvider";
 import ProfileTabs from "./ProfileTabs";
 import ProfileHero from "./ProfileHero";
@@ -36,6 +37,9 @@ export default function OtherProfileInfoCard({ profile }: Props) {
             ) : (
               <span className="text-sm text-slate-500">Không xác định được người dùng.</span>
             )}
+            {targetId != null ? (
+              <FollowActionButton targetUserId={targetId} />
+            ) : null}
             {targetId != null ? (
               <OpenDmBubbleButton
                 peerUserId={targetId}

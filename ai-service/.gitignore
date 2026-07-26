@@ -8,3 +8,6 @@ __pycache__/
 artifacts/*/model.safetensors
 artifacts/*/pytorch_model.bin
 artifacts/*/training_args.bin
+artifacts/image/*.pth
+artifacts/image/*.pt
+artifacts/image/*.json

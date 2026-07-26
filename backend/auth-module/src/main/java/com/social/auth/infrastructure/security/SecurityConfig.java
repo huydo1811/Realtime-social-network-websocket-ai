@@ -61,6 +61,7 @@ public class SecurityConfig {
         .requestMatchers(mvc.pattern(HttpMethod.GET, "/users")).hasAnyRole("USER", "ADMIN")
         .requestMatchers(mvc.pattern(HttpMethod.GET, "/users/{id}")).hasAnyRole("USER", "ADMIN")
         .requestMatchers(mvc.pattern("/admin/moderation/**")).hasRole("ADMIN")
+        .requestMatchers(mvc.pattern("/groups/admin"), mvc.pattern("/groups/admin/**")).hasRole("ADMIN")
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         .anyRequest().authenticated()
       )

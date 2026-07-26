@@ -1,6 +1,18 @@
-import type { FriendshipResponse } from "@/types/friendship";
+import type { FriendshipResponse, GroupMembershipResponse, GroupPostResponse, GroupResponse, GroupVisibility } from "@/types/friendship";
 
 export type AdminFriendshipItem = FriendshipResponse;
+
+export type AdminGroupDetail = GroupResponse & {
+  memberCount: number;
+  pendingMemberCount: number;
+  postCount: number;
+  pendingPostCount: number;
+  requirePostApproval?: boolean;
+};
+
+export type AdminGroupMembership = GroupMembershipResponse;
+export type AdminGroupPost = GroupPostResponse;
+export type AdminGroupVisibility = GroupVisibility;
 
 export type AdminCallSession = {
   id: number;

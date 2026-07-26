@@ -228,7 +228,6 @@ export default function LeftSidebar() {
         </div>
         <div className="flex-1 overflow-hidden">
           <p className="text-sm font-bold text-slate-800 truncate">{user?.fullName || "Hype User"}</p>
-          <p className="text-[11px] text-slate-500 truncate">{user?.username || "@user_hype"}</p>
         </div>
         <button
           onClick={handleLogout}

@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { postApi } from "@/lib/api/postApi";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens } from "@/lib/api/authToken";
-import { blockUser, listGroupFeed } from "@/lib/api/friendshipApi";
+import { blockUser, listGroupFeed, toggleGroupPostLike } from "@/lib/api/friendshipApi";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
 import type {
@@ -128,8 +128,8 @@ function mapGroupPostToFeed(post: GroupPostResponse): FeedPost {
     status: "APPROVED",
     createdAtIso: post.createdAt ?? undefined,
     createdAt: toRelativeDate(post.createdAt ?? ""),
-    likes: 0,
-    comments: 0,
+    likes: post.likeCount ?? 0,
+    comments: post.commentCount ?? 0,
     shares: 0,
   };
 }
@@ -244,6 +244,10 @@ export default function ProfileFeedSection({
             return tb - ta;
           });
           syncWith(merged);
+          setLikedMap((prev) => ({
+            ...prev,
+            ...Object.fromEntries(groups.map((g) => [`group-${g.id}`, Boolean(g.likedByMe)])),
+          }));
           await hydrateLikeState(mapped);
         } else if (append) {
           updatePosts((prev) => [...prev, ...mapped]);
@@ -465,7 +469,33 @@ export default function ProfileFeedSection({
 
   async function toggleLike(postId: string) {
     const target = posts.find((p) => p.id === postId);
-    if (target?.source === "GROUP_POST") return;
+    if (target?.source === "GROUP_POST") {
+      if (!target.groupId) return;
+      const numericId = Number(String(postId).replace(/^group-/, ""));
+      if (!Number.isFinite(numericId)) return;
+      const oldLiked = Boolean(likedMap[postId]);
+      const oldLikes = target.likes ?? 0;
+      setLikedMap((prev) => ({ ...prev, [postId]: !oldLiked }));
+      updatePosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, likes: Math.max(0, p.likes + (oldLiked ? -1 : 1)) } : p
+        )
+      );
+      try {
+        const likeRes = await toggleGroupPostLike(target.groupId, numericId);
+        setLikedMap((prev) => ({ ...prev, [postId]: likeRes.liked }));
+        updatePosts((prev) =>
+          prev.map((p) => (p.id === postId ? { ...p, likes: likeRes.likeCount } : p))
+        );
+      } catch (e) {
+        setLikedMap((prev) => ({ ...prev, [postId]: oldLiked }));
+        updatePosts((prev) =>
+          prev.map((p) => (p.id === postId ? { ...p, likes: oldLikes } : p))
+        );
+        setError(e instanceof Error ? e.message : "Không thể thích bài viết nhóm");
+      }
+      return;
+    }
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) return;
     const oldLiked = Boolean(likedMap[postId]);

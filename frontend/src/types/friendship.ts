@@ -53,10 +53,12 @@ export type GroupPostStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type GroupResponse = {
   id: number;
   ownerUserId: number;
+  ownerFullName?: string | null;
   name: string;
   description?: string | null;
   visibility: GroupVisibility;
   requireApproval: boolean;
+  requirePostApproval?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -65,6 +67,8 @@ export type GroupMembershipResponse = {
   id: number;
   groupId: number;
   userId: number;
+  fullName?: string | null;
+  avatarUrl?: string | null;
   role: GroupMembershipRole;
   status: GroupMembershipStatus;
   requestedAt?: string;
@@ -87,4 +91,17 @@ export type GroupPostResponse = {
   reviewedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  likeCount?: number;
+  commentCount?: number;
+  likedByMe?: boolean;
+};
+
+export type GroupPostCommentResponse = {
+  id: number;
+  postId: number;
+  userId: number;
+  authorName?: string | null;
+  authorAvatarUrl?: string | null;
+  content: string;
+  createdAt?: string;
 };

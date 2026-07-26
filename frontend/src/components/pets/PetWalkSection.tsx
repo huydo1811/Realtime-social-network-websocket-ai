@@ -10,6 +10,7 @@ import { uploadToCloudinary } from "@/lib/cloudinary/upload";
 import { getAuthTokens } from "@/lib/api/authToken";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { initChatSocket, subscribePetWalkUser } from "@/lib/socket/chatSocket";
+import MediaPreview from "@/components/common/MediaPreview";
 import type {
   CreatePetWalkMeetupPayload,
   CreatePetWalkSessionPayload,
@@ -159,6 +160,7 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
   const [shareTone, setShareTone] = useState<ShareTone>("friendly");
   const [shareTemplate, setShareTemplate] = useState<ShareTemplate>("diary");
   const [usernamesByUserId, setUsernamesByUserId] = useState<Record<number, string>>({});
+  const [displayNamesByUserId, setDisplayNamesByUserId] = useState<Record<number, string>>({});
   const [finishShareSession, setFinishShareSession] = useState<PetWalkSessionDto | null>(null);
   const [finishShareText, setFinishShareText] = useState("");
   const [finishShareMediaUrl, setFinishShareMediaUrl] = useState<string | undefined>(undefined);
@@ -499,37 +501,49 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
     let cancelled = false;
     void Promise.all(
       Array.from(uniqueIds).map(async (id) => {
-        if (usernamesByUserId[id]) return null;
+        if (displayNamesByUserId[id] || usernamesByUserId[id]) return null;
         try {
           const profile = await getUserById(String(id));
-          return { id, username: profile.username };
+          return {
+            id,
+            fullName: profile.fullName?.trim() || undefined,
+            username: profile.username?.trim() || undefined,
+          };
         } catch {
           return null;
         }
       })
     ).then((items) => {
       if (cancelled) return;
-      const next: Record<number, string> = {};
+      const nextNames: Record<number, string> = {};
+      const nextUsernames: Record<number, string> = {};
       items.forEach((item) => {
-        if (item?.username) next[item.id] = item.username;
+        if (!item) return;
+        if (item.fullName) nextNames[item.id] = item.fullName;
+        if (item.username) nextUsernames[item.id] = item.username;
       });
-      if (Object.keys(next).length) {
-        setUsernamesByUserId((prev) => ({ ...prev, ...next }));
+      if (Object.keys(nextNames).length) {
+        setDisplayNamesByUserId((prev) => ({ ...prev, ...nextNames }));
+      }
+      if (Object.keys(nextUsernames).length) {
+        setUsernamesByUserId((prev) => ({ ...prev, ...nextUsernames }));
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [meetups, sentMeetups, usernamesByUserId]);
+  }, [meetups, sentMeetups, displayNamesByUserId, usernamesByUserId]);
 
   function formatPartnerTags(walkId: number): string {
     const ids = acceptedPartnerIdsByWalkId.get(walkId) ?? [];
     const tags = ids.map((id) => {
+      const fullName = displayNamesByUserId[id];
+      if (fullName) return fullName;
       const username = usernamesByUserId[id];
-      return username ? `@${username}` : `@user_${id}`;
+      return username ? `@${username}` : `User #${id}`;
     });
-    return tags.join(" ");
+    return tags.join(", ");
   }
 
   function formatPartnerPetTags(walkId: number): string {
@@ -927,6 +941,19 @@ export default function PetWalkSection({ petId, isOwner }: Props) {
                   </select>
                 </label>
               </div>
+              {finishShareMediaUrl ? (
+                <div className="mt-2">
+                  <MediaPreview
+                    url={finishShareMediaUrl}
+                    name={finishShareMediaName}
+                    onClear={() => {
+                      setFinishShareMediaUrl(undefined);
+                      setFinishShareMediaName("");
+                    }}
+                    compact
+                  />
+                </div>
+              ) : null}
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"

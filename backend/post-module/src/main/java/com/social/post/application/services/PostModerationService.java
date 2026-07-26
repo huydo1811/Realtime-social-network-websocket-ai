@@ -1,10 +1,13 @@
 package com.social.post.application.services;
 
+import com.social.moderation.application.usecases.ModerateImageUseCase;
 import com.social.moderation.application.usecases.ModerateTextUseCase;
 import com.social.moderation.application.usecases.ModerateTextUseCase.ModerationDecision;
 import com.social.moderation.domain.ModerationAction;
+import com.social.moderation.domain.ImageModerationResult;
 import com.social.moderation.domain.ModerationResult;
 import com.social.moderation.domain.entities.ModerationAudit.TargetType;
+import com.social.post.domain.exceptions.PostImageModerationRejectedException;
 import com.social.post.domain.exceptions.PostModerationRejectedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,9 +29,13 @@ public class PostModerationService {
     private static final Logger log = LoggerFactory.getLogger(PostModerationService.class);
 
     private final ModerateTextUseCase moderateTextUseCase;
+    private final ModerateImageUseCase moderateImageUseCase;
 
-    public PostModerationService(ModerateTextUseCase moderateTextUseCase) {
+    public PostModerationService(
+            ModerateTextUseCase moderateTextUseCase,
+            ModerateImageUseCase moderateImageUseCase) {
         this.moderateTextUseCase = moderateTextUseCase;
+        this.moderateImageUseCase = moderateImageUseCase;
     }
 
     /**
@@ -56,6 +63,18 @@ public class PostModerationService {
         };
     }
 
+    public void enforceMedia(String mediaUrl) {
+        if (mediaUrl == null || mediaUrl.isBlank() || isVideo(mediaUrl)) {
+            return;
+        }
+        ImageModerationResult result = moderateImageUseCase.moderate(mediaUrl);
+        if (result.violation()) {
+            log.warn("Rejecting image content (score={}, model={}, label={})",
+                    result.score(), result.modelName(), result.predictedLabel());
+            throw new PostImageModerationRejectedException(result);
+        }
+    }
+
     /**
      * Persist a moderation audit row. Callers should invoke this exactly once
      * per moderated content, regardless of the resulting action.
@@ -68,6 +87,17 @@ public class PostModerationService {
                 text,
                 new ModerationDecision(outcome.result(), outcome.action())
         );
+    }
+
+    private static boolean isVideo(String mediaUrl) {
+        String value = mediaUrl.toLowerCase();
+        return value.contains("/video/upload/")
+                || value.endsWith(".mp4")
+                || value.endsWith(".mov")
+                || value.endsWith(".webm")
+                || value.endsWith(".m4v")
+                || value.endsWith(".avi")
+                || value.endsWith(".mkv");
     }
 
     /** Result of {@link #enforce(String)} — used by callers to mutate entities and audit. */

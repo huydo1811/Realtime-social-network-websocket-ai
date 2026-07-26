@@ -38,6 +38,7 @@ public class UpdatePostUseCase {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new PostDomainException("Không tìm thấy bài viết"));
         postPetValidator.validateOwnership(actorId, petId);
+        moderationService.enforceMedia(mediaUrl);
         // Re-moderate on every edit so users cannot bypass the filter by editing later.
         Outcome outcome = moderationService.enforce(content);
         post.update(actorId, content, mediaUrl, visibility, petId);

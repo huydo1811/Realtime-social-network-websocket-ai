@@ -39,6 +39,7 @@ public class CreatePostUseCase {
             Long petId) {
         userRepository.findById(actorId).orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
         postPetValidator.validateOwnership(actorId, petId);
+        moderationService.enforceMedia(mediaUrl);
         Post post = Post.create(actorId, content, mediaUrl, visibility, petId);
 
         Outcome outcome = moderationService.enforce(post.getContent());

@@ -6,6 +6,7 @@ import { getAuthTokens } from "@/lib/api/authToken";
 import { onRead, onPrivateThreadsSync } from "@/lib/event/chatEvents";
 import FloatingChatWindow from "@/components/chat/FloatingChatWindow";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { initChatSocket, subscribeConversation, subscribePresence } from "@/lib/socket/chatSocket";
 import { getUserById } from "@/lib/api/userApi";
 import { followUser, listFollowSuggestions } from "@/lib/api/friendshipApi";
@@ -433,13 +434,18 @@ export default function RightSidebar() {
                 followSuggestions.map((item) => (
                   <div key={item.userId} className="rounded-xl border border-slate-100 bg-slate-50/70 px-2.5 py-2">
                     <div className="flex items-center gap-2">
-                      <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${grad(item.fullName || String(item.userId))} flex items-center justify-center text-xs font-bold text-white`}>
+                      <Link
+                        href={`/profile/${item.userId}`}
+                        className={`h-8 w-8 shrink-0 rounded-full bg-gradient-to-br ${grad(item.fullName || String(item.userId))} flex items-center justify-center text-xs font-bold text-white hover:opacity-90`}
+                        title="Xem hồ sơ"
+                      >
                         {(item.fullName || "U").charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold text-slate-800">{item.fullName || `Người dùng #${item.userId}`}</p>
-                        <p className="truncate text-[11px] text-slate-500">@{item.username || `user_${item.userId}`}</p>
-                      </div>
+                      </Link>
+                      <Link href={`/profile/${item.userId}`} className="min-w-0 flex-1 hover:opacity-90">
+                        <p className="truncate text-xs font-semibold text-slate-800 hover:text-rose-600">
+                          {item.fullName || `Người dùng #${item.userId}`}
+                        </p>
+                      </Link>
                       <button
                         type="button"
                         onClick={() => void followSuggestedUser(item.userId)}

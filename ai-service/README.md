@@ -9,14 +9,17 @@ ai-service/
 ├── app/
 │   └── main.py             # FastAPI app + lazy-loaded Predictor
 ├── artifacts/
-│   └── phobert_v1/         # copied from results_train_profanity_phoBERT/artifacts/phobert_v1
-│       ├── model.safetensors
-│       ├── vocab.txt
-│       ├── bpe.codes
-│       ├── tokenizer.json / tokenizer_config.json
-│       ├── config.json
-│       ├── serving_config.json
-│       └── label_mapping.json
+│   ├── phobert_v1/         # copied from results_train_profanity_phoBERT/artifacts/phobert_v1
+│   │   ├── model.safetensors
+│   │   ├── vocab.txt
+│   │   ├── bpe.codes
+│   │   ├── tokenizer.json / tokenizer_config.json
+│   │   ├── config.json
+│   │   ├── serving_config.json
+│   │   └── label_mapping.json
+│   └── image/
+│       ├── best_pet_nonpet_efficientnet_b0.pth
+│       └── pet_filter_metadata.json
 ├── requirements.txt
 └── README.md
 ```
@@ -34,6 +37,8 @@ Copy-Item -Recurse results_train_profanity_phoBERT\artifacts\phobert_v1 ai-servi
 cd ai-service
 pip install -r requirements.txt
 $env:MODEL_DIR = "$PWD\artifacts\phobert_v1"
+$env:IMAGE_MODEL_PATH = "$PWD\artifacts\image\best_pet_nonpet_efficientnet_b0.pth"
+$env:IMAGE_METADATA_PATH = "$PWD\artifacts\image\pet_filter_metadata.json"
 $env:PYTHONIOENCODING = "utf-8"     # so the server can log Vietnamese text
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 # → http://localhost:8000  (GET /healthz to verify)
@@ -56,6 +61,8 @@ cd ai-service
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export MODEL_DIR=$PWD/artifacts/phobert_v1
+export IMAGE_MODEL_PATH=$PWD/artifacts/image/best_pet_nonpet_efficientnet_b0.pth
+export IMAGE_METADATA_PATH=$PWD/artifacts/image/pet_filter_metadata.json
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -66,7 +73,15 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ### `GET /healthz`
 
 ```json
-{ "status": "ok", "model": "phobert_v1", "threshold": 0.24, "model_loaded": true }
+{
+  "status": "ok",
+  "model": "phobert_v1",
+  "threshold": 0.24,
+  "model_loaded": true,
+  "image_model": "best_pet_nonpet_efficientnet_b0.pth",
+  "image_threshold": 0.60,
+  "image_model_loaded": true
+}
 ```
 
 ### `POST /predict`
@@ -89,6 +104,27 @@ curl -X POST http://localhost:8000/predict \
 
 `threshold` (optional) lets the caller override the model's training-time threshold for experimentation; default uses the value from `serving_config.json`.
 
+### `POST /predict-image`
+
+```bash
+curl -X POST http://localhost:8000/predict-image \
+  -H "Content-Type: application/json" \
+  -d '{"imageUrl":"https://res.cloudinary.com/.../image/upload/...jpg"}'
+```
+
+```json
+{
+  "violation": false,
+  "score": 0.07,
+  "threshold": 0.60,
+  "model": "best_pet_nonpet_efficientnet_b0.pth",
+  "reason": "pet_or_uncertain",
+  "predicted_label": "pet"
+}
+```
+
+When `violation=true`, backend rejects image post with a validation message.
+
 ## Docker
 
 ```bash
@@ -102,4 +138,8 @@ Refer to `../results_train_profanity_phoBERT/train.py` for the offline training 
 
 ## Java client contract
 
-The Spring `HttpTextModerationService` calls `POST /predict` and expects the JSON above. It treats any non-200 response (including 503 model_unavailable) as a fail-open condition.
+The Spring clients call:
+- `POST /predict` for text moderation (post/comment/reply text)
+- `POST /predict-image` for image moderation (post media URL)
+
+Any upstream failure is currently treated as fail-open by backend moderation service.

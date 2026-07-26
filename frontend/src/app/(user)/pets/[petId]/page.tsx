@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import MediaPreview from "@/components/common/MediaPreview";
 import UserLayout from "@/components/layout/UserLayout";
 import PetAssistantSection from "@/components/pets/PetAssistantSection";
 import PetDiagnosisSection from "@/components/pets/PetDiagnosisSection";
@@ -104,6 +105,8 @@ export default function PetDetailPage() {
   const [socialBadgeFetchFailed, setSocialBadgeFetchFailed] = useState(false);
   const [uploadingPetAvatar, setUploadingPetAvatar] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState<string | null>(null);
+  const [draftAvatarName, setDraftAvatarName] = useState("");
   const [sharingBadgeKey, setSharingBadgeKey] = useState<string | null>(null);
 
   const actorId = useMemo(() => {
@@ -233,8 +236,13 @@ export default function PetDetailPage() {
     if (!file || !pet || !isOwner) return;
     setUploadingPetAvatar(true);
     setAvatarNotice(null);
+    const localPreview = URL.createObjectURL(file);
+    setDraftAvatarUrl(localPreview);
+    setDraftAvatarName(file.name);
     try {
       const uploaded = await uploadToCloudinary(file);
+      setDraftAvatarUrl(uploaded.secureUrl);
+      URL.revokeObjectURL(localPreview);
       const updated = await petApi.update(pet.id, {
         name: pet.name,
         species: pet.species,
@@ -249,8 +257,13 @@ export default function PetDetailPage() {
         status: pet.status,
       });
       setPet(updated);
+      setDraftAvatarUrl(null);
+      setDraftAvatarName("");
       setAvatarNotice("Đã cập nhật ảnh thú cưng.");
     } catch (e) {
+      setDraftAvatarUrl(null);
+      setDraftAvatarName("");
+      URL.revokeObjectURL(localPreview);
       setAvatarNotice(e instanceof Error ? e.message : "Không thể cập nhật ảnh thú cưng.");
     } finally {
       setUploadingPetAvatar(false);
@@ -293,16 +306,17 @@ export default function PetDetailPage() {
           <>
             <div className="mb-6 overflow-hidden rounded-3xl border border-rose-100 bg-gradient-to-br from-white via-rose-50/40 to-violet-50/40 shadow-sm">
               <div className="flex items-start gap-4 p-6">
-                {pet.avatarUrl ? (
+                {(draftAvatarUrl || pet.avatarUrl) ? (
                   <Image
-                    src={pet.avatarUrl}
+                    src={draftAvatarUrl || pet.avatarUrl!}
                     alt={pet.name}
-                    width={80}
-                    height={80}
-                    className="h-24 w-24 rounded-2xl object-cover shadow-sm ring-2 ring-white"
+                    width={112}
+                    height={112}
+                    className="h-28 w-28 rounded-2xl object-cover shadow-sm ring-2 ring-white"
+                    unoptimized={Boolean(draftAvatarUrl)}
                   />
                 ) : (
-                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-rose-100 text-2xl font-bold text-rose-600">
+                  <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-rose-100 text-2xl font-bold text-rose-600">
                     {pet.name[0]?.toUpperCase() ?? "P"}
                   </div>
                 )}
@@ -333,18 +347,27 @@ export default function PetDetailPage() {
                     <p className="mt-2 inline-flex rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-slate-500">Chủ nuôi: {pet.ownerName}</p>
                   ) : null}
                   {isOwner ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                        {uploadingPetAvatar ? "Đang cập nhật ảnh..." : "Đổi ảnh thú cưng"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => void handleChangePetAvatar(e.target.files?.[0])}
-                          disabled={uploadingPetAvatar}
+                    <div className="mt-3 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                          {uploadingPetAvatar ? "Đang cập nhật ảnh..." : "Đổi ảnh thú cưng"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => void handleChangePetAvatar(e.target.files?.[0])}
+                            disabled={uploadingPetAvatar}
+                          />
+                        </label>
+                        {avatarNotice ? <span className="text-xs text-slate-600">{avatarNotice}</span> : null}
+                      </div>
+                      {draftAvatarUrl ? (
+                        <MediaPreview
+                          url={draftAvatarUrl}
+                          name={draftAvatarName || "Ảnh mới đang lưu..."}
+                          compact
                         />
-                      </label>
-                      {avatarNotice ? <span className="text-xs text-slate-600">{avatarNotice}</span> : null}
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

@@ -8,12 +8,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.social.post.domain.exceptions.PostDomainException;
+import com.social.post.domain.exceptions.PostImageModerationRejectedException;
 import com.social.post.domain.exceptions.PostModerationRejectedException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,7 +23,7 @@ public class PostExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest req) {
         List<String> messages = ex.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
+                .map(err -> err.getDefaultMessage() == null ? "Dữ liệu không hợp lệ" : err.getDefaultMessage())
                 .collect(Collectors.toList());
         return response(HttpStatus.BAD_REQUEST, "Validation Failed",
                 messages.isEmpty() ? "Dữ liệu không hợp lệ" : messages.get(0), req.getRequestURI());
@@ -45,6 +45,22 @@ public class PostExceptionHandler {
         body.put("moderation", Map.of(
                 "score", ex.getScore(),
                 "model", ex.getModelName()
+        ));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(PostImageModerationRejectedException.class)
+    public ResponseEntity<?> handleImageModerationReject(PostImageModerationRejectedException ex, HttpServletRequest req) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", HttpStatus.BAD_REQUEST.value());
+        body.put("error", "Image Moderation Rejected");
+        body.put("message", ex.getMessage());
+        body.put("path", req.getRequestURI());
+        body.put("moderation", Map.of(
+                "score", ex.getScore(),
+                "model", ex.getModelName(),
+                "predictedLabel", ex.getPredictedLabel()
         ));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }

@@ -5,6 +5,9 @@ uvicorn[standard]>=0.29.0,<1.0.0
 pydantic>=2.5.0,<3.0.0
 # numpy is pulled in transitively by torch; pin upper bound to keep torch 2.x happy
 numpy>=1.26,<2.0
+torchvision>=0.17.0,<1.0.0
+Pillow>=10.0.0,<12.0.0
+requests>=2.31.0,<3.0.0
 # underthesea intentionally omitted: its `underthesea-core` distribution only ships as
 # a source distribution requiring the Rust toolchain (maturin) to build. Training still
 # uses underthesea (see results_train_profanity_phoBERT/requirements.txt), but inference

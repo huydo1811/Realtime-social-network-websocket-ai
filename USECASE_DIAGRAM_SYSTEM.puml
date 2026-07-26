@@ -1,0 +1,135 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam usecase {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+  ArrowColor #777777
+}
+
+actor "Nguoi dung" as User
+actor "Quan tri vien" as Admin
+
+rectangle "He thong mang xa hoi thu cung" {
+
+  package "Xac thuc & Ho so" {
+    usecase "Dang ky" as UC_Register
+    usecase "Dang nhap" as UC_Login
+    usecase "OTP / Reset mat khau" as UC_OTP
+    usecase "Cap nhat ho so ca nhan" as UC_Profile
+    usecase "Tim kiem / Xem user" as UC_UserView
+  }
+
+  package "Bai viet & Tuong tac" {
+    usecase "Tao/Sua/Xoa bai viet" as UC_PostCRUD
+    usecase "Xem newsfeed" as UC_Feed
+    usecase "Like bai viet" as UC_LikePost
+    usecase "Binh luan / Tra loi" as UC_Comment
+    usecase "Like binh luan" as UC_LikeComment
+    usecase "Chia se bai viet" as UC_Share
+    usecase "Bao cao noi dung" as UC_Report
+    usecase "An bai viet khoi feed ca nhan" as UC_HidePersonal
+  }
+
+  package "Ban be, Follow, Nhom" {
+    usecase "Quan ly ket ban\n(gui/chap nhan/tu choi/huy/xoa/chan)" as UC_Friend
+    usecase "Theo doi / Bo theo doi" as UC_Follow
+    usecase "Tao/Kham pha/Tham gia nhom" as UC_GroupJoin
+    usecase "Dang bai trong nhom" as UC_GroupPost
+    usecase "Xem bai nhom trong feed tong" as UC_GroupFeed
+    usecase "Duyet member / Duyet bai nhom\n(Truong nhom)" as UC_GroupModerate
+  }
+
+  package "Chat & Cuoc goi" {
+    usecase "Nhan tin (gui/sua/xoa/file)" as UC_ChatMessage
+    usecase "Read receipt / Typing / Presence" as UC_ChatRealtime
+    usecase "Tuy chinh giao dien chat" as UC_ChatAppearance
+    usecase "Goi thoai/video WebRTC" as UC_Call
+  }
+
+  package "Thu cung & Suc khoe" {
+    usecase "Quan ly thu cung (CRUD)" as UC_PetCRUD
+    usecase "So suc khoe (record, can nang,\nan uong, hoat dong)" as UC_Health
+    usecase "Lich nhac nho (tao/hoan thanh/bo qua)" as UC_Reminder
+    usecase "Di dao & Meetup" as UC_WalkMeetup
+    usecase "Tim phong kham thu y gan day" as UC_VetNearby
+    usecase "Chan doan trieu chung" as UC_Diagnosis
+    usecase "Social health summary/\nprompts/badges" as UC_PetSocial
+  }
+
+  package "Quan tri he thong (Admin)" {
+    usecase "Dashboard thong ke" as UC_AdminDashboard
+    usecase "CRUD nguoi dung" as UC_AdminUsers
+    usecase "Quan ly friendship admin" as UC_AdminFriendship
+    usecase "An/Bo an bai viet, an binh luan" as UC_AdminPostMod
+    usecase "Quan ly bao cao noi dung" as UC_AdminReports
+    usecase "Nhat ky kiem duyet AI\n(audit, mark handled)" as UC_AdminAIMod
+    usecase "Quan tri chat (audit, xoa msg,\npreset/appearance)" as UC_AdminChat
+    usecase "Quan tri cuoc goi (session/events)" as UC_AdminCall
+    usecase "Quan tri thu cung (stats/search/drilldown)" as UC_AdminPet
+  }
+
+  package "AI-service (tich hop)" {
+    usecase "Moderate text\n(POST /predict)" as UC_AIText
+    usecase "Health check model\n(GET /healthz)" as UC_AIHealth
+  }
+}
+
+User --> UC_Register
+User --> UC_Login
+User --> UC_OTP
+User --> UC_Profile
+User --> UC_UserView
+User --> UC_PostCRUD
+User --> UC_Feed
+User --> UC_LikePost
+User --> UC_Comment
+User --> UC_LikeComment
+User --> UC_Share
+User --> UC_Report
+User --> UC_HidePersonal
+User --> UC_Friend
+User --> UC_Follow
+User --> UC_GroupJoin
+User --> UC_GroupPost
+User --> UC_GroupFeed
+User --> UC_ChatMessage
+User --> UC_ChatRealtime
+User --> UC_ChatAppearance
+User --> UC_Call
+User --> UC_PetCRUD
+User --> UC_Health
+User --> UC_Reminder
+User --> UC_WalkMeetup
+User --> UC_VetNearby
+User --> UC_Diagnosis
+User --> UC_PetSocial
+User --> UC_GroupModerate
+
+Admin --> UC_Login
+Admin --> UC_AdminDashboard
+Admin --> UC_AdminUsers
+Admin --> UC_AdminFriendship
+Admin --> UC_AdminPostMod
+Admin --> UC_AdminReports
+Admin --> UC_AdminAIMod
+Admin --> UC_AdminChat
+Admin --> UC_AdminCall
+Admin --> UC_AdminPet
+
+UC_PostCRUD ..> UC_AIText : <<include>>
+UC_Comment ..> UC_AIText : <<include>>
+UC_GroupPost ..> UC_GroupModerate : <<extend>>
+UC_AdminAIMod ..> UC_AIHealth : <<include>>
+
+note bottom
+  Ghi chu:
+  - AI-service hien dung cho text moderation.
+  - Chan doan pet hien tai la rule-based service trong backend pet-module.
+  - Neu so do qua day, tach theo 3 hinh:
+    (1) Social core, (2) Pets, (3) Admin.
+end note
+
+@enduml
+

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { uploadToCloudinary } from "@/lib/cloudinary/upload";
+import MediaPreview from "@/components/common/MediaPreview";
 import type { PetDto } from "@/types/pet";
 
 type Props = {
@@ -171,6 +172,17 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit, initialPe
                 {uploading ? "Đang tải..." : "Chọn ảnh/video"}
               </button>
             </div>
+            {mediaUrl ? (
+              <MediaPreview
+                url={mediaUrl}
+                name={mediaName}
+                onClear={() => {
+                  setMediaUrl(undefined);
+                  setMediaName("");
+                  if (mediaInputRef.current) mediaInputRef.current.value = "";
+                }}
+              />
+            ) : null}
             {uploadError ? <p className="text-xs text-rose-600">{uploadError}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3 text-xs font-medium">

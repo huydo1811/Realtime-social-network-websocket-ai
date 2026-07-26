@@ -4,6 +4,7 @@ import type {
   FollowSuggestion,
   FriendshipResponse,
   GroupMembershipResponse,
+  GroupPostCommentResponse,
   GroupPostResponse,
   GroupPostStatus,
   GroupResponse,
@@ -166,11 +167,15 @@ export async function createGroup(payload: {
   description?: string;
   visibility: GroupVisibility;
   requireApproval: boolean;
+  requirePostApproval?: boolean;
 }): Promise<GroupResponse> {
   const res = await apiAuthFetch(`${API_URL}/groups`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      requirePostApproval: payload.requirePostApproval ?? true,
+    }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as GroupResponse;
@@ -195,6 +200,12 @@ export async function listMyGroupMemberships(): Promise<GroupMembershipResponse[
   const res = await apiAuthFetch(`${API_URL}/groups/mine`);
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as GroupMembershipResponse[];
+}
+
+export async function listMyOwnedGroups(): Promise<GroupResponse[]> {
+  const res = await apiAuthFetch(`${API_URL}/groups/mine/owned`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupResponse[];
 }
 
 export async function joinGroup(groupId: number): Promise<GroupMembershipResponse> {
@@ -247,6 +258,35 @@ export async function rejectGroupPost(groupId: number, postId: number): Promise<
   const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts/${postId}/reject`, { method: "POST" });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as GroupPostResponse;
+}
+
+export async function toggleGroupPostLike(
+  groupId: number,
+  postId: number
+): Promise<{ liked: boolean; likeCount: number }> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts/${postId}/like`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as { liked: boolean; likeCount: number };
+}
+
+export async function listGroupPostComments(groupId: number, postId: number): Promise<GroupPostCommentResponse[]> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts/${postId}/comments`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostCommentResponse[];
+}
+
+export async function createGroupPostComment(
+  groupId: number,
+  postId: number,
+  content: string
+): Promise<GroupPostCommentResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/posts/${postId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupPostCommentResponse;
 }
 
 export async function listGroupFeed(limit = 30): Promise<GroupPostResponse[]> {

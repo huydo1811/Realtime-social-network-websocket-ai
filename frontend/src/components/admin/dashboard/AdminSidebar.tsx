@@ -67,6 +67,14 @@ export default function AdminSidebar() {
           Quan hệ bạn bè
         </Link>
         <Link
+          href="/admin/groups"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/groups") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Nhóm cộng đồng
+        </Link>
+        <Link
           href="/admin/call"
           className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
             pathname.startsWith("/admin/call") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"

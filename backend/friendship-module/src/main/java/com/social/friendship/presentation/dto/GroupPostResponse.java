@@ -20,8 +20,17 @@ public class GroupPostResponse {
     private LocalDateTime reviewedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private long likeCount;
+    private long commentCount;
+    private boolean likedByMe;
 
-    public static GroupPostResponse from(SocialGroupPost row, User author, String groupName) {
+    public static GroupPostResponse from(
+            SocialGroupPost row,
+            User author,
+            String groupName,
+            long likeCount,
+            long commentCount,
+            boolean likedByMe) {
         GroupPostResponse dto = new GroupPostResponse();
         dto.id = row.getId();
         dto.groupId = row.getGroupId();
@@ -36,11 +45,18 @@ public class GroupPostResponse {
         dto.reviewedAt = row.getReviewedAt();
         dto.createdAt = row.getCreatedAt();
         dto.updatedAt = row.getUpdatedAt();
+        dto.likeCount = likeCount;
+        dto.commentCount = commentCount;
+        dto.likedByMe = likedByMe;
         return dto;
     }
 
+    public static GroupPostResponse from(SocialGroupPost row, User author, String groupName) {
+        return from(row, author, groupName, 0L, 0L, false);
+    }
+
     public static GroupPostResponse from(SocialGroupPost row, User author) {
-        return from(row, author, null);
+        return from(row, author, null, 0L, 0L, false);
     }
 
     public Long getId() {
@@ -93,5 +109,17 @@ public class GroupPostResponse {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public long getLikeCount() {
+        return likeCount;
+    }
+
+    public long getCommentCount() {
+        return commentCount;
+    }
+
+    public boolean isLikedByMe() {
+        return likedByMe;
     }
 }

@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 import com.social.friendship.domain.entities.GroupVisibility;
 import com.social.friendship.domain.entities.SocialGroup;
 
-public class GroupResponse {
+public class AdminGroupDetailResponse {
     private Long id;
     private Long ownerUserId;
     private String ownerFullName;
@@ -16,13 +16,19 @@ public class GroupResponse {
     private boolean requirePostApproval;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private long memberCount;
+    private long pendingMemberCount;
+    private long postCount;
+    private long pendingPostCount;
 
-    public static GroupResponse from(SocialGroup row) {
-        return from(row, null);
-    }
-
-    public static GroupResponse from(SocialGroup row, String ownerFullName) {
-        GroupResponse dto = new GroupResponse();
+    public static AdminGroupDetailResponse from(
+            SocialGroup row,
+            String ownerFullName,
+            long memberCount,
+            long pendingMemberCount,
+            long postCount,
+            long pendingPostCount) {
+        AdminGroupDetailResponse dto = new AdminGroupDetailResponse();
         dto.id = row.getId();
         dto.ownerUserId = row.getOwnerUserId();
         dto.ownerFullName = ownerFullName;
@@ -33,6 +39,10 @@ public class GroupResponse {
         dto.requirePostApproval = row.isRequirePostApproval();
         dto.createdAt = row.getCreatedAt();
         dto.updatedAt = row.getUpdatedAt();
+        dto.memberCount = memberCount;
+        dto.pendingMemberCount = pendingMemberCount;
+        dto.postCount = postCount;
+        dto.pendingPostCount = pendingPostCount;
         return dto;
     }
 
@@ -74,5 +84,21 @@ public class GroupResponse {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public long getMemberCount() {
+        return memberCount;
+    }
+
+    public long getPendingMemberCount() {
+        return pendingMemberCount;
+    }
+
+    public long getPostCount() {
+        return postCount;
+    }
+
+    public long getPendingPostCount() {
+        return pendingPostCount;
     }
 }

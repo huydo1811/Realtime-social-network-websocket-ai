@@ -12,6 +12,7 @@ public class CreateGroupRequest {
     private String description;
     private GroupVisibility visibility = GroupVisibility.PUBLIC;
     private boolean requireApproval = false;
+    private boolean requirePostApproval = true;
 
     public String getName() {
         return name;
@@ -43,5 +44,13 @@ public class CreateGroupRequest {
 
     public void setRequireApproval(boolean requireApproval) {
         this.requireApproval = requireApproval;
+    }
+
+    public boolean isRequirePostApproval() {
+        return requirePostApproval;
+    }
+
+    public void setRequirePostApproval(boolean requirePostApproval) {
+        this.requirePostApproval = requirePostApproval;
     }
 }

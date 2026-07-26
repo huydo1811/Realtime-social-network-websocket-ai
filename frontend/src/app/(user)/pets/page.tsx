@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import MediaPreview from "@/components/common/MediaPreview";
 import UserLayout from "@/components/layout/UserLayout";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
@@ -249,13 +250,15 @@ export default function PetsPage() {
                     </label>
                   </div>
                   {form.avatarUrl ? (
-                    <div className="mt-2">
-                      <Image
-                        src={form.avatarUrl}
-                        alt="pet preview"
-                        width={64}
-                        height={64}
-                        className="h-16 w-16 rounded-xl object-cover"
+                    <div className="mt-3">
+                      <MediaPreview
+                        url={form.avatarUrl}
+                        name={petImageName || "Ảnh thú cưng"}
+                        onClear={() => {
+                          setForm((f) => ({ ...f, avatarUrl: undefined }));
+                          setPetImageName("");
+                        }}
+                        compact
                       />
                     </div>
                   ) : null}

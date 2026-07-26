@@ -355,10 +355,9 @@ export default function PostCard({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleLike(post.id); }}
-          disabled={post.source === "GROUP_POST"}
           className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 font-semibold ${
             liked ? "bg-rose-500 text-white" : "text-slate-700 hover:bg-slate-100"
-          } ${post.source === "GROUP_POST" ? "cursor-not-allowed opacity-60" : ""}`}
+          }`}
         >
           <svg className="h-4 w-4" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.32 6.32a4.5 4.5 0 000 6.36L12 20.36l7.68-7.68a4.5 4.5 0 00-6.36-6.36L12 7.64l-1.32-1.32a4.5 4.5 0 00-6.36 0z" />

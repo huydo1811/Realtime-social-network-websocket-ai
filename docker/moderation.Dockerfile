@@ -6,6 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     MODEL_DIR=/workspace/artifacts/phobert_v1 \
+    IMAGE_MODEL_PATH=/workspace/artifacts/image/best_pet_nonpet_efficientnet_b0.pth \
+    IMAGE_METADATA_PATH=/workspace/artifacts/image/pet_filter_metadata.json \
     PORT=8000
 
 WORKDIR /workspace

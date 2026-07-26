@@ -3,8 +3,12 @@ import type {
   AdminCallEvent,
   AdminCallSession,
   AdminFriendshipItem,
+  AdminGroupDetail,
+  AdminGroupMembership,
+  AdminGroupPost,
   AdminPageResponse,
 } from "@/types/admin";
+import type { GroupMembershipStatus, GroupPostStatus, GroupResponse, GroupVisibility } from "@/types/friendship";
 
 async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
@@ -64,5 +68,95 @@ export const adminApi = {
     const res = await apiAuthFetch(`${API_URL}/calls/admin/sessions/${encodeURIComponent(callId)}/events`);
     if (!res.ok) throw await parseError(res, "Không thể tải timeline sự kiện cuộc gọi");
     return (await res.json()) as AdminCallEvent[];
+  },
+
+  async listGroups(params?: {
+    q?: string;
+    visibility?: GroupVisibility | "";
+    ownerUserId?: number;
+    page?: number;
+    size?: number;
+  }): Promise<AdminPageResponse<GroupResponse>> {
+    const query = new URLSearchParams();
+    query.set("page", String(params?.page ?? 0));
+    query.set("size", String(params?.size ?? 20));
+    if (params?.q?.trim()) query.set("q", params.q.trim());
+    if (params?.visibility) query.set("visibility", params.visibility);
+    if (params?.ownerUserId != null && Number.isFinite(params.ownerUserId)) {
+      query.set("ownerUserId", String(params.ownerUserId));
+    }
+    const res = await apiAuthFetch(`${API_URL}/groups/admin?${query.toString()}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách nhóm");
+    return (await res.json()) as AdminPageResponse<GroupResponse>;
+  },
+
+  async getGroupDetail(groupId: number): Promise<AdminGroupDetail> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải chi tiết nhóm");
+    return (await res.json()) as AdminGroupDetail;
+  },
+
+  async listGroupMembers(groupId: number, status?: GroupMembershipStatus | ""): Promise<AdminGroupMembership[]> {
+    const query = new URLSearchParams();
+    if (status) query.set("status", status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/members${suffix}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải thành viên nhóm");
+    return (await res.json()) as AdminGroupMembership[];
+  },
+
+  async listGroupPosts(groupId: number, status?: GroupPostStatus | ""): Promise<AdminGroupPost[]> {
+    const query = new URLSearchParams();
+    if (status) query.set("status", status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/posts${suffix}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải bài viết nhóm");
+    return (await res.json()) as AdminGroupPost[];
+  },
+
+  async approveGroupMember(groupId: number, membershipId: number): Promise<AdminGroupMembership> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/members/${membershipId}/approve`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể duyệt thành viên");
+    return (await res.json()) as AdminGroupMembership;
+  },
+
+  async rejectGroupMember(groupId: number, membershipId: number): Promise<AdminGroupMembership> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/members/${membershipId}/reject`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể từ chối thành viên");
+    return (await res.json()) as AdminGroupMembership;
+  },
+
+  async removeGroupMember(groupId: number, membershipId: number): Promise<void> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/members/${membershipId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể gỡ thành viên");
+  },
+
+  async approveGroupPost(groupId: number, postId: number): Promise<AdminGroupPost> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/posts/${postId}/approve`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể duyệt bài viết nhóm");
+    return (await res.json()) as AdminGroupPost;
+  },
+
+  async rejectGroupPost(groupId: number, postId: number): Promise<AdminGroupPost> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}/posts/${postId}/reject`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể từ chối bài viết nhóm");
+    return (await res.json()) as AdminGroupPost;
+  },
+
+  async deleteGroup(groupId: number): Promise<void> {
+    const res = await apiAuthFetch(`${API_URL}/groups/admin/${groupId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseError(res, "Không thể xóa nhóm");
   },
 };

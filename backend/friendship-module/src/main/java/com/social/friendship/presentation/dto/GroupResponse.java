@@ -11,26 +11,34 @@ public class GroupResponse {
     private String ownerFullName;
     private String name;
     private String description;
+    private String avatarUrl;
     private GroupVisibility visibility;
     private boolean requireApproval;
     private boolean requirePostApproval;
+    private long memberCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     public static GroupResponse from(SocialGroup row) {
-        return from(row, null);
+        return from(row, null, 0L);
     }
 
     public static GroupResponse from(SocialGroup row, String ownerFullName) {
+        return from(row, ownerFullName, 0L);
+    }
+
+    public static GroupResponse from(SocialGroup row, String ownerFullName, long memberCount) {
         GroupResponse dto = new GroupResponse();
         dto.id = row.getId();
         dto.ownerUserId = row.getOwnerUserId();
         dto.ownerFullName = ownerFullName;
         dto.name = row.getName();
         dto.description = row.getDescription();
+        dto.avatarUrl = row.getAvatarUrl();
         dto.visibility = row.getVisibility();
         dto.requireApproval = row.isRequireApproval();
         dto.requirePostApproval = row.isRequirePostApproval();
+        dto.memberCount = memberCount;
         dto.createdAt = row.getCreatedAt();
         dto.updatedAt = row.getUpdatedAt();
         return dto;
@@ -56,6 +64,10 @@ public class GroupResponse {
         return description;
     }
 
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
     public GroupVisibility getVisibility() {
         return visibility;
     }
@@ -66,6 +78,10 @@ public class GroupResponse {
 
     public boolean isRequirePostApproval() {
         return requirePostApproval;
+    }
+
+    public long getMemberCount() {
+        return memberCount;
     }
 
     public LocalDateTime getCreatedAt() {

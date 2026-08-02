@@ -112,7 +112,7 @@ export default function AdminSidebar() {
             pathname.startsWith("/admin/moderation") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
           }`}
         >
-          Nhật ký kiểm duyệt AI
+          Quản lý AI
         </Link>
       </nav>
 

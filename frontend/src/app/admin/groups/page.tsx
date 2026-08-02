@@ -126,8 +126,13 @@ export default function AdminGroupsPage() {
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">Quản lý nhóm cộng đồng</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Xem toàn bộ nhóm, duyệt thành viên/bài viết vượt quyền trưởng nhóm, và xóa nhóm vi phạm.
+          Xem toàn bộ nhóm, duyệt thành viên/bài viết, xóa nhóm vi phạm. Báo cáo nhóm từ người dùng nằm ở mục Báo cáo nội dung.
         </p>
+        <div className="mt-3">
+          <a href="/admin/reports" className="text-sm font-semibold text-rose-600 hover:underline">
+            Xem báo cáo nhóm / nội dung →
+          </a>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <input
             value={q}

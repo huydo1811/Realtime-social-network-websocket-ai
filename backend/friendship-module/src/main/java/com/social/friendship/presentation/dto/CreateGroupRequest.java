@@ -13,6 +13,7 @@ public class CreateGroupRequest {
     private GroupVisibility visibility = GroupVisibility.PUBLIC;
     private boolean requireApproval = false;
     private boolean requirePostApproval = true;
+    private String avatarUrl;
 
     public String getName() {
         return name;
@@ -52,5 +53,13 @@ public class CreateGroupRequest {
 
     public void setRequirePostApproval(boolean requirePostApproval) {
         this.requirePostApproval = requirePostApproval;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 }

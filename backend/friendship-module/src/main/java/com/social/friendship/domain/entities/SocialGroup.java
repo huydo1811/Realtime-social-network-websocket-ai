@@ -39,6 +39,9 @@ public class SocialGroup {
     @Column(name = "require_post_approval", nullable = false)
     private boolean requirePostApproval;
 
+    @Column(name = "avatar_url", columnDefinition = "TEXT")
+    private String avatarUrl;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -54,7 +57,8 @@ public class SocialGroup {
             String description,
             GroupVisibility visibility,
             boolean requireApproval,
-            boolean requirePostApproval) {
+            boolean requirePostApproval,
+            String avatarUrl) {
         SocialGroup group = new SocialGroup();
         group.ownerUserId = ownerUserId;
         group.name = name;
@@ -62,6 +66,7 @@ public class SocialGroup {
         group.visibility = visibility == null ? GroupVisibility.PUBLIC : visibility;
         group.requireApproval = requireApproval;
         group.requirePostApproval = requirePostApproval;
+        group.avatarUrl = avatarUrl == null || avatarUrl.isBlank() ? null : avatarUrl.trim();
         return group;
     }
 
@@ -75,6 +80,27 @@ public class SocialGroup {
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public void updateProfile(String name, String description, String avatarUrl) {
+        if (name != null) {
+            String trimmed = name.trim();
+            if (trimmed.isBlank()) {
+                throw new IllegalArgumentException("Tên nhóm không được để trống");
+            }
+            if (trimmed.length() > 120) {
+                throw new IllegalArgumentException("Tên nhóm tối đa 120 ký tự");
+            }
+            this.name = trimmed;
+        }
+        if (description != null) {
+            String trimmed = description.trim();
+            this.description = trimmed.isBlank() ? null : trimmed;
+        }
+        if (avatarUrl != null) {
+            String trimmed = avatarUrl.trim();
+            this.avatarUrl = trimmed.isBlank() ? null : trimmed;
+        }
     }
 
     public Long getId() {
@@ -103,6 +129,10 @@ public class SocialGroup {
 
     public boolean isRequirePostApproval() {
         return requirePostApproval;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
     }
 
     public LocalDateTime getCreatedAt() {

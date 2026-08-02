@@ -12,6 +12,7 @@ type Props = {
   onOpen: (postId: string) => void;
   onOpenAuthorProfile?: (authorId?: number) => void;
   onOpenPetProfile?: (petId?: number) => void;
+  onOpenGroup?: (groupId: number) => void;
   onReportPost?: (postId: string) => void;
   canManage?: boolean;
   canAdminHide?: boolean;
@@ -29,6 +30,7 @@ export default function PostCard({
   onOpen,
   onOpenAuthorProfile,
   onOpenPetProfile,
+  onOpenGroup,
   onReportPost,
   canManage = false,
   canAdminHide = false,
@@ -154,9 +156,30 @@ export default function PostCard({
               </button>
             ) : null}
             {post.source === "GROUP_POST" && post.groupId ? (
-              <p className="mt-0.5 text-[11px] font-medium text-sky-600">
-                Trong nhóm: {post.groupName || `Nhóm #${post.groupId}`}
-              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenGroup?.(post.groupId!);
+                }}
+                className="mt-0.5 flex cursor-pointer items-center gap-1.5 text-xs font-medium text-sky-600 hover:underline"
+              >
+                {post.groupAvatar ? (
+                  <Image
+                    src={post.groupAvatar}
+                    alt={post.groupName || "Nhóm"}
+                    width={16}
+                    height={16}
+                    className="h-4 w-4 rounded-full object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sky-100 text-[10px] font-bold text-sky-700">
+                    {(post.groupName?.[0] || "G").toUpperCase()}
+                  </span>
+                )}
+                <span>{post.groupName || `Nhóm #${post.groupId}`}</span>
+              </button>
             ) : null}
             <p className="text-xs text-slate-500">{post.createdAt}</p>
           </div>

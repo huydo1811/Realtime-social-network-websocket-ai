@@ -10,6 +10,7 @@ public class GroupPostResponse {
     private Long id;
     private Long groupId;
     private String groupName;
+    private String groupAvatarUrl;
     private Long authorUserId;
     private String authorName;
     private String authorAvatarUrl;
@@ -31,10 +32,22 @@ public class GroupPostResponse {
             long likeCount,
             long commentCount,
             boolean likedByMe) {
+        return from(row, author, groupName, null, likeCount, commentCount, likedByMe);
+    }
+
+    public static GroupPostResponse from(
+            SocialGroupPost row,
+            User author,
+            String groupName,
+            String groupAvatarUrl,
+            long likeCount,
+            long commentCount,
+            boolean likedByMe) {
         GroupPostResponse dto = new GroupPostResponse();
         dto.id = row.getId();
         dto.groupId = row.getGroupId();
         dto.groupName = groupName;
+        dto.groupAvatarUrl = groupAvatarUrl;
         dto.authorUserId = row.getAuthorUserId();
         dto.authorName = author == null ? null : author.getFullName();
         dto.authorAvatarUrl = author == null ? null : author.getAvatarUrl();
@@ -52,11 +65,11 @@ public class GroupPostResponse {
     }
 
     public static GroupPostResponse from(SocialGroupPost row, User author, String groupName) {
-        return from(row, author, groupName, 0L, 0L, false);
+        return from(row, author, groupName, null, 0L, 0L, false);
     }
 
     public static GroupPostResponse from(SocialGroupPost row, User author) {
-        return from(row, author, null, 0L, 0L, false);
+        return from(row, author, null, null, 0L, 0L, false);
     }
 
     public Long getId() {
@@ -69,6 +82,10 @@ public class GroupPostResponse {
 
     public String getGroupName() {
         return groupName;
+    }
+
+    public String getGroupAvatarUrl() {
+        return groupAvatarUrl;
     }
 
     public Long getAuthorUserId() {

@@ -73,7 +73,7 @@ export interface PostCommentDto {
 }
 
 export type ContentReportStatus = "PENDING" | "RESOLVED" | "REJECTED";
-export type ContentReportTargetType = "POST" | "COMMENT";
+export type ContentReportTargetType = "POST" | "COMMENT" | "GROUP";
 
 export interface ContentReportDto {
   id: number;

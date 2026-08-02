@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { postApi } from "@/lib/api/postApi";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens } from "@/lib/api/authToken";
-import { blockUser, listGroupFeed, toggleGroupPostLike } from "@/lib/api/friendshipApi";
+import { blockUser, createGroupPostComment, listGroupFeed, listGroupPostComments, toggleGroupPostLike } from "@/lib/api/friendshipApi";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
 import type {
@@ -15,7 +15,7 @@ import type {
   PostVisibility,
 } from "@/types/post";
 import type { PetDto } from "@/types/pet";
-import type { GroupPostResponse } from "@/types/friendship";
+import type { GroupPostCommentResponse, GroupPostResponse } from "@/types/friendship";
 
 import PostCard from "./PostCard";
 import PostComposer from "./PostComposer";
@@ -74,6 +74,21 @@ function mapComment(item: PostCommentDto): CommentItem {
   };
 }
 
+function mapGroupComment(item: GroupPostCommentResponse): CommentItem {
+  const createdAtTs = item.createdAt ? Date.parse(item.createdAt) : Number.NaN;
+  return {
+    id: String(item.id),
+    authorId: item.userId,
+    authorName: item.authorName?.trim() || `User #${item.userId}`,
+    authorAvatar: item.authorAvatarUrl ?? undefined,
+    text: item.content,
+    createdAt: toRelativeDate(item.createdAt || new Date().toISOString()),
+    createdAtTs: Number.isNaN(createdAtTs) ? undefined : createdAtTs,
+    likeCount: 0,
+    likedByMe: false,
+  };
+}
+
 function mapPostToFeed(post: PostDto): FeedPost {
   return {
     id: String(post.id),
@@ -119,6 +134,7 @@ function mapGroupPostToFeed(post: GroupPostResponse): FeedPost {
     source: "GROUP_POST",
     groupId: post.groupId,
     groupName: post.groupName ?? undefined,
+    groupAvatar: post.groupAvatarUrl ?? undefined,
     authorId: post.authorUserId,
     authorName: post.authorName ?? undefined,
     authorAvatar: post.authorAvatarUrl ?? undefined,
@@ -417,12 +433,30 @@ export default function ProfileFeedSection({
 
   async function openPostDetail(postId: string) {
     const target = posts.find((p) => p.id === postId);
-    if (target?.source === "GROUP_POST" && target.groupId) {
-      router.push(`/groups/${target.groupId}`);
-      return;
-    }
     setOpeningPostId(postId);
     setActivePostId(postId);
+
+    if (target?.source === "GROUP_POST" && target.groupId) {
+      const numericId = Number(String(postId).replace(/^group-/, ""));
+      if (!Number.isFinite(numericId)) {
+        setOpeningPostId(null);
+        return;
+      }
+      try {
+        const comments = await listGroupPostComments(target.groupId, numericId);
+        setCommentsMap((prev) => ({
+          ...prev,
+          [postId]: comments.map(mapGroupComment),
+        }));
+        setLikedMap((prev) => ({ ...prev, [postId]: Boolean(prev[postId]) }));
+      } catch {
+        setCommentsMap((prev) => ({ ...prev, [postId]: prev[postId] || [] }));
+      } finally {
+        setOpeningPostId(null);
+      }
+      return;
+    }
+
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) {
       setOpeningPostId(null);
@@ -463,6 +497,13 @@ export default function ProfileFeedSection({
   function openPetProfile(petId?: number) {
     if (!petId || !Number.isFinite(petId)) return;
     const targetPath = `/pets/${petId}`;
+    if (pathname === targetPath) return;
+    router.push(targetPath);
+  }
+
+  function openGroup(groupId?: number) {
+    if (!groupId || !Number.isFinite(groupId)) return;
+    const targetPath = `/groups/${groupId}`;
     if (pathname === targetPath) return;
     router.push(targetPath);
   }
@@ -531,7 +572,27 @@ export default function ProfileFeedSection({
 
   async function addComment(postId: string, text: string) {
     const target = posts.find((p) => p.id === postId);
-    if (target?.source === "GROUP_POST") return;
+    if (target?.source === "GROUP_POST") {
+      if (!target.groupId) return;
+      const numericId = Number(String(postId).replace(/^group-/, ""));
+      if (!Number.isFinite(numericId)) return;
+      try {
+        const created = await createGroupPostComment(target.groupId, numericId, text);
+        const mapped = mapGroupComment(created);
+        setCommentsMap((prev) => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), mapped],
+        }));
+        updatePosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, comments: p.comments + 1 } : p
+          )
+        );
+      } catch (e) {
+        throw new Error(e instanceof Error ? e.message : "Không thể bình luận");
+      }
+      return;
+    }
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) return;
     try {
@@ -552,6 +613,8 @@ export default function ProfileFeedSection({
   }
 
   async function toggleCommentLike(postId: string, commentId: string) {
+    const post = posts.find((p) => p.id === postId);
+    if (post?.source === "GROUP_POST") return;
     const postNum = Number(postId);
     const commentNum = Number(commentId);
     if (!Number.isFinite(postNum) || !Number.isFinite(commentNum)) return;
@@ -612,6 +675,10 @@ export default function ProfileFeedSection({
   }
 
   async function addReply(postId: string, parentCommentId: string, text: string) {
+    const post = posts.find((p) => p.id === postId);
+    if (post?.source === "GROUP_POST") {
+      throw new Error("Bài viết nhóm chưa hỗ trợ trả lời lồng nhau");
+    }
     const postNum = Number(postId);
     const parentNum = Number(parentCommentId);
     if (!Number.isFinite(postNum) || !Number.isFinite(parentNum)) return;
@@ -789,6 +856,7 @@ export default function ProfileFeedSection({
                 onOpen={(id) => void openPostDetail(id)}
                 onOpenAuthorProfile={openAuthorProfile}
                 onOpenPetProfile={openPetProfile}
+                onOpenGroup={openGroup}
                 onReportPost={actorId != null && post.authorId === actorId ? undefined : (id) => openPostReportModal(id)}
                 canManage={canManagePost(post)}
                 canAdminHide={isAdmin && post.status !== "DELETED" && post.status !== "REJECTED"}

@@ -80,6 +80,17 @@ public class ContentReport {
         return report;
     }
 
+    public static ContentReport createGroupReport(Long reporterUserId, Long groupId, String reason) {
+        ContentReport report = new ContentReport();
+        report.targetType = ReportTargetType.GROUP;
+        report.targetId = groupId;
+        report.postId = null;
+        report.reporterUserId = reporterUserId;
+        report.reason = normalizeReason(reason);
+        report.status = ContentReportStatus.PENDING;
+        return report;
+    }
+
     public void resolve(Long adminUserId, String note) {
         this.status = ContentReportStatus.RESOLVED;
         this.resolvedBy = adminUserId;

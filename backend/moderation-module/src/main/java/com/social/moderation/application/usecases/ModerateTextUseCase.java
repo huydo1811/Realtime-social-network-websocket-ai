@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.social.moderation.application.services.ModerationRuntimeConfigService;
 import com.social.moderation.domain.ModerationAction;
 import com.social.moderation.domain.ModerationPolicy;
 import com.social.moderation.domain.ModerationResult;
@@ -20,37 +21,31 @@ import com.social.moderation.domain.entities.ModerationAudit.Action;
 import com.social.moderation.domain.entities.ModerationAudit.Source;
 import com.social.moderation.domain.entities.ModerationAudit.TargetType;
 import com.social.moderation.domain.repositories.ModerationAuditRepository;
-import com.social.moderation.infrastructure.config.ModerationProperties;
 
-/**
- * Application service that combines {@link TextModerationService} and
- * {@link ModerationPolicy} into a single call, then writes an audit row.
- *
- * <p>Audit persistence uses {@link Propagation#REQUIRES_NEW} so that logging
- * a moderation decision never rolls back the surrounding business transaction
- * (which is the right behaviour even on hard reject).</p>
- */
 @Service
 public class ModerateTextUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ModerateTextUseCase.class);
 
     private final TextModerationService moderationService;
-    private final ModerationPolicy policy;
     private final ModerationAuditRepository auditRepository;
-    private final String modelVersion;
+    private final ModerationRuntimeConfigService runtimeConfig;
 
     public ModerateTextUseCase(
             TextModerationService moderationService,
-            ModerationProperties properties,
-            ModerationAuditRepository auditRepository) {
+            ModerationAuditRepository auditRepository,
+            ModerationRuntimeConfigService runtimeConfig) {
         this.moderationService = moderationService;
-        this.policy = ModerationPolicy.of(properties.getAllowThreshold(), properties.getRejectThreshold());
         this.auditRepository = auditRepository;
-        this.modelVersion = properties.getDefaultModelName();
+        this.runtimeConfig = runtimeConfig;
     }
 
     public ModerationDecision moderate(String text) {
+        ModerationPolicy policy = runtimeConfig.textPolicy();
+        if (!runtimeConfig.isTextEnabled()) {
+            ModerationResult disabled = ModerationResult.fallback("text_moderation_disabled", 0L);
+            return new ModerationDecision(disabled, ModerationAction.ALLOW);
+        }
         ModerationResult result = moderationService.moderate(text);
         ModerationAction action = result.source() == ModerationResult.Source.FALLBACK
                 ? ModerationAction.ALLOW
@@ -66,6 +61,7 @@ public class ModerateTextUseCase {
             String text,
             ModerationDecision decision) {
         if (text == null) text = "";
+        ModerationPolicy policy = runtimeConfig.textPolicy();
         ModerationResult result = decision.result();
         Action auditAction = result.source() == ModerationResult.Source.FALLBACK
                 ? Action.FALLBACK
@@ -81,7 +77,7 @@ public class ModerateTextUseCase {
                 sha256(text),
                 preview(text),
                 result.modelName(),
-                modelVersion,
+                runtimeConfig.activeTextModelVersion(),
                 result.score(),
                 policy.allowThreshold(),
                 policy.rejectThreshold(),

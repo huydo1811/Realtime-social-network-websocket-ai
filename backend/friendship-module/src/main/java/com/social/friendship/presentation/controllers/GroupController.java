@@ -11,9 +11,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +40,7 @@ import com.social.friendship.infrastructure.repositories.JpaSocialGroupRepositor
 import com.social.friendship.presentation.dto.CreateGroupPostCommentRequest;
 import com.social.friendship.presentation.dto.CreateGroupPostRequest;
 import com.social.friendship.presentation.dto.CreateGroupRequest;
+import com.social.friendship.presentation.dto.UpdateGroupRequest;
 import com.social.friendship.presentation.dto.GroupMembershipResponse;
 import com.social.friendship.presentation.dto.GroupPostCommentResponse;
 import com.social.friendship.presentation.dto.GroupPostResponse;
@@ -88,16 +91,45 @@ public class GroupController {
         Long actorId = currentUserId();
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
+        GroupVisibility visibility = request.getVisibility() == null ? GroupVisibility.PUBLIC : request.getVisibility();
+        boolean requireApproval = visibility == GroupVisibility.PRIVATE || request.isRequireApproval();
         SocialGroup created = groupRepository.save(
                 SocialGroup.create(
                         actorId,
                         request.getName(),
                         request.getDescription(),
-                        request.getVisibility(),
-                        request.isRequireApproval(),
-                        request.isRequirePostApproval()));
+                        visibility,
+                        requireApproval,
+                        request.isRequirePostApproval(),
+                        request.getAvatarUrl()));
         membershipRepository.save(SocialGroupMembership.owner(created.getId(), actorId));
         return ResponseEntity.ok(toGroupResponse(created, actor));
+    }
+
+    @PutMapping("/{groupId}")
+    @Transactional
+    public ResponseEntity<GroupResponse> update(
+            @PathVariable Long groupId,
+            @Valid @RequestBody UpdateGroupRequest request) {
+        Long actorId = currentUserId();
+        SocialGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm"));
+        ensureGroupOwner(groupId, actorId);
+        group.updateProfile(request.getName(), request.getDescription(), request.getAvatarUrl());
+        return ResponseEntity.ok(toGroupResponse(groupRepository.save(group)));
+    }
+
+    @DeleteMapping("/{groupId}")
+    @Transactional
+    public ResponseEntity<Void> delete(@PathVariable Long groupId) {
+        Long actorId = currentUserId();
+        groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm"));
+        ensureGroupOwner(groupId, actorId);
+        postRepository.deleteByGroupId(groupId);
+        membershipRepository.deleteByGroupId(groupId);
+        groupRepository.deleteById(groupId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/discover")
@@ -161,8 +193,12 @@ public class GroupController {
                 .limit(safeLimit)
                 .toList();
         return ResponseEntity.ok(rows.stream().map(row -> {
-            String groupName = groupMap.get(row.getGroupId()) == null ? null : groupMap.get(row.getGroupId()).getName();
-            return toPostResponse(row, groupName, actorId);
+            SocialGroup group = groupMap.get(row.getGroupId());
+            return toPostResponse(
+                    row,
+                    group == null ? null : group.getName(),
+                    group == null ? null : group.getAvatarUrl(),
+                    actorId);
         }).toList());
     }
 
@@ -185,7 +221,12 @@ public class GroupController {
     public ResponseEntity<List<GroupMembershipResponse>> listMembers(
             @PathVariable Long groupId,
             @RequestParam(defaultValue = "APPROVED") GroupMembershipStatus status) {
-        currentUserId();
+        Long actorId = currentUserId();
+        SocialGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm"));
+        if (!canView(group, actorId)) {
+            throw new IllegalArgumentException("Bạn không có quyền xem thành viên nhóm này");
+        }
         return ResponseEntity.ok(membershipRepository.findByGroupIdAndStatusOrderByRequestedAtDesc(groupId, status)
                 .stream().map(this::toMembershipResponse).toList());
     }
@@ -216,6 +257,26 @@ public class GroupController {
         }
         membership.reject(actorId);
         return ResponseEntity.ok(toMembershipResponse(membershipRepository.save(membership)));
+    }
+
+    @DeleteMapping("/{groupId}/members/{membershipId}")
+    @Transactional
+    public ResponseEntity<Void> removeMember(@PathVariable Long groupId, @PathVariable Long membershipId) {
+        Long actorId = currentUserId();
+        ensureGroupOwner(groupId, actorId);
+        SocialGroupMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy thành viên"));
+        if (!groupId.equals(membership.getGroupId())) {
+            throw new IllegalArgumentException("Thành viên không thuộc nhóm này");
+        }
+        if (membership.getRole() == GroupMembershipRole.OWNER) {
+            throw new IllegalArgumentException("Không thể kick trưởng nhóm");
+        }
+        if (membership.getUserId().equals(actorId)) {
+            throw new IllegalArgumentException("Không thể tự kick chính mình");
+        }
+        membershipRepository.delete(membership);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{groupId}/posts")
@@ -263,7 +324,7 @@ public class GroupController {
                 // audit failures must not break create post flow
             }
         }
-        return ResponseEntity.ok(toPostResponse(created, group.getName(), actorId));
+        return ResponseEntity.ok(toPostResponse(created, group.getName(), group.getAvatarUrl(), actorId));
     }
 
     @GetMapping("/{groupId}/posts")
@@ -289,7 +350,7 @@ public class GroupController {
             rows.addAll(approved);
             rows.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
         }
-        return ResponseEntity.ok(rows.stream().map(row -> toPostResponse(row, group.getName(), actorId)).toList());
+        return ResponseEntity.ok(rows.stream().map(row -> toPostResponse(row, group.getName(), group.getAvatarUrl(), actorId)).toList());
     }
 
     @PostMapping("/{groupId}/posts/{postId}/approve")
@@ -301,7 +362,11 @@ public class GroupController {
         post.approve(actorId);
         SocialGroupPost saved = postRepository.save(post);
         SocialGroup group = groupRepository.findById(groupId).orElse(null);
-        return ResponseEntity.ok(toPostResponse(saved, group == null ? null : group.getName(), actorId));
+        return ResponseEntity.ok(toPostResponse(
+                saved,
+                group == null ? null : group.getName(),
+                group == null ? null : group.getAvatarUrl(),
+                actorId));
     }
 
     @PostMapping("/{groupId}/posts/{postId}/reject")
@@ -313,7 +378,11 @@ public class GroupController {
         post.reject(actorId);
         SocialGroupPost saved = postRepository.save(post);
         SocialGroup group = groupRepository.findById(groupId).orElse(null);
-        return ResponseEntity.ok(toPostResponse(saved, group == null ? null : group.getName(), actorId));
+        return ResponseEntity.ok(toPostResponse(
+                saved,
+                group == null ? null : group.getName(),
+                group == null ? null : group.getAvatarUrl(),
+                actorId));
     }
 
     @PostMapping("/{groupId}/posts/{postId}/like")
@@ -388,7 +457,8 @@ public class GroupController {
     }
 
     private GroupResponse toGroupResponse(SocialGroup group, User owner) {
-        return GroupResponse.from(group, owner == null ? null : owner.getFullName());
+        long memberCount = membershipRepository.countByGroupIdAndStatus(group.getId(), GroupMembershipStatus.APPROVED);
+        return GroupResponse.from(group, owner == null ? null : owner.getFullName(), memberCount);
     }
 
     private GroupMembershipResponse toMembershipResponse(SocialGroupMembership row) {
@@ -396,11 +466,15 @@ public class GroupController {
     }
 
     private GroupPostResponse toPostResponse(SocialGroupPost row, String groupName, Long actorId) {
+        return toPostResponse(row, groupName, null, actorId);
+    }
+
+    private GroupPostResponse toPostResponse(SocialGroupPost row, String groupName, String groupAvatarUrl, Long actorId) {
         User author = userRepository.findById(row.getAuthorUserId()).orElse(null);
         long likes = likeRepository.countByPostId(row.getId());
         long comments = commentRepository.countByPostId(row.getId());
         boolean liked = actorId != null && likeRepository.existsByPostIdAndUserId(row.getId(), actorId);
-        return GroupPostResponse.from(row, author, groupName, likes, comments, liked);
+        return GroupPostResponse.from(row, author, groupName, groupAvatarUrl, likes, comments, liked);
     }
 
     private SocialGroupPost requirePost(Long groupId, Long postId) {
@@ -416,7 +490,7 @@ public class GroupController {
         SocialGroupMembership owner = membershipRepository.findByGroupIdAndUserId(groupId, actorId)
                 .orElseThrow(() -> new IllegalArgumentException("Bạn chưa tham gia nhóm"));
         if (owner.getRole() != GroupMembershipRole.OWNER) {
-            throw new IllegalArgumentException("Chỉ trưởng nhóm mới được duyệt thành viên");
+            throw new IllegalArgumentException("Chỉ trưởng nhóm mới được thực hiện thao tác này");
         }
     }
 

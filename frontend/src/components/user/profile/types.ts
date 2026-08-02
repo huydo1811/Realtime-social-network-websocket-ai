@@ -6,6 +6,7 @@ export type FeedPost = {
   source?: "POST" | "GROUP_POST";
   groupId?: number;
   groupName?: string;
+  groupAvatar?: string;
   sharedPostId?: number;
   authorId?: number;
   content: string;

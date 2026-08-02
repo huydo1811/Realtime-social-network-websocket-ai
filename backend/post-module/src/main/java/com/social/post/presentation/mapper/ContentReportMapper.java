@@ -2,6 +2,7 @@ package com.social.post.presentation.mapper;
 
 import org.springframework.stereotype.Component;
 
+import com.social.friendship.infrastructure.repositories.JpaSocialGroupRepository;
 import com.social.post.domain.entities.ContentReport;
 import com.social.post.domain.entities.ReportTargetType;
 import com.social.post.domain.repositories.PostCommentRepository;
@@ -12,12 +13,15 @@ import com.social.post.presentation.dto.ContentReportResponse;
 public class ContentReportMapper {
     private final PostRepository postRepository;
     private final PostCommentRepository postCommentRepository;
+    private final JpaSocialGroupRepository groupRepository;
 
     public ContentReportMapper(
             PostRepository postRepository,
-            PostCommentRepository postCommentRepository) {
+            PostCommentRepository postCommentRepository,
+            JpaSocialGroupRepository groupRepository) {
         this.postRepository = postRepository;
         this.postCommentRepository = postCommentRepository;
+        this.groupRepository = groupRepository;
     }
 
     public ContentReportResponse toResponse(ContentReport report) {
@@ -46,6 +50,14 @@ public class ContentReportMapper {
                 postRepository.findById(comment.getPostId())
                         .ifPresent(post -> response.setRelatedPostContent(post.getContent()));
             });
+        } else if (report.getTargetType() == ReportTargetType.GROUP) {
+            groupRepository.findById(report.getTargetId()).ifPresentOrElse(group -> {
+                response.setTargetAuthorUserId(group.getOwnerUserId());
+                String desc = group.getDescription() == null || group.getDescription().isBlank()
+                        ? ""
+                        : " — " + group.getDescription();
+                response.setTargetContent("Nhóm: " + group.getName() + desc);
+            }, () -> response.setTargetContent("[Nhóm đã bị xóa]"));
         }
         return response;
     }

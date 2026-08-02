@@ -68,7 +68,8 @@ public class GroupAdminController {
                 .searchAdmin(query, visibility, ownerUserId, PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")))
                 .map(row -> GroupResponse.from(
                         row,
-                        userRepository.findById(row.getOwnerUserId()).map(u -> u.getFullName()).orElse(null)));
+                        userRepository.findById(row.getOwnerUserId()).map(u -> u.getFullName()).orElse(null),
+                        membershipRepository.countByGroupIdAndStatus(row.getId(), GroupMembershipStatus.APPROVED)));
         return ResponseEntity.ok(result);
     }
 

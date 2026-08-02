@@ -66,7 +66,9 @@ export default function AdminReportsPage() {
       setReports((prev) => prev.map((item) => (item.id === reportId ? updated : item)));
       setNotice(
         accept
-          ? "Duyệt báo cáo: nội dung đã được xử lý ẩn bởi quản trị viên."
+          ? updated.targetType === "GROUP"
+            ? "Duyệt báo cáo: nhóm vi phạm đã được xóa."
+            : "Duyệt báo cáo: nội dung đã được xử lý ẩn bởi quản trị viên."
           : "Từ chối báo cáo: nội dung được giữ nguyên, log vẫn được lưu."
       );
     } catch (e) {
@@ -81,7 +83,7 @@ export default function AdminReportsPage() {
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">Báo cáo nội dung thủ công</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Quản trị viên duyệt báo cáo bài viết/bình luận trước khi tích hợp AI tự động.
+          Quản trị viên duyệt báo cáo bài viết, bình luận và nhóm. Duyệt báo cáo nhóm sẽ xóa nhóm vi phạm.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <select
@@ -162,10 +164,42 @@ export default function AdminReportsPage() {
                 reports.map((report) => (
                   <tr key={report.id} className="border-b border-slate-100 align-top">
                     <td className="py-2 pr-2 font-medium text-slate-700">#{report.id}</td>
-                    <td className="py-2 pr-2">{report.targetType}</td>
                     <td className="py-2 pr-2">
-                      {report.targetType} #{report.targetId}
-                      {report.postId ? <div className="text-xs text-slate-500">Post #{report.postId}</div> : null}
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
+                          report.targetType === "GROUP"
+                            ? "bg-violet-50 text-violet-700"
+                            : report.targetType === "COMMENT"
+                              ? "bg-sky-50 text-sky-700"
+                              : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {report.targetType === "GROUP"
+                          ? "Nhóm"
+                          : report.targetType === "COMMENT"
+                            ? "Bình luận"
+                            : "Bài viết"}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-2">
+                      {report.targetType === "GROUP" ? (
+                        <>
+                          Nhóm #{report.targetId}
+                          <div className="mt-1">
+                            <a
+                              href={`/admin/groups`}
+                              className="text-xs font-medium text-rose-600 hover:underline"
+                            >
+                              Mở quản lý nhóm
+                            </a>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {report.targetType} #{report.targetId}
+                          {report.postId ? <div className="text-xs text-slate-500">Post #{report.postId}</div> : null}
+                        </>
+                      )}
                     </td>
                     <td className="py-2 pr-2">User #{report.reporterUserId}</td>
                     <td className="py-2 pr-2 max-w-[280px] whitespace-pre-wrap">{report.reason}</td>
@@ -182,6 +216,11 @@ export default function AdminReportsPage() {
                       {report.targetType === "COMMENT" && report.relatedPostContent ? (
                         <p className="mt-1 text-slate-500">
                           Bài viết liên quan: {report.relatedPostContent.slice(0, 140)}
+                        </p>
+                      ) : null}
+                      {report.targetType === "GROUP" ? (
+                        <p className="mt-1 text-violet-600">
+                          Báo cáo nhóm — duyệt sẽ xóa toàn bộ nhóm.
                         </p>
                       ) : null}
                     </td>
@@ -204,10 +243,18 @@ export default function AdminReportsPage() {
                         <button
                           type="button"
                           disabled={report.status !== "PENDING"}
-                          onClick={() => void resolve(report.id, true, "Duyệt: ẩn nội dung vi phạm")}
+                          onClick={() =>
+                            void resolve(
+                              report.id,
+                              true,
+                              report.targetType === "GROUP"
+                                ? "Duyệt: xóa nhóm vi phạm"
+                                : "Duyệt: ẩn nội dung vi phạm"
+                            )
+                          }
                           className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                         >
-                          Duyệt (ẩn nội dung)
+                          {report.targetType === "GROUP" ? "Duyệt (xóa nhóm)" : "Duyệt (ẩn nội dung)"}
                         </button>
                         <button
                           type="button"

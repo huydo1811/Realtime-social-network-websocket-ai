@@ -165,6 +165,7 @@ export async function listFollowSuggestions(limit = 8): Promise<FollowSuggestion
 export async function createGroup(payload: {
   name: string;
   description?: string;
+  avatarUrl?: string;
   visibility: GroupVisibility;
   requireApproval: boolean;
   requirePostApproval?: boolean;
@@ -179,6 +180,24 @@ export async function createGroup(payload: {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as GroupResponse;
+}
+
+export async function updateGroup(
+  groupId: number,
+  payload: { name?: string; description?: string; avatarUrl?: string }
+): Promise<GroupResponse> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GroupResponse;
+}
+
+export async function deleteGroup(groupId: number): Promise<void> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function discoverGroups(params?: { query?: string; visibility?: GroupVisibility }): Promise<GroupResponse[]> {
@@ -230,6 +249,11 @@ export async function rejectGroupMembership(groupId: number, membershipId: numbe
   const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/members/${membershipId}/reject`, { method: "POST" });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as GroupMembershipResponse;
+}
+
+export async function removeGroupMember(groupId: number, membershipId: number): Promise<void> {
+  const res = await apiAuthFetch(`${API_URL}/groups/${groupId}/members/${membershipId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function createGroupPost(groupId: number, payload: { content: string; mediaUrl?: string }): Promise<GroupPostResponse> {

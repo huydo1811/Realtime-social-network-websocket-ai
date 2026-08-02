@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import MediaPreview from "@/components/common/MediaPreview";
 import UserLayout from "@/components/layout/UserLayout";
 import PostMediaDisplay from "@/components/user/profile/PostMediaDisplay";
@@ -12,6 +12,7 @@ import {
   approveGroupPost,
   createGroupPost,
   createGroupPostComment,
+  deleteGroup,
   getGroup,
   joinGroup,
   listGroupMembers,
@@ -19,14 +20,18 @@ import {
   listGroupPosts,
   listMyGroupMemberships,
   rejectGroupPost,
+  removeGroupMember,
   toggleGroupPostLike,
+  updateGroup,
 } from "@/lib/api/friendshipApi";
+import { postApi } from "@/lib/api/postApi";
 import type {
   GroupMembershipResponse,
   GroupPostCommentResponse,
   GroupPostResponse,
   GroupResponse,
 } from "@/types/friendship";
+import ReportContentModal from "@/components/user/profile/ReportContentModal";
 
 function formatDate(iso?: string | null) {
   if (!iso) return "";
@@ -57,6 +62,7 @@ function AuthorAvatar({ name, url }: { name: string; url?: string | null }) {
 
 export default function GroupDetailPage() {
   const params = useParams<{ groupId: string }>();
+  const router = useRouter();
   const groupId = Number(params.groupId);
   const [group, setGroup] = useState<GroupResponse | null>(null);
   const [myMemberships, setMyMemberships] = useState<GroupMembershipResponse[]>([]);
@@ -73,10 +79,17 @@ export default function GroupDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"posts" | "members">("posts");
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", description: "", avatarUrl: "" });
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
 
   const myMembership = useMemo(() => myMemberships.find((row) => row.groupId === groupId), [myMemberships, groupId]);
   const isOwner = myMembership?.role === "OWNER" && myMembership?.status === "APPROVED";
   const canPost = myMembership?.status === "APPROVED";
+  const isPrivateLocked =
+    group?.visibility === "PRIVATE" && !canPost;
 
   function profileHref(userId: number) {
     return `/profile/${userId}`;
@@ -105,18 +118,31 @@ export default function GroupDetailPage() {
     if (!Number.isFinite(groupId) || groupId <= 0) return;
     setLoading(true);
     try {
-      const [groupRow, mineRows, memberRows, approvedPosts] = await Promise.all([
+      const [groupRow, mineRows] = await Promise.all([
         getGroup(groupId),
         listMyGroupMemberships(),
-        listGroupMembers(groupId, "APPROVED").catch(() => [] as GroupMembershipResponse[]),
-        listGroupPosts(groupId, "APPROVED"),
       ]);
       setGroup(groupRow);
       setMyMemberships(mineRows);
+      const mine = mineRows.find((row) => row.groupId === groupId);
+      const approved = mine?.status === "APPROVED";
+      const canView = groupRow.visibility === "PUBLIC" || approved;
+
+      if (!canView) {
+        setMembers([]);
+        setPosts([]);
+        setPendingPosts([]);
+        setCommentsByPostId({});
+        return;
+      }
+
+      const [memberRows, approvedPosts] = await Promise.all([
+        listGroupMembers(groupId, "APPROVED").catch(() => [] as GroupMembershipResponse[]),
+        listGroupPosts(groupId, "APPROVED").catch(() => [] as GroupPostResponse[]),
+      ]);
       setMembers(memberRows);
       setPosts(approvedPosts);
       void loadCommentsForPosts(approvedPosts);
-      const mine = mineRows.find((row) => row.groupId === groupId);
       const canModerate = mine?.role === "OWNER" && mine?.status === "APPROVED";
       if (canModerate) {
         const pendingRows = await listGroupPosts(groupId, "PENDING").catch(() => [] as GroupPostResponse[]);
@@ -144,6 +170,54 @@ export default function GroupDetailPage() {
       setNotice(e instanceof Error ? e.message : "Không thể tham gia nhóm");
     } finally {
       setBusyKey(null);
+    }
+  }
+
+  async function handleSaveGroupEdit() {
+    if (!editForm.name.trim()) return;
+    setBusyKey("edit-group");
+    setNotice(null);
+    try {
+      const updated = await updateGroup(groupId, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
+        avatarUrl: editForm.avatarUrl.trim(),
+      });
+      setGroup(updated);
+      setEditing(false);
+      setNotice("Đã cập nhật nhóm.");
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Không thể cập nhật nhóm");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDeleteGroup() {
+    if (!group) return;
+    if (!window.confirm(`Xóa nhóm "${group.name}"? Toàn bộ bài viết và thành viên sẽ bị xóa.`)) return;
+    setBusyKey("delete-group");
+    setNotice(null);
+    try {
+      await deleteGroup(groupId);
+      router.push("/groups");
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Không thể xóa nhóm");
+      setBusyKey(null);
+    }
+  }
+
+  async function handlePickAvatar(file?: File) {
+    if (!file) return;
+    setUploadingAvatar(true);
+    setNotice(null);
+    try {
+      const uploaded = await uploadToCloudinary(file);
+      setEditForm((v) => ({ ...v, avatarUrl: uploaded.secureUrl }));
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Không thể tải ảnh nhóm");
+    } finally {
+      setUploadingAvatar(false);
     }
   }
 
@@ -214,6 +288,27 @@ export default function GroupDetailPage() {
     }
   }
 
+  async function handleKickMember(row: GroupMembershipResponse) {
+    const label = displayName(row.fullName, row.userId);
+    if (!window.confirm(`Kick "${label}" khỏi nhóm?`)) return;
+    setBusyKey(`kick-${row.id}`);
+    setNotice(null);
+    try {
+      await removeGroupMember(groupId, row.id);
+      setMembers((prev) => prev.filter((m) => m.id !== row.id));
+      setGroup((prev) =>
+        prev
+          ? { ...prev, memberCount: Math.max(0, (prev.memberCount ?? members.length) - 1) }
+          : prev
+      );
+      setNotice(`Đã kick ${label} khỏi nhóm.`);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Không thể kick thành viên");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleToggleLike(post: GroupPostResponse) {
     setBusyKey(`like-${post.id}`);
     setNotice(null);
@@ -265,30 +360,87 @@ export default function GroupDetailPage() {
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs text-slate-500">Nhóm</p>
-                <h1 className="text-xl font-bold text-slate-900">{group?.name || "Đang tải..."}</h1>
-                <p className="mt-1 text-sm text-slate-600">{group?.description || "Chưa có mô tả."}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {group?.visibility === "PUBLIC" ? "Công khai" : "Riêng tư"}
-                  {" · "}
-                  {group?.requireApproval ? "Duyệt thành viên" : "Vào nhóm ngay"}
-                  {" · "}
-                  {group?.requirePostApproval !== false ? "Bài viết cần duyệt" : "Bài viết đăng ngay"}
-                </p>
+              <div className="flex min-w-0 items-start gap-3">
+                {group?.avatarUrl ? (
+                  <Image
+                    src={group.avatarUrl}
+                    alt={group.name}
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 rounded-2xl object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-100 text-lg font-bold text-sky-700">
+                    {(group?.name?.[0] || "G").toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-slate-500">Nhóm</p>
+                  <h1 className="text-xl font-bold text-slate-900">{group?.name || "Đang tải..."}</h1>
+                  <p className="mt-1 text-sm text-slate-600">{group?.description || "Chưa có mô tả."}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {group?.visibility === "PUBLIC" ? "Công khai" : "Riêng tư"}
+                    {" · "}
+                    {group?.memberCount ?? members.length} thành viên
+                    {" · "}
+                    {group?.requireApproval || group?.visibility === "PRIVATE" ? "Duyệt thành viên" : "Vào nhóm ngay"}
+                    {" · "}
+                    {group?.requirePostApproval !== false ? "Bài viết cần duyệt" : "Bài viết đăng ngay"}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Link href="/groups" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                   Quay lại nhóm
                 </Link>
+                {isOwner ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!group) return;
+                        setEditForm({
+                          name: group.name,
+                          description: group.description || "",
+                          avatarUrl: group.avatarUrl || "",
+                        });
+                        setEditing(true);
+                      }}
+                      className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Sửa nhóm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteGroup()}
+                      disabled={busyKey === "delete-group"}
+                      className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                    >
+                      {busyKey === "delete-group" ? "Đang xóa..." : "Xóa nhóm"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setReportOpen(true)}
+                    className="rounded-xl border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                  >
+                    Báo cáo nhóm
+                  </button>
+                )}
                 {!canPost ? (
                   <button
                     type="button"
                     onClick={() => void handleJoin()}
-                    disabled={busyKey === "join"}
+                    disabled={busyKey === "join" || myMembership?.status === "PENDING"}
                     className="rounded-xl bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-600 disabled:opacity-60"
                   >
-                    {busyKey === "join" ? "Đang xử lý..." : "Tham gia nhóm"}
+                    {busyKey === "join"
+                      ? "Đang xử lý..."
+                      : myMembership?.status === "PENDING"
+                        ? "Chờ duyệt"
+                        : "Tham gia nhóm"}
                   </button>
                 ) : null}
               </div>
@@ -297,6 +449,15 @@ export default function GroupDetailPage() {
 
           {notice ? <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">{notice}</div> : null}
 
+          {isPrivateLocked ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-sm">
+              <p className="text-sm font-semibold text-amber-900">Đây là nhóm riêng tư</p>
+              <p className="mt-2 text-sm text-amber-800/90">
+                Bạn cần được trưởng nhóm duyệt tham gia trước khi xem bài viết và thành viên.
+              </p>
+            </div>
+          ) : (
+            <>
           <div className="flex gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
             <button
               type="button"
@@ -314,7 +475,7 @@ export default function GroupDetailPage() {
                 activeTab === "members" ? "bg-rose-500 text-white" : "text-slate-600 hover:bg-slate-50"
               }`}
             >
-              Thành viên ({members.length})
+              Thành viên ({group?.memberCount ?? members.length})
             </button>
           </div>
 
@@ -575,22 +736,39 @@ export default function GroupDetailPage() {
               ) : members.length ? (
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {members.map((row) => (
-                    <Link
+                    <div
                       key={row.id}
-                      href={profileHref(row.userId)}
-                      className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 transition hover:border-rose-200 hover:bg-rose-50/50"
+                      className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"
                     >
-                      <AuthorAvatar name={displayName(row.fullName, row.userId)} url={row.avatarUrl} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-800">
+                      <Link href={profileHref(row.userId)} className="shrink-0">
+                        <AuthorAvatar name={displayName(row.fullName, row.userId)} url={row.avatarUrl} />
+                      </Link>
+                      <Link href={profileHref(row.userId)} className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800 hover:text-rose-600 hover:underline">
                           {displayName(row.fullName, row.userId)}
                         </p>
                         <p className="text-xs text-slate-500">
                           {row.role === "OWNER" ? "Trưởng nhóm" : "Thành viên"}
                         </p>
-                      </div>
-                      <span className="text-xs font-medium text-rose-500">Xem hồ sơ</span>
-                    </Link>
+                      </Link>
+                      {isOwner && row.role !== "OWNER" ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleKickMember(row)}
+                          disabled={busyKey === `kick-${row.id}`}
+                          className="shrink-0 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          {busyKey === `kick-${row.id}` ? "..." : "Kick"}
+                        </button>
+                      ) : (
+                        <Link
+                          href={profileHref(row.userId)}
+                          className="shrink-0 text-xs font-medium text-rose-500 hover:underline"
+                        >
+                          Xem hồ sơ
+                        </Link>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -598,7 +776,98 @@ export default function GroupDetailPage() {
               )}
             </div>
           )}
+            </>
+          )}
         </div>
+
+        {editing ? (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-4"
+            onClick={() => setEditing(false)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-slate-900">Sửa nhóm</h3>
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-3">
+                  {editForm.avatarUrl ? (
+                    <Image src={editForm.avatarUrl} alt="" width={56} height={56} className="h-14 w-14 rounded-2xl object-cover" unoptimized />
+                  ) : (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-100 text-sm font-bold text-sky-700">
+                      {(editForm.name[0] || "G").toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <input
+                      id="detail-edit-avatar"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingAvatar}
+                      onChange={(e) => void handlePickAvatar(e.target.files?.[0])}
+                    />
+                    <label
+                      htmlFor="detail-edit-avatar"
+                      className="cursor-pointer rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      {uploadingAvatar ? "Đang tải..." : "Đổi ảnh đại diện"}
+                    </label>
+                  </div>
+                </div>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((v) => ({ ...v, name: e.target.value }))}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  placeholder="Tên nhóm"
+                />
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((v) => ({ ...v, description: e.target.value }))}
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Mô tả"
+                />
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" onClick={() => setEditing(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveGroupEdit()}
+                  disabled={busyKey === "edit-group" || uploadingAvatar || !editForm.name.trim()}
+                  className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
+                >
+                  {busyKey === "edit-group" ? "Đang lưu..." : "Lưu"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <ReportContentModal
+          open={reportOpen}
+          targetType="GROUP"
+          submitting={reportBusy}
+          onClose={() => setReportOpen(false)}
+          onSubmit={async ({ reason }) => {
+            setReportBusy(true);
+            setNotice(null);
+            try {
+              await postApi.reportGroup(groupId, reason);
+              setNotice("Đã gửi báo cáo nhóm cho quản trị viên.");
+              setReportOpen(false);
+            } catch (e) {
+              setNotice(e instanceof Error ? e.message : "Không thể báo cáo nhóm");
+            } finally {
+              setReportBusy(false);
+            }
+          }}
+        />
       </section>
     </UserLayout>
   );

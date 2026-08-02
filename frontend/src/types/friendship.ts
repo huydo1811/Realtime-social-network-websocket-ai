@@ -56,9 +56,11 @@ export type GroupResponse = {
   ownerFullName?: string | null;
   name: string;
   description?: string | null;
+  avatarUrl?: string | null;
   visibility: GroupVisibility;
   requireApproval: boolean;
   requirePostApproval?: boolean;
+  memberCount?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -81,6 +83,7 @@ export type GroupPostResponse = {
   id: number;
   groupId: number;
   groupName?: string | null;
+  groupAvatarUrl?: string | null;
   authorUserId: number;
   authorName?: string | null;
   authorAvatarUrl?: string | null;

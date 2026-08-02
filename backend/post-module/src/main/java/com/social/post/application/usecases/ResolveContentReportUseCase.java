@@ -4,6 +4,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.social.friendship.infrastructure.repositories.JpaSocialGroupMembershipRepository;
+import com.social.friendship.infrastructure.repositories.JpaSocialGroupPostRepository;
+import com.social.friendship.infrastructure.repositories.JpaSocialGroupRepository;
 import com.social.post.domain.entities.ContentReport;
 import com.social.post.domain.entities.ReportTargetType;
 import com.social.post.domain.exceptions.PostDomainException;
@@ -16,14 +19,23 @@ public class ResolveContentReportUseCase {
     private final ContentReportRepository contentReportRepository;
     private final PostRepository postRepository;
     private final PostCommentRepository postCommentRepository;
+    private final JpaSocialGroupRepository groupRepository;
+    private final JpaSocialGroupMembershipRepository groupMembershipRepository;
+    private final JpaSocialGroupPostRepository groupPostRepository;
 
     public ResolveContentReportUseCase(
             ContentReportRepository contentReportRepository,
             PostRepository postRepository,
-            PostCommentRepository postCommentRepository) {
+            PostCommentRepository postCommentRepository,
+            JpaSocialGroupRepository groupRepository,
+            JpaSocialGroupMembershipRepository groupMembershipRepository,
+            JpaSocialGroupPostRepository groupPostRepository) {
         this.contentReportRepository = contentReportRepository;
         this.postRepository = postRepository;
         this.postCommentRepository = postCommentRepository;
+        this.groupRepository = groupRepository;
+        this.groupMembershipRepository = groupMembershipRepository;
+        this.groupPostRepository = groupPostRepository;
     }
 
     @Transactional
@@ -42,6 +54,13 @@ public class ResolveContentReportUseCase {
                         .orElseThrow(() -> new PostDomainException("Không tìm thấy bình luận"));
                 comment.hideByAdmin();
                 postCommentRepository.save(comment);
+            } else if (report.getTargetType() == ReportTargetType.GROUP) {
+                Long groupId = report.getTargetId();
+                if (groupRepository.existsById(groupId)) {
+                    groupPostRepository.deleteByGroupId(groupId);
+                    groupMembershipRepository.deleteByGroupId(groupId);
+                    groupRepository.deleteById(groupId);
+                }
             }
             report.resolve(adminUserId, note);
         } else {

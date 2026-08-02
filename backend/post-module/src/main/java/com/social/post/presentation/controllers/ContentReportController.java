@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.social.post.application.usecases.CreateCommentReportUseCase;
+import com.social.post.application.usecases.CreateGroupReportUseCase;
 import com.social.post.application.usecases.CreatePostReportUseCase;
 import com.social.post.application.usecases.ListContentReportsUseCase;
 import com.social.post.application.usecases.ResolveContentReportUseCase;
@@ -32,6 +33,7 @@ import jakarta.validation.Valid;
 public class ContentReportController {
     private final CreatePostReportUseCase createPostReportUseCase;
     private final CreateCommentReportUseCase createCommentReportUseCase;
+    private final CreateGroupReportUseCase createGroupReportUseCase;
     private final ListContentReportsUseCase listContentReportsUseCase;
     private final ResolveContentReportUseCase resolveContentReportUseCase;
     private final ContentReportMapper contentReportMapper;
@@ -39,11 +41,13 @@ public class ContentReportController {
     public ContentReportController(
             CreatePostReportUseCase createPostReportUseCase,
             CreateCommentReportUseCase createCommentReportUseCase,
+            CreateGroupReportUseCase createGroupReportUseCase,
             ListContentReportsUseCase listContentReportsUseCase,
             ResolveContentReportUseCase resolveContentReportUseCase,
             ContentReportMapper contentReportMapper) {
         this.createPostReportUseCase = createPostReportUseCase;
         this.createCommentReportUseCase = createCommentReportUseCase;
+        this.createGroupReportUseCase = createGroupReportUseCase;
         this.listContentReportsUseCase = listContentReportsUseCase;
         this.resolveContentReportUseCase = resolveContentReportUseCase;
         this.contentReportMapper = contentReportMapper;
@@ -64,6 +68,15 @@ public class ContentReportController {
             @Valid @RequestBody ContentReportRequest request) {
         Long actorId = currentUserId();
         var report = createCommentReportUseCase.execute(actorId, commentId, request.getReason());
+        return ResponseEntity.ok(contentReportMapper.toResponse(report));
+    }
+
+    @PostMapping("/groups/{groupId}")
+    public ResponseEntity<ContentReportResponse> reportGroup(
+            @PathVariable Long groupId,
+            @Valid @RequestBody ContentReportRequest request) {
+        Long actorId = currentUserId();
+        var report = createGroupReportUseCase.execute(actorId, groupId, request.getReason());
         return ResponseEntity.ok(contentReportMapper.toResponse(report));
     }
 

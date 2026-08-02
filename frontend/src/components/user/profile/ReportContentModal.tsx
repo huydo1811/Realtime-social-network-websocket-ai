@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-type ReportTargetType = "POST" | "COMMENT";
+type ReportTargetType = "POST" | "COMMENT" | "GROUP";
 
 type Props = {
   open: boolean;
@@ -36,10 +36,13 @@ export default function ReportContentModal({
   const [blockUser, setBlockUser] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const title = useMemo(
-    () => (targetType === "POST" ? "Báo cáo bài viết" : "Báo cáo bình luận"),
-    [targetType]
-  );
+  const title = useMemo(() => {
+    if (targetType === "POST") return "Báo cáo bài viết";
+    if (targetType === "COMMENT") return "Báo cáo bình luận";
+    return "Báo cáo nhóm";
+  }, [targetType]);
+
+  const showActions = withActions && targetType !== "GROUP";
 
   if (!open) return null;
 
@@ -107,7 +110,7 @@ export default function ReportContentModal({
           className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300"
         />
 
-        {withActions ? (
+        {showActions ? (
           <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
               <input

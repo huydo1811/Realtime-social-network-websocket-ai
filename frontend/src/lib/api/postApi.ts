@@ -292,6 +292,16 @@ export const postApi = {
     return (await res.json()) as ContentReportDto;
   },
 
+  async reportGroup(groupId: number, reason: string): Promise<ContentReportDto> {
+    const res = await apiAuthFetch(`${API_URL}/reports/groups/${groupId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể báo cáo nhóm");
+    return (await res.json()) as ContentReportDto;
+  },
+
   async adminListReports(params?: {
     page?: number;
     size?: number;

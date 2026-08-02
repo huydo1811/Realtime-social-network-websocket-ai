@@ -11,6 +11,7 @@ public class AdminGroupDetailResponse {
     private String ownerFullName;
     private String name;
     private String description;
+    private String avatarUrl;
     private GroupVisibility visibility;
     private boolean requireApproval;
     private boolean requirePostApproval;
@@ -34,6 +35,7 @@ public class AdminGroupDetailResponse {
         dto.ownerFullName = ownerFullName;
         dto.name = row.getName();
         dto.description = row.getDescription();
+        dto.avatarUrl = row.getAvatarUrl();
         dto.visibility = row.getVisibility();
         dto.requireApproval = row.isRequireApproval();
         dto.requirePostApproval = row.isRequirePostApproval();
@@ -64,6 +66,10 @@ public class AdminGroupDetailResponse {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
     }
 
     public GroupVisibility getVisibility() {

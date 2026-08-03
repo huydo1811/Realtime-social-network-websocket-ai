@@ -66,7 +66,7 @@ export default function ReportsTable({
                 <td className="py-3 pr-4">{r.reason}</td>
                 <td className="py-3 pr-4">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(r.status)}`}>
-                    {r.status}
+                    {r.statusLabel}
                   </span>
                 </td>
                 <td className="py-3 text-slate-500">{r.createdAt}</td>

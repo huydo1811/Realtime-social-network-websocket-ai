@@ -35,6 +35,7 @@ import com.social.post.application.usecases.GetPetPostSocialSummaryUseCase;
 import com.social.post.application.usecases.ListFeedPostsUseCase;
 import com.social.post.application.usecases.ListPetPostsUseCase;
 import com.social.post.application.usecases.ListPostCommentsUseCase;
+import com.social.post.application.usecases.ListPostLikersUseCase;
 import com.social.post.application.usecases.ListUserPostsUseCase;
 import com.social.post.application.usecases.SharePostUseCase;
 import com.social.post.application.usecases.TogglePostCommentLikeUseCase;
@@ -75,6 +76,7 @@ public class PostController {
     private final ListPostCommentsUseCase listPostCommentsUseCase;
     private final SharePostUseCase sharePostUseCase;
     private final GetPostLikeStateUseCase getPostLikeStateUseCase;
+    private final ListPostLikersUseCase listPostLikersUseCase;
     private final GetPetPostSocialSummaryUseCase getPetPostSocialSummaryUseCase;
     private final TogglePostCommentLikeUseCase togglePostCommentLikeUseCase;
     private final GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase;
@@ -100,6 +102,7 @@ public class PostController {
             ListPostCommentsUseCase listPostCommentsUseCase,
             SharePostUseCase sharePostUseCase,
             GetPostLikeStateUseCase getPostLikeStateUseCase,
+            ListPostLikersUseCase listPostLikersUseCase,
             GetPetPostSocialSummaryUseCase getPetPostSocialSummaryUseCase,
             TogglePostCommentLikeUseCase togglePostCommentLikeUseCase,
             GetPostCommentLikeStateUseCase getPostCommentLikeStateUseCase,
@@ -123,6 +126,7 @@ public class PostController {
         this.listPostCommentsUseCase = listPostCommentsUseCase;
         this.sharePostUseCase = sharePostUseCase;
         this.getPostLikeStateUseCase = getPostLikeStateUseCase;
+        this.listPostLikersUseCase = listPostLikersUseCase;
         this.getPetPostSocialSummaryUseCase = getPetPostSocialSummaryUseCase;
         this.togglePostCommentLikeUseCase = togglePostCommentLikeUseCase;
         this.getPostCommentLikeStateUseCase = getPostCommentLikeStateUseCase;
@@ -266,6 +270,28 @@ public class PostController {
         Long actorId = currentUserId();
         boolean liked = getPostLikeStateUseCase.execute(actorId, postId);
         return ResponseEntity.ok(Map.of("liked", liked));
+    }
+
+    @GetMapping("/{postId}/likes")
+    public ResponseEntity<java.util.List<Map<String, Object>>> listLikers(@PathVariable Long postId) {
+        currentUserId();
+        var likes = listPostLikersUseCase.execute(postId);
+        java.util.List<Map<String, Object>> rows = likes.stream().map(like -> {
+            Map<String, Object> row = new java.util.HashMap<>();
+            row.put("userId", like.getUserId());
+            row.put("likedAt", like.getCreatedAt());
+            userRepository.findById(like.getUserId()).ifPresentOrElse(user -> {
+                row.put("fullName", user.getFullName());
+                row.put("username", user.getUsername());
+                row.put("avatarUrl", user.getAvatarUrl());
+            }, () -> {
+                row.put("fullName", "Người dùng #" + like.getUserId());
+                row.put("username", null);
+                row.put("avatarUrl", null);
+            });
+            return row;
+        }).toList();
+        return ResponseEntity.ok(rows);
     }
 
     @PostMapping("/{postId}/comments")

@@ -6,7 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { postApi } from "@/lib/api/postApi";
 import { petApi } from "@/lib/api/petApi";
 import { getAuthTokens } from "@/lib/api/authToken";
-import { blockUser, createGroupPostComment, listGroupFeed, listGroupPostComments, toggleGroupPostLike } from "@/lib/api/friendshipApi";
+import { blockUser, createGroupPostComment, deleteGroupPost, listGroupFeed, listGroupPostComments, toggleGroupPostLike } from "@/lib/api/friendshipApi";
+import { handleModerationAwareError } from "@/components/common/ModerationViolationModal";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { deleteCloudinaryByUrl, uploadToCloudinary } from "@/lib/cloudinary/upload";
 import type {
@@ -26,6 +27,7 @@ import type { FeedPost } from "./types";
 
 type Props = {
   avatarUrl: string;
+  composerName?: string;
   initialPosts: FeedPost[];
   onPostsChanged?: (posts: FeedPost[]) => void;
   readonly?: boolean;
@@ -152,6 +154,7 @@ function mapGroupPostToFeed(post: GroupPostResponse): FeedPost {
 
 export default function ProfileFeedSection({
   avatarUrl,
+  composerName,
   initialPosts,
   onPostsChanged,
   readonly = false,
@@ -311,11 +314,18 @@ export default function ProfileFeedSection({
     petId?: number;
   }) {
     if (readonly) return;
-    const created = await postApi.create(payload);
-    const mapped = mapPostToFeed(created);
-    updatePosts((prev) => [mapped, ...prev]);
-    const likeState = await postApi.getLikeState(created.id).catch(() => ({ liked: false }));
-    setLikedMap((prev) => ({ ...prev, [mapped.id]: likeState.liked }));
+    try {
+      const created = await postApi.create(payload);
+      const mapped = mapPostToFeed(created);
+      updatePosts((prev) => [mapped, ...prev]);
+      const likeState = await postApi.getLikeState(created.id).catch(() => ({ liked: false }));
+      setLikedMap((prev) => ({ ...prev, [mapped.id]: likeState.liked }));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Không thể đăng bài viết";
+      if (handleModerationAwareError(e, message)) return;
+      setError(message);
+      throw e instanceof Error ? e : new Error(message);
+    }
   }
 
   function openEdit(postId: string) {
@@ -361,7 +371,10 @@ export default function ProfileFeedSection({
       }
       closeEdit(postId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể cập nhật bài viết");
+      const message = e instanceof Error ? e.message : "Không thể cập nhật bài viết";
+      if (!handleModerationAwareError(e, message)) {
+        setError(message);
+      }
     } finally {
       setSavingPostId(null);
     }
@@ -388,10 +401,19 @@ export default function ProfileFeedSection({
   }
 
   async function deletePost(postId: string) {
-    const postNum = Number(postId);
-    if (!Number.isFinite(postNum)) return;
+    const target = posts.find((p) => p.id === postId);
     setActionBusyId(postId);
     try {
+      if (target?.source === "GROUP_POST" && target.groupId) {
+        const numericId = Number(String(postId).replace(/^group-/, ""));
+        if (!Number.isFinite(numericId)) return;
+        await deleteGroupPost(target.groupId, numericId);
+        updatePosts((prev) => prev.filter((p) => p.id !== postId));
+        if (activePostId === postId) setActivePostId(null);
+        return;
+      }
+      const postNum = Number(postId);
+      if (!Number.isFinite(postNum)) return;
       await postApi.remove(postNum);
       updatePosts((prev) => prev.filter((p) => p.id !== postId));
       if (activePostId === postId) setActivePostId(null);
@@ -699,7 +721,28 @@ export default function ProfileFeedSection({
 
   async function sharePost(postId: string, payload?: { content?: string; visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE" }) {
     const target = posts.find((p) => p.id === postId);
-    if (target?.source === "GROUP_POST") return;
+    if (target?.source === "GROUP_POST") {
+      try {
+        const prefix = `🔄 Chia sẻ từ nhóm ${target.groupName || "nhóm"}\n\n${target.content || ""}`.trim();
+        const extra = payload?.content?.trim();
+        const finalContent = extra ? `${extra}\n\n${prefix}` : prefix;
+        const shared = await postApi.create({
+          content: finalContent,
+          mediaUrl: target.mediaUrl,
+          visibility: payload?.visibility ?? "FRIENDS",
+        });
+        if (source === "feed" || source === "me") {
+          updatePosts((prev) => [mapPostToFeed(shared), ...prev]);
+        }
+        setShareModalPostId(null);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Không thể chia sẻ bài viết";
+        if (!handleModerationAwareError(e, message)) {
+          setError(message);
+        }
+      }
+      return;
+    }
     const postNum = Number(postId);
     if (!Number.isFinite(postNum)) return;
     try {
@@ -1002,6 +1045,8 @@ export default function ProfileFeedSection({
       <PostDetailModal
         post={activePost}
         actorId={actorId}
+        composerAvatarUrl={avatarUrl}
+        composerName={composerName}
         liked={activePost ? Boolean(likedMap[activePost.id]) : false}
         comments={activePost ? commentsMap[activePost.id] || [] : []}
         onOpenAuthorProfile={openAuthorProfile}
@@ -1053,7 +1098,7 @@ export default function ProfileFeedSection({
                 onClick={() => setReportResult({ open: false, title: "", details: [] })}
                 className="cursor-pointer rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
               >
-                Dong
+                Đóng
               </button>
             </div>
           </div>

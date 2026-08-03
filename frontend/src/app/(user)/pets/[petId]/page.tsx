@@ -2,32 +2,59 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import MediaPreview from "@/components/common/MediaPreview";
+import { showAppToast } from "@/components/common/AppToastHost";
+import { handleModerationAwareError } from "@/components/common/ModerationViolationModal";
 import UserLayout from "@/components/layout/UserLayout";
-import PetAssistantSection from "@/components/pets/PetAssistantSection";
-import PetDiagnosisSection from "@/components/pets/PetDiagnosisSection";
 import PetHealthSection from "@/components/pets/PetHealthSection";
 import PetWalkSection from "@/components/pets/PetWalkSection";
 import PostCard from "@/components/user/profile/PostCard";
+import PostDetailModal from "@/components/user/profile/PostDetailModal";
 import type { FeedPost } from "@/components/user/profile/types";
 import { petApi } from "@/lib/api/petApi";
 import { postApi } from "@/lib/api/postApi";
+import { getMyProfile } from "@/lib/api/authApi";
 import { getAuthTokens, clearAuthTokens } from "@/lib/api/authToken";
 import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { uploadToCloudinary } from "@/lib/cloudinary/upload";
 import { getPetBadgeMeta } from "@/lib/pets/petBadgeMeta";
-import type { PetDto, PetSocialBadgeDto, PetSocialHealthSummaryDto, PetSocialPromptDto } from "@/types/pet";
-import type { PetPostSocialSummaryDto, PostDto, PostVisibility } from "@/types/post";
+import type { PetDto, PetGender, PetSocialBadgeDto, PetSocialHealthSummaryDto, PetSocialPromptDto, PetSpecies, PetVisibility } from "@/types/pet";
+import type { UpdatePetPayload } from "@/types/pet";
+import type { PetPostSocialSummaryDto, PostCommentDto, PostDto, PostVisibility } from "@/types/post";
 
-type Tab = "posts" | "health" | "walk" | "assistant";
+type Tab = "posts" | "health" | "walk";
 type TabMeta = {
   id: Tab;
   label: string;
-  icon: JSX.Element;
+  icon: ReactNode;
 };
+
+type CommentItem = {
+  id: string;
+  authorId?: number;
+  authorName: string;
+  authorAvatar?: string;
+  text: string;
+  createdAt: string;
+  createdAtTs?: number;
+  parentCommentId?: string;
+  likeCount: number;
+  likedByMe: boolean;
+};
+
+const SPECIES_OPTIONS: { value: PetSpecies; label: string }[] = [
+  { value: "DOG", label: "Chó" },
+  { value: "CAT", label: "Mèo" },
+  { value: "BIRD", label: "Chim" },
+  { value: "RABBIT", label: "Thỏ" },
+  { value: "HAMSTER", label: "Hamster" },
+  { value: "FISH", label: "Cá" },
+  { value: "REPTILE", label: "Bò sát" },
+  { value: "OTHER", label: "Khác" },
+];
 
 const SPECIES_LABELS: Record<string, string> = {
   DOG: "Chó",
@@ -54,6 +81,22 @@ function toRelativeDate(input: string): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} phút trước`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} giờ trước`;
   return `${Math.floor(diff / 86_400_000)} ngày trước`;
+}
+
+function mapComment(item: PostCommentDto): CommentItem {
+  const createdAtTs = item.createdAt ? Date.parse(item.createdAt) : Number.NaN;
+  return {
+    id: String(item.id),
+    authorId: item.userId,
+    authorName: item.authorName?.trim() || `User #${item.userId}`,
+    authorAvatar: item.authorAvatarUrl ?? undefined,
+    text: item.content,
+    createdAt: toRelativeDate(item.createdAt),
+    createdAtTs: Number.isNaN(createdAtTs) ? undefined : createdAtTs,
+    parentCommentId: item.parentCommentId != null ? String(item.parentCommentId) : undefined,
+    likeCount: item.likeCount ?? 0,
+    likedByMe: Boolean(item.likedByMe),
+  };
 }
 
 function mapPostToFeed(post: PostDto): FeedPost {
@@ -98,16 +141,27 @@ export default function PetDetailPage() {
   const [healthSocial, setHealthSocial] = useState<PetSocialHealthSummaryDto | null>(null);
   const [quickPostContent, setQuickPostContent] = useState("");
   const [quickPostVisibility, setQuickPostVisibility] = useState<PostVisibility>("FRIENDS");
+  const [quickPostMediaUrl, setQuickPostMediaUrl] = useState<string | undefined>(undefined);
+  const [quickPostMediaName, setQuickPostMediaName] = useState("");
+  const [uploadingQuickPostMedia, setUploadingQuickPostMedia] = useState(false);
   const [creatingQuickPost, setCreatingQuickPost] = useState(false);
-  const [quickPostNotice, setQuickPostNotice] = useState<string | null>(null);
   const [socialPrompts, setSocialPrompts] = useState<PetSocialPromptDto[]>([]);
   const [socialBadges, setSocialBadges] = useState<PetSocialBadgeDto[]>([]);
   const [socialBadgeFetchFailed, setSocialBadgeFetchFailed] = useState(false);
   const [uploadingPetAvatar, setUploadingPetAvatar] = useState(false);
-  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
   const [draftAvatarUrl, setDraftAvatarUrl] = useState<string | null>(null);
   const [draftAvatarName, setDraftAvatarName] = useState("");
   const [sharingBadgeKey, setSharingBadgeKey] = useState<string | null>(null);
+  const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
+  const [commentsMap, setCommentsMap] = useState<Record<string, CommentItem[]>>({});
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [openingPostId, setOpeningPostId] = useState<string | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState<UpdatePetPayload>({ name: "", species: "CAT", gender: "UNKNOWN", visibility: "PUBLIC" });
+  const [savingPet, setSavingPet] = useState(false);
+  const [deletingPet, setDeletingPet] = useState(false);
+  const [sessionAvatarUrl, setSessionAvatarUrl] = useState<string | null>(null);
+  const [sessionName, setSessionName] = useState<string | undefined>(undefined);
 
   const actorId = useMemo(() => {
     const token = getAuthTokens()?.accessToken;
@@ -115,6 +169,10 @@ export default function PetDetailPage() {
   }, []);
 
   const isOwner = pet != null && actorId != null && pet.ownerUserId === actorId;
+  const activePost = useMemo(
+    () => posts.find((p) => p.id === activePostId) || null,
+    [posts, activePostId]
+  );
   const unlockedBadges = socialBadges.filter((badge) => badge.unlocked);
   const lockedBadges = socialBadges.filter((badge) => !badge.unlocked);
   const tabs: TabMeta[] = [
@@ -145,15 +203,6 @@ export default function PetDetailPage() {
         </svg>
       ),
     },
-    {
-      id: "assistant",
-      label: "Trợ lý & AI",
-      icon: (
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2M5 12H3m18 0h-2M6.5 6.5 5 5m14 14-1.5-1.5M6.5 17.5 5 19m14-14-1.5 1.5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
-        </svg>
-      ),
-    },
   ];
 
   const load = useCallback(async () => {
@@ -170,7 +219,8 @@ export default function PetDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [petData, postPage, postSummary, healthSummary, prompts, badgeResult] = await Promise.all([
+      const accessToken = tokens.accessToken;
+      const [petData, postPage, postSummary, healthSummary, prompts, badgeResult, myProfile] = await Promise.all([
         petApi.getById(petId),
         postApi.listPetPosts(petId, 0, 20),
         postApi.getPetSocialSummary(petId).catch(() => null),
@@ -180,14 +230,46 @@ export default function PetDetailPage() {
           .getSocialBadges(petId)
           .then((data) => ({ data, failed: false }))
           .catch(() => ({ data: [] as PetSocialBadgeDto[], failed: true })),
+        getMyProfile(accessToken).catch(() => null),
       ]);
       setPet(petData);
-      setPosts(postPage.content.map(mapPostToFeed));
+      const mappedPosts = postPage.content.map(mapPostToFeed);
+      setPosts(mappedPosts);
       setPetSocial(postSummary);
       setHealthSocial(healthSummary);
       setSocialPrompts(prompts);
       setSocialBadges(badgeResult.data);
       setSocialBadgeFetchFailed(badgeResult.failed);
+      if (myProfile) {
+        const profile = myProfile as { avatarUrl?: string; fullName?: string };
+        setSessionAvatarUrl(profile.avatarUrl?.trim() || null);
+        setSessionName(profile.fullName?.trim() || undefined);
+      }
+      if (mappedPosts.length) {
+        const likeEntries = await Promise.all(
+          mappedPosts.map(async (p) => {
+            const postNum = Number(p.id);
+            if (!Number.isFinite(postNum)) return [p.id, false] as const;
+            try {
+              const res = await postApi.getLikeState(postNum);
+              return [p.id, res.liked] as const;
+            } catch {
+              return [p.id, false] as const;
+            }
+          })
+        );
+        setLikedMap(Object.fromEntries(likeEntries));
+      }
+      if (petData) {
+        setEditForm({
+          name: petData.name,
+          species: petData.species,
+          breed: petData.breed ?? undefined,
+          gender: petData.gender,
+          bio: petData.bio ?? undefined,
+          visibility: petData.visibility,
+        });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Không thể tải hồ sơ thú cưng";
       if (msg.toLowerCase().includes("unauthorized")) {
@@ -207,35 +289,218 @@ export default function PetDetailPage() {
 
   async function createQuickPetPost() {
     const content = quickPostContent.trim();
-    if (!content) {
-      setQuickPostNotice("Nhập nội dung trước khi đăng.");
+    if (!content && !quickPostMediaUrl?.trim()) {
+      showAppToast("Nhập nội dung hoặc chọn ảnh trước khi đăng.", "warning");
       return;
     }
     if (!pet) return;
     setCreatingQuickPost(true);
-    setQuickPostNotice(null);
     try {
       const created = await postApi.create({
         content,
+        mediaUrl: quickPostMediaUrl,
         visibility: quickPostVisibility,
         petId: pet.id,
       });
-      setPosts((prev) => [mapPostToFeed(created), ...prev]);
+      const mapped = mapPostToFeed(created);
+      setPosts((prev) => [mapped, ...prev]);
       setQuickPostContent("");
-      setQuickPostNotice("Đã đăng bài pet lên bảng tin.");
+      setQuickPostMediaUrl(undefined);
+      setQuickPostMediaName("");
+      showAppToast("Đã đăng bài pet lên bảng tin.", "success");
+      const likeState = await postApi.getLikeState(created.id).catch(() => ({ liked: false }));
+      setLikedMap((prev) => ({ ...prev, [mapped.id]: likeState.liked }));
       const refreshedSummary = await postApi.getPetSocialSummary(pet.id).catch(() => null);
       if (refreshedSummary) setPetSocial(refreshedSummary);
     } catch (e) {
-      setQuickPostNotice(e instanceof Error ? e.message : "Không thể đăng bài.");
+      const msg = e instanceof Error ? e.message : "Không thể đăng bài.";
+      if (!handleModerationAwareError(e, msg)) {
+        showAppToast(msg, "error");
+      }
     } finally {
       setCreatingQuickPost(false);
+    }
+  }
+
+  async function handlePickQuickPostMedia(file?: File) {
+    if (!file) return;
+    setUploadingQuickPostMedia(true);
+    try {
+      const uploaded = await uploadToCloudinary(file);
+      setQuickPostMediaUrl(uploaded.secureUrl);
+      setQuickPostMediaName(file.name);
+      showAppToast("Đã tải ảnh lên", "success");
+    } catch (e) {
+      showAppToast(e instanceof Error ? e.message : "Không thể tải ảnh/video lên Cloudinary", "error");
+      setQuickPostMediaUrl(undefined);
+      setQuickPostMediaName("");
+    } finally {
+      setUploadingQuickPostMedia(false);
+    }
+  }
+
+  async function openPostDetail(postId: string) {
+    setOpeningPostId(postId);
+    setActivePostId(postId);
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) {
+      setOpeningPostId(null);
+      return;
+    }
+    try {
+      const [fresh, comments] = await Promise.all([
+        postApi.getById(postNum),
+        postApi.listComments(postNum),
+      ]);
+      const resolvedId = String(fresh.id);
+      const mappedFresh = mapPostToFeed(fresh);
+      setPosts((prev) =>
+        prev.some((p) => p.id === resolvedId)
+          ? prev.map((p) => (p.id === resolvedId ? mappedFresh : p))
+          : [mappedFresh, ...prev]
+      );
+      setCommentsMap((prev) => ({ ...prev, [resolvedId]: comments.map(mapComment) }));
+      const likeState = await postApi.getLikeState(postNum);
+      setLikedMap((prev) => ({ ...prev, [resolvedId]: likeState.liked }));
+      setActivePostId(resolvedId);
+    } catch {
+      // keep modal usable
+    } finally {
+      setOpeningPostId(null);
+    }
+  }
+
+  async function toggleLike(postId: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    const oldLiked = Boolean(likedMap[postId]);
+    const oldLikes = posts.find((p) => p.id === postId)?.likes ?? 0;
+    setLikedMap((prev) => ({ ...prev, [postId]: !oldLiked }));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, likes: Math.max(0, p.likes + (oldLiked ? -1 : 1)) } : p
+      )
+    );
+    try {
+      const likeRes = await postApi.toggleLike(postNum);
+      setLikedMap((prev) => ({ ...prev, [postId]: !oldLiked }));
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likes: likeRes.likeCount } : p))
+      );
+      void postApi.getLikeState(postNum).then((stateRes) => {
+        setLikedMap((prev) => ({ ...prev, [postId]: stateRes.liked }));
+      }).catch(() => undefined);
+    } catch (e) {
+      setLikedMap((prev) => ({ ...prev, [postId]: oldLiked }));
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likes: oldLikes } : p))
+      );
+      showAppToast(e instanceof Error ? e.message : "Không thể thích bài viết", "error");
+    }
+  }
+
+  async function addComment(postId: string, text: string) {
+    const postNum = Number(postId);
+    if (!Number.isFinite(postNum)) return;
+    const created = await postApi.createComment(postNum, text);
+    const mapped = mapComment(created);
+    setCommentsMap((prev) => ({
+      ...prev,
+      [postId]: [...(prev[postId] || []), mapped],
+    }));
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p))
+    );
+  }
+
+  async function toggleCommentLike(postId: string, commentId: string) {
+    const postNum = Number(postId);
+    const commentNum = Number(commentId);
+    if (!Number.isFinite(postNum) || !Number.isFinite(commentNum)) return;
+    const list = commentsMap[postId] || [];
+    const target = list.find((c) => c.id === commentId);
+    if (!target) return;
+    const prevLiked = target.likedByMe;
+    const prevCount = target.likeCount;
+    setCommentsMap((prev) => ({
+      ...prev,
+      [postId]: (prev[postId] || []).map((c) =>
+        c.id === commentId
+          ? { ...c, likedByMe: !prevLiked, likeCount: Math.max(0, c.likeCount + (prevLiked ? -1 : 1)) }
+          : c
+      ),
+    }));
+    try {
+      const countRes = await postApi.toggleCommentLike(postNum, commentNum);
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map((c) =>
+          c.id === commentId ? { ...c, likeCount: countRes.likeCount, likedByMe: !prevLiked } : c
+        ),
+      }));
+    } catch {
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map((c) =>
+          c.id === commentId ? { ...c, likeCount: prevCount, likedByMe: prevLiked } : c
+        ),
+      }));
+    }
+  }
+
+  async function addReply(postId: string, parentCommentId: string, text: string) {
+    const postNum = Number(postId);
+    const parentNum = Number(parentCommentId);
+    if (!Number.isFinite(postNum) || !Number.isFinite(parentNum)) return;
+    const reply = await postApi.createReply(postNum, parentNum, text);
+    const mapped = mapComment(reply);
+    setCommentsMap((prev) => ({
+      ...prev,
+      [postId]: [...(prev[postId] || []), mapped],
+    }));
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p))
+    );
+  }
+
+  async function handleSavePetEdit() {
+    if (!pet || !editForm.name.trim()) return;
+    setSavingPet(true);
+    try {
+      const updated = await petApi.update(pet.id, {
+        ...editForm,
+        name: editForm.name.trim(),
+        breed: editForm.breed?.trim() || undefined,
+        bio: editForm.bio?.trim() || undefined,
+        status: pet.status,
+      });
+      setPet(updated);
+      setShowEditForm(false);
+      showAppToast("Đã cập nhật hồ sơ thú cưng.", "success");
+    } catch (e) {
+      showAppToast(e instanceof Error ? e.message : "Không thể cập nhật thú cưng.", "error");
+    } finally {
+      setSavingPet(false);
+    }
+  }
+
+  async function handleDeletePet() {
+    if (!pet) return;
+    if (!window.confirm(`Xóa hồ sơ "${pet.name}"? Hành động này không thể hoàn tác.`)) return;
+    setDeletingPet(true);
+    try {
+      await petApi.remove(pet.id);
+      showAppToast("Đã xóa thú cưng.", "success");
+      router.push("/pets");
+    } catch (e) {
+      showAppToast(e instanceof Error ? e.message : "Không thể xóa thú cưng.", "error");
+      setDeletingPet(false);
     }
   }
 
   async function handleChangePetAvatar(file?: File) {
     if (!file || !pet || !isOwner) return;
     setUploadingPetAvatar(true);
-    setAvatarNotice(null);
     const localPreview = URL.createObjectURL(file);
     setDraftAvatarUrl(localPreview);
     setDraftAvatarName(file.name);
@@ -259,12 +524,12 @@ export default function PetDetailPage() {
       setPet(updated);
       setDraftAvatarUrl(null);
       setDraftAvatarName("");
-      setAvatarNotice("Đã cập nhật ảnh thú cưng.");
+      showAppToast("Đã cập nhật ảnh thú cưng.", "success");
     } catch (e) {
       setDraftAvatarUrl(null);
       setDraftAvatarName("");
       URL.revokeObjectURL(localPreview);
-      setAvatarNotice(e instanceof Error ? e.message : "Không thể cập nhật ảnh thú cưng.");
+      showAppToast(e instanceof Error ? e.message : "Không thể cập nhật ảnh thú cưng.", "error");
     } finally {
       setUploadingPetAvatar(false);
     }
@@ -273,17 +538,17 @@ export default function PetDetailPage() {
   async function shareBadgeToFeed(badge: PetSocialBadgeDto) {
     if (!pet) return;
     setSharingBadgeKey(badge.key);
-    setQuickPostNotice(null);
     try {
       const created = await postApi.create({
         content: badge.shareText,
         visibility: "FRIENDS",
         petId: pet.id,
       });
-      setPosts((prev) => [mapPostToFeed(created), ...prev]);
-      setQuickPostNotice(`Đã khoe huy hiệu "${badge.title}" lên bảng tin.`);
+      const mapped = mapPostToFeed(created);
+      setPosts((prev) => [mapped, ...prev]);
+      showAppToast(`Đã khoe huy hiệu "${badge.title}" lên bảng tin.`, "success");
     } catch (e) {
-      setQuickPostNotice(e instanceof Error ? e.message : "Không thể chia sẻ huy hiệu.");
+      showAppToast(e instanceof Error ? e.message : "Không thể chia sẻ huy hiệu.", "error");
     } finally {
       setSharingBadgeKey(null);
     }
@@ -359,7 +624,21 @@ export default function PetDetailPage() {
                             disabled={uploadingPetAvatar}
                           />
                         </label>
-                        {avatarNotice ? <span className="text-xs text-slate-600">{avatarNotice}</span> : null}
+                        <button
+                          type="button"
+                          onClick={() => setShowEditForm((v) => !v)}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          {showEditForm ? "Đóng sửa hồ sơ" : "Sửa hồ sơ"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletePet()}
+                          disabled={deletingPet}
+                          className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          {deletingPet ? "Đang xóa..." : "Xóa thú cưng"}
+                        </button>
                       </div>
                       {draftAvatarUrl ? (
                         <MediaPreview
@@ -368,6 +647,90 @@ export default function PetDetailPage() {
                           compact
                         />
                       ) : null}
+                      {showEditForm ? (
+                        <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="block sm:col-span-2">
+                              <span className="mb-1 block text-xs font-medium text-slate-700">Tên</span>
+                              <input
+                                value={editForm.name}
+                                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-100"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-medium text-slate-700">Loài</span>
+                              <select
+                                value={editForm.species}
+                                onChange={(e) => setEditForm((f) => ({ ...f, species: e.target.value as PetSpecies }))}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                              >
+                                {SPECIES_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-medium text-slate-700">Giống</span>
+                              <input
+                                value={editForm.breed ?? ""}
+                                onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-100"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-medium text-slate-700">Giới tính</span>
+                              <select
+                                value={editForm.gender ?? "UNKNOWN"}
+                                onChange={(e) => setEditForm((f) => ({ ...f, gender: e.target.value as PetGender }))}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                              >
+                                <option value="MALE">Đực</option>
+                                <option value="FEMALE">Cái</option>
+                                <option value="UNKNOWN">Không rõ</option>
+                              </select>
+                            </label>
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-medium text-slate-700">Quyền xem</span>
+                              <select
+                                value={editForm.visibility ?? "PUBLIC"}
+                                onChange={(e) => setEditForm((f) => ({ ...f, visibility: e.target.value as PetVisibility }))}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                              >
+                                <option value="PUBLIC">Công khai</option>
+                                <option value="FRIENDS">Bạn bè</option>
+                                <option value="PRIVATE">Riêng tư</option>
+                              </select>
+                            </label>
+                            <label className="block sm:col-span-2">
+                              <span className="mb-1 block text-xs font-medium text-slate-700">Tiểu sử</span>
+                              <textarea
+                                value={editForm.bio ?? ""}
+                                onChange={(e) => setEditForm((f) => ({ ...f, bio: e.target.value }))}
+                                rows={3}
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-100"
+                              />
+                            </label>
+                          </div>
+                          <div className="mt-3 flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowEditForm(false)}
+                              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              Hủy
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleSavePetEdit()}
+                              disabled={savingPet || !editForm.name.trim()}
+                              className="rounded-full bg-rose-500 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
+                            >
+                              {savingPet ? "Đang lưu..." : "Lưu thay đổi"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -375,7 +738,7 @@ export default function PetDetailPage() {
             </div>
 
             <div className="mb-5 rounded-2xl border border-slate-200 bg-white/90 p-1.5 shadow-sm backdrop-blur">
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+              <div className="grid grid-cols-3 gap-1">
                 {tabs.map((item) => (
                   <button
                     key={item.id}
@@ -546,28 +909,57 @@ export default function PetDetailPage() {
                       placeholder={`Viết cập nhật về ${pet.name} để chia sẻ với bạn bè...`}
                     />
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-xs text-slate-600">
-                        Quyền xem
-                        <select
-                          value={quickPostVisibility}
-                          onChange={(e) => setQuickPostVisibility(e.target.value as PostVisibility)}
-                          className="ml-2 rounded-lg border border-slate-200 bg-white px-2 py-1"
-                        >
-                          <option value="PUBLIC">Công khai</option>
-                          <option value="FRIENDS">Bạn bè</option>
-                          <option value="PRIVATE">Riêng tư</option>
-                        </select>
-                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-xs text-slate-600">
+                          Quyền xem
+                          <select
+                            value={quickPostVisibility}
+                            onChange={(e) => setQuickPostVisibility(e.target.value as PostVisibility)}
+                            className="ml-2 rounded-lg border border-slate-200 bg-white px-2 py-1"
+                          >
+                            <option value="PUBLIC">Công khai</option>
+                            <option value="FRIENDS">Bạn bè</option>
+                            <option value="PRIVATE">Riêng tư</option>
+                          </select>
+                        </label>
+                        <label className="cursor-pointer rounded-full border border-sky-300 bg-white px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100">
+                          {uploadingQuickPostMedia ? "Đang tải ảnh..." : "Thêm ảnh/video"}
+                          <input
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            disabled={uploadingQuickPostMedia}
+                            onChange={(e) => {
+                              void handlePickQuickPostMedia(e.target.files?.[0]);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {quickPostMediaUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQuickPostMediaUrl(undefined);
+                              setQuickPostMediaName("");
+                            }}
+                            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                          >
+                            Bỏ ảnh
+                          </button>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() => void createQuickPetPost()}
-                        disabled={creatingQuickPost}
+                        disabled={creatingQuickPost || uploadingQuickPostMedia}
                         className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
                       >
                         {creatingQuickPost ? "Đang đăng..." : "Đăng lên bảng tin"}
                       </button>
                     </div>
-                    {quickPostNotice ? <p className="mt-2 text-xs text-sky-800">{quickPostNotice}</p> : null}
+                    {quickPostMediaUrl ? (
+                      <MediaPreview url={quickPostMediaUrl} name={quickPostMediaName || "Ảnh đính kèm"} compact />
+                    ) : null}
                     <p className="mt-1 text-[11px] text-slate-500">
                       Bài gần nhất: {formatDateTime(petSocial?.latestPostAt)}
                     </p>
@@ -583,9 +975,9 @@ export default function PetDetailPage() {
                       <PostCard
                         key={post.id}
                         post={post}
-                        liked={false}
-                        onToggleLike={() => {}}
-                        onOpen={() => {}}
+                        liked={Boolean(likedMap[post.id])}
+                        onToggleLike={() => void toggleLike(post.id)}
+                        onOpen={() => void openPostDetail(post.id)}
                       />
                     ))}
                   </div>
@@ -593,17 +985,38 @@ export default function PetDetailPage() {
               </div>
             ) : tab === "health" ? (
               <PetHealthSection petId={petId} isOwner={isOwner} />
-            ) : tab === "walk" ? (
-              <PetWalkSection petId={petId} isOwner={isOwner} />
             ) : (
-              <div className="space-y-6">
-                <PetAssistantSection petId={petId} petName={pet?.name ?? "Thú cưng"} species={pet?.species ?? "OTHER"} isOwner={isOwner} />
-                <PetDiagnosisSection petId={petId} isOwner={isOwner} />
-              </div>
+              <PetWalkSection petId={petId} isOwner={isOwner} />
             )}
           </>
         ) : null}
       </div>
+
+      <PostDetailModal
+        post={activePost}
+        actorId={actorId}
+        composerAvatarUrl={sessionAvatarUrl}
+        composerName={sessionName}
+        liked={activePost ? Boolean(likedMap[activePost.id]) : false}
+        comments={activePost ? commentsMap[activePost.id] || [] : []}
+        onClose={() => setActivePostId(null)}
+        onToggleLike={(postId) => void toggleLike(postId)}
+        onAddComment={async (postId, text) => {
+          try {
+            await addComment(postId, text);
+          } catch (e) {
+            showAppToast(e instanceof Error ? e.message : "Không thể bình luận", "error");
+          }
+        }}
+        onToggleCommentLike={(postId, commentId) => void toggleCommentLike(postId, commentId)}
+        onAddReply={async (postId, parentCommentId, text) => {
+          try {
+            await addReply(postId, parentCommentId, text);
+          } catch (e) {
+            showAppToast(e instanceof Error ? e.message : "Không thể trả lời", "error");
+          }
+        }}
+      />
     </UserLayout>
   );
 }

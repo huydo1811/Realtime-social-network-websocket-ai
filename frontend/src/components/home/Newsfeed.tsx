@@ -14,6 +14,7 @@ export default function Newsfeed() {
   const token = getAuthTokens()?.accessToken;
   const actorId = token ? getUserIdFromAccessToken(token) : null;
   const [avatarUrl, setAvatarUrl] = useState("/hype.png");
+  const [composerName, setComposerName] = useState<string | undefined>(undefined);
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -26,8 +27,9 @@ export default function Newsfeed() {
     getMyProfile(accessToken)
       .then((profile) => {
         if (cancelled) return;
-        const data = profile as { avatarUrl?: string };
+        const data = profile as { avatarUrl?: string; fullName?: string };
         setAvatarUrl(data.avatarUrl?.trim() || "/hype.png");
+        setComposerName(data.fullName?.trim() || undefined);
       })
       .catch(() => {
         if (!cancelled) setAvatarUrl("/hype.png");
@@ -52,6 +54,7 @@ export default function Newsfeed() {
     <section>
       <ProfileFeedSection
         avatarUrl={avatarUrl}
+        composerName={composerName}
         initialPosts={[]}
         source="feed"
         userId={actorId ?? undefined}

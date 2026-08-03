@@ -63,6 +63,16 @@ const items = [
     ),
   },
   {
+    href: "/pets",
+    label: "Thú cưng",
+    badge: null,
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6c-2.2 0-4 1.3-4 3s1.8 3 4 3 4-1.3 4-3-1.8-3-4-3zm-7 9c0-2.2 2.7-4 7-4s7 1.8 7 4v1H5v-1zm14-6.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM7 8.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" />
+      </svg>
+    ),
+  },
+  {
     href: "/groups",
     label: "Nhóm",
     badge: null,
@@ -83,7 +93,7 @@ const items = [
     ),
   },
   {
-    href: "/settings/chat",
+    href: "/settings",
     label: "Cài đặt",
     badge: null,
     icon: (
@@ -106,7 +116,7 @@ export default function MobileBottomNav() {
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur">
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-8">
         {items.map((item) => {
           const active = isActive(pathname, item.href);
           const badgeCount =

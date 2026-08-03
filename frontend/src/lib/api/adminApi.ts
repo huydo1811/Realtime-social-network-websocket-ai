@@ -6,6 +6,7 @@ import type {
   AdminGroupDetail,
   AdminGroupMembership,
   AdminGroupPost,
+  AdminOperationAuditLog,
   AdminPageResponse,
 } from "@/types/admin";
 import type { GroupMembershipStatus, GroupPostStatus, GroupResponse, GroupVisibility } from "@/types/friendship";
@@ -158,5 +159,50 @@ export const adminApi = {
       method: "DELETE",
     });
     if (!res.ok) throw await parseError(res, "Không thể xóa nhóm");
+  },
+
+  async logPageVisit(body: { page: string; label: string }): Promise<void> {
+    const res = await apiAuthFetch(`${API_URL}/admin/audit-logs/visit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await parseError(res, "Không thể ghi nhật ký truy cập trang");
+  },
+
+  async listOperationAuditLogs(params?: {
+    page?: number;
+    size?: number;
+    adminUserId?: number;
+    httpMethod?: string;
+    from?: string;
+    to?: string;
+  }): Promise<{
+    items: AdminOperationAuditLog[];
+    total: number;
+    page: number;
+    size: number;
+    totalPages: number;
+  }> {
+    const query = new URLSearchParams();
+    query.set("page", String(params?.page ?? 0));
+    query.set("size", String(params?.size ?? 20));
+    if (params?.adminUserId != null && Number.isFinite(params.adminUserId)) {
+      query.set("adminUserId", String(params.adminUserId));
+    }
+    if (params?.httpMethod?.trim() && params.httpMethod.trim().toUpperCase() !== "ALL") {
+      query.set("httpMethod", params.httpMethod.trim().toUpperCase());
+    }
+    if (params?.from?.trim()) query.set("from", params.from.trim());
+    if (params?.to?.trim()) query.set("to", params.to.trim());
+    const res = await apiAuthFetch(`${API_URL}/admin/audit-logs?${query.toString()}`);
+    if (!res.ok) throw await parseError(res, "Không thể tải nhật ký thao tác admin");
+    return (await res.json()) as {
+      items: AdminOperationAuditLog[];
+      total: number;
+      page: number;
+      size: number;
+      totalPages: number;
+    };
   },
 };

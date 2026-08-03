@@ -20,7 +20,7 @@ export default function AdminSidebar() {
           <Image src="/hype.png" alt="Hype" fill className="rounded-lg object-cover" unoptimized />
         </div>
         <div>
-          <p className="text-sm text-slate-500">Admin Panel</p>
+          <p className="text-sm text-slate-500">Trang quản trị</p>
           <h2 className="text-lg font-semibold leading-tight">Hype</h2>
         </div>
       </div>
@@ -113,6 +113,22 @@ export default function AdminSidebar() {
           }`}
         >
           Quản lý AI
+        </Link>
+        <Link
+          href="/admin/audit"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/audit") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Nhật ký thao tác
+        </Link>
+        <Link
+          href="/admin/profile"
+          className={`block w-full rounded-xl px-3 py-2 text-left font-medium transition-colors ${
+            pathname.startsWith("/admin/profile") ? "bg-rose-50 text-rose-700 font-semibold" : "hover:bg-slate-100"
+          }`}
+        >
+          Hồ sơ admin
         </Link>
       </nav>
 

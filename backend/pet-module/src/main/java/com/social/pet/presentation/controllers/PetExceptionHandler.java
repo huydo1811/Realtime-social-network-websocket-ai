@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.social.pet.domain.exceptions.PetDomainException;
+import com.social.pet.domain.exceptions.PetImageModerationRejectedException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -31,6 +32,11 @@ public class PetExceptionHandler {
 
     @ExceptionHandler({ IllegalArgumentException.class, IllegalStateException.class, PetDomainException.class })
     public ResponseEntity<?> handleBadRequest(RuntimeException ex, HttpServletRequest req) {
+        return response(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage(), req.getRequestURI());
+    }
+
+    @ExceptionHandler(PetImageModerationRejectedException.class)
+    public ResponseEntity<?> handlePetImageModeration(PetImageModerationRejectedException ex, HttpServletRequest req) {
         return response(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage(), req.getRequestURI());
     }
 

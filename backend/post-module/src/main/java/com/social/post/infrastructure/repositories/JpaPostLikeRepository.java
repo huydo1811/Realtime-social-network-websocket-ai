@@ -1,5 +1,6 @@
 package com.social.post.infrastructure.repositories;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,4 +13,6 @@ public interface JpaPostLikeRepository extends JpaRepository<PostLike, Long> {
     boolean existsByPostIdAndUserId(Long postId, Long userId);
 
     long countByPostId(Long postId);
+
+    List<PostLike> findByPostIdOrderByCreatedAtDesc(Long postId);
 }

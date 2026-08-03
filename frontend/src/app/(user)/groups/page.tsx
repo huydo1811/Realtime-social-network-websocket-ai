@@ -8,6 +8,7 @@ import {
   createGroup,
   deleteGroup,
   discoverGroups,
+  getGroup,
   joinGroup,
   listGroupMembers,
   listMyGroupMemberships,
@@ -61,6 +62,8 @@ export default function GroupsPage() {
   const [uploadingEditAvatar, setUploadingEditAvatar] = useState(false);
   const [reportGroupId, setReportGroupId] = useState<number | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
+  const [myGroupsTab, setMyGroupsTab] = useState<"owned" | "joined">("owned");
+  const [joinedGroups, setJoinedGroups] = useState<GroupResponse[]>([]);
   const [createForm, setCreateForm] = useState({
     name: "",
     description: "",
@@ -81,6 +84,23 @@ export default function GroupsPage() {
       setGroups(discoverRows);
       setMyMemberships(membershipRows);
       setOwnedGroups(ownedRows);
+      const groupMap = new Map<number, GroupResponse>();
+      discoverRows.forEach((g) => groupMap.set(g.id, g));
+      ownedRows.forEach((g) => groupMap.set(g.id, g));
+      const joinedMemberships = membershipRows.filter(
+        (m) => m.status === "APPROVED" && m.role !== "OWNER"
+      );
+      const joinedResolved = await Promise.all(
+        joinedMemberships.map(async (m) => {
+          if (groupMap.has(m.groupId)) return groupMap.get(m.groupId)!;
+          try {
+            return await getGroup(m.groupId);
+          } catch {
+            return null;
+          }
+        })
+      );
+      setJoinedGroups(joinedResolved.filter((g): g is GroupResponse => g != null));
       const ownerGroupIds = membershipRows
         .filter((m) => m.role === "OWNER")
         .map((m) => m.groupId);
@@ -259,6 +279,94 @@ export default function GroupsPage() {
     );
   }
 
+  function renderGroupCard(group: GroupResponse, options?: { showOwnerActions?: boolean }) {
+    const showOwnerActions = options?.showOwnerActions ?? false;
+    const membership = membershipByGroup.get(group.id);
+    return (
+      <article
+        key={group.id}
+        className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+      >
+        <div className="flex items-start gap-3">
+          <GroupAvatar name={group.name} url={group.avatarUrl} size={52} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-900">{group.name}</p>
+            <p className="mt-1 line-clamp-2 text-xs text-slate-600">{group.description || "Chưa có mô tả."}</p>
+            {renderGroupMeta(group)}
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {showOwnerActions ? (
+            <>
+              <button
+                type="button"
+                onClick={() => openEditGroup(group)}
+                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Sửa
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteGroup(group.id, group.name)}
+                disabled={busyKey === `delete-${group.id}`}
+                className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+              >
+                {busyKey === `delete-${group.id}` ? "Đang xóa..." : "Xóa"}
+              </button>
+            </>
+          ) : null}
+          <Link
+            href={`/groups/${group.id}`}
+            className="rounded-xl bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-600"
+          >
+            Vào nhóm
+          </Link>
+          {!showOwnerActions && membership?.role !== "OWNER" ? (
+            <button
+              type="button"
+              onClick={() => setReportGroupId(group.id)}
+              className="rounded-xl border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+            >
+              Báo cáo
+            </button>
+          ) : null}
+        </div>
+        {showOwnerActions && pendingByGroup[group.id]?.length ? (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-800">
+              Yêu cầu chờ duyệt ({pendingByGroup[group.id].length})
+            </p>
+            <div className="mt-2 space-y-1">
+              {pendingByGroup[group.id].map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 text-xs">
+                  <span className="font-medium text-slate-800">{row.fullName || `User #${row.userId}`}</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleApprove(group.id, row.id)}
+                      disabled={busyKey === `approve-${row.id}`}
+                      className="rounded-md bg-emerald-500 px-2 py-1 text-white hover:bg-emerald-600 disabled:opacity-60"
+                    >
+                      Duyệt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleReject(group.id, row.id)}
+                      disabled={busyKey === `reject-${row.id}`}
+                      className="rounded-md bg-rose-500 px-2 py-1 text-white hover:bg-rose-600 disabled:opacity-60"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </article>
+    );
+  }
+
   return (
     <UserLayout>
       <section className="w-full animate-in fade-in slide-in-from-bottom-4 pb-20 pt-2 duration-500">
@@ -357,79 +465,49 @@ export default function GroupsPage() {
             </button>
           </div>
 
-          {!loading && ownedGroups.length > 0 ? (
+          {!loading ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm font-semibold text-slate-900">Nhóm của tôi</p>
-              <div className="mt-3 space-y-2">
-                {ownedGroups.map((group) => (
-                  <article key={group.id} className="rounded-xl border border-slate-200 px-3 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <GroupAvatar name={group.name} url={group.avatarUrl} size={48} />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-900">{group.name}</p>
-                          <p className="mt-0.5 text-xs text-slate-600">{group.description || "Chưa có mô tả."}</p>
-                          {renderGroupMeta(group)}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditGroup(group)}
-                          className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteGroup(group.id, group.name)}
-                          disabled={busyKey === `delete-${group.id}`}
-                          className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
-                        >
-                          {busyKey === `delete-${group.id}` ? "Đang xóa..." : "Xóa"}
-                        </button>
-                        <Link
-                          href={`/groups/${group.id}`}
-                          className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Vào nhóm
-                        </Link>
-                      </div>
+              <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50/80 p-1">
+                <button
+                  type="button"
+                  onClick={() => setMyGroupsTab("owned")}
+                  className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    myGroupsTab === "owned"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Nhóm của tôi ({ownedGroups.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMyGroupsTab("joined")}
+                  className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    myGroupsTab === "joined"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Nhóm đã tham gia ({joinedGroups.length})
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {myGroupsTab === "owned" ? (
+                  ownedGroups.length ? (
+                    ownedGroups.map((group) => renderGroupCard(group, { showOwnerActions: true }))
+                  ) : (
+                    <div className="col-span-full rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                      Bạn chưa sở hữu nhóm nào. Tạo nhóm mới ở form phía trên.
                     </div>
-                    {pendingByGroup[group.id]?.length ? (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                        <p className="text-xs font-semibold text-amber-800">
-                          Yêu cầu chờ duyệt ({pendingByGroup[group.id].length})
-                        </p>
-                        <div className="mt-2 space-y-1">
-                          {pendingByGroup[group.id].map((row) => (
-                            <div key={row.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 text-xs">
-                              <span className="font-medium text-slate-800">{row.fullName || `User #${row.userId}`}</span>
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => void handleApprove(group.id, row.id)}
-                                  disabled={busyKey === `approve-${row.id}`}
-                                  className="rounded-md bg-emerald-500 px-2 py-1 text-white hover:bg-emerald-600 disabled:opacity-60"
-                                >
-                                  Duyệt
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleReject(group.id, row.id)}
-                                  disabled={busyKey === `reject-${row.id}`}
-                                  className="rounded-md bg-rose-500 px-2 py-1 text-white hover:bg-rose-600 disabled:opacity-60"
-                                >
-                                  Từ chối
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
+                  )
+                ) : joinedGroups.length ? (
+                  joinedGroups.map((group) => renderGroupCard(group))
+                ) : (
+                  <div className="col-span-full rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                    Bạn chưa tham gia nhóm nào (ngoài nhóm bạn sở hữu).
+                  </div>
+                )}
               </div>
             </div>
           ) : null}

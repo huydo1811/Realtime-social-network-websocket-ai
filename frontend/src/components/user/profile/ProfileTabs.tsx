@@ -60,6 +60,7 @@ export default function ProfileTabs({
       {tab === "posts" ? (
         <ProfileFeedSection
           avatarUrl={avatarUrl}
+          composerName={profile.fullName}
           initialPosts={posts}
           onPostsChanged={onPostsChanged}
           source={feedSource}

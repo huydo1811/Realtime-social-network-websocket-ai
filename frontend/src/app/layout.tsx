@@ -4,6 +4,8 @@ import "./globals.css";
 import PresenceHeartbeat from "@/components/chat/PresenceHeartbeat";
 import CallProvider from "@/components/call/CallProvider";
 import { FloatingDmProvider } from "@/components/chat/FloatingDmProvider";
+import AppToastHost from "@/components/common/AppToastHost";
+import ModerationViolationModalHost from "@/components/common/ModerationViolationModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,7 +24,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="vi">
       <head>
         <link rel="icon" href="/favicon.ico?v=2" />
         <link rel="apple-touch-icon" href="/favicon.ico?v=2" />
@@ -33,6 +35,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CallProvider>
           <FloatingDmProvider>{children}</FloatingDmProvider>
         </CallProvider>
+        <AppToastHost />
+        <ModerationViolationModalHost />
       </body>
     </html>
   );

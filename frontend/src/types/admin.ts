@@ -44,3 +44,16 @@ export type AdminPageResponse<T> = {
   number: number;
   size: number;
 };
+
+export type AdminOperationAuditLog = {
+  id: number;
+  adminUserId: number;
+  action: string;
+  resourceType?: string | null;
+  resourceId?: string | null;
+  detail?: string | null;
+  requestPath?: string | null;
+  httpMethod?: string | null;
+  ipAddress?: string | null;
+  createdAt?: string | null;
+};

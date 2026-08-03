@@ -6,6 +6,21 @@ import type { AdminCallEvent, AdminCallSession } from "@/types/admin";
 
 const PAGE_SIZE = 12;
 
+const CALL_STATUS_LABELS: Record<string, string> = {
+  INVITING: "Đang mời",
+  RINGING: "Đang đổ chuông",
+  CONNECTED: "Đang kết nối",
+  ENDED: "Đã kết thúc",
+  CANCELED: "Đã hủy",
+  REJECTED: "Bị từ chối",
+  TIMEOUT: "Hết thời gian",
+};
+
+const MEDIA_TYPE_LABELS: Record<string, string> = {
+  AUDIO: "Thoại",
+  VIDEO: "Video",
+};
+
 function formatDate(value?: string | null): string {
   if (!value) return "--";
   const date = new Date(value);
@@ -64,7 +79,7 @@ export default function AdminCallPage() {
       const data = await adminApi.listCallEvents(callId);
       setEvents(data);
       if (data.length === 0) {
-        setNotice("Call này chưa có event log.");
+        setNotice("Cuộc gọi này chưa có nhật ký sự kiện.");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải timeline");
@@ -87,36 +102,42 @@ export default function AdminCallPage() {
           Theo dõi lịch sử call giữa user, lọc theo trạng thái, mở timeline event theo từng callId.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <input
-            value={userIdInput}
-            onChange={(e) => setUserIdInput(e.target.value)}
-            placeholder="Lọc theo userId (caller/callee)..."
-            className="h-10 min-w-[240px] rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-rose-300"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setPage(0);
-              setStatusFilter(e.target.value);
-            }}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-rose-300"
-          >
-            <option value="ALL">Mọi trạng thái</option>
-            <option value="INVITING">INVITING</option>
-            <option value="RINGING">RINGING</option>
-            <option value="CONNECTED">CONNECTED</option>
-            <option value="ENDED">ENDED</option>
-            <option value="CANCELED">CANCELED</option>
-            <option value="REJECTED">REJECTED</option>
-            <option value="TIMEOUT">TIMEOUT</option>
-          </select>
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+            ID người dùng
+            <input
+              value={userIdInput}
+              onChange={(e) => setUserIdInput(e.target.value)}
+              placeholder="Lọc theo caller hoặc callee..."
+              className="h-10 min-w-[240px] rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-rose-300"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+            Trạng thái cuộc gọi
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setPage(0);
+                setStatusFilter(e.target.value);
+              }}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-rose-300"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="INVITING">Đang mời</option>
+              <option value="RINGING">Đang đổ chuông</option>
+              <option value="CONNECTED">Đang kết nối</option>
+              <option value="ENDED">Đã kết thúc</option>
+              <option value="CANCELED">Đã hủy</option>
+              <option value="REJECTED">Bị từ chối</option>
+              <option value="TIMEOUT">Hết thời gian</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={() => void loadSessions(0)}
             disabled={loading}
-            className="rounded-xl bg-rose-500 px-4 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
+            className="self-end rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
           >
-            {loading ? "Đang tải..." : "Tìm"}
+            {loading ? "Đang tải..." : "Tìm kiếm"}
           </button>
         </div>
       </header>
@@ -158,11 +179,11 @@ export default function AdminCallPage() {
             <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="border-b text-left text-slate-500">
-                  <th className="py-2 pr-2">Call ID</th>
-                  <th className="py-2 pr-2">Caller</th>
-                  <th className="py-2 pr-2">Callee</th>
-                  <th className="py-2 pr-2">Media</th>
-                  <th className="py-2 pr-2">Status</th>
+                  <th className="py-2 pr-2">Mã cuộc gọi</th>
+                  <th className="py-2 pr-2">Người gọi</th>
+                  <th className="py-2 pr-2">Người nhận</th>
+                  <th className="py-2 pr-2">Loại media</th>
+                  <th className="py-2 pr-2">Trạng thái</th>
                   <th className="py-2 pr-2">Bắt đầu</th>
                   <th className="py-2 pr-2">Kết thúc</th>
                   <th className="py-2 pr-2">Hành động</th>
@@ -181,8 +202,8 @@ export default function AdminCallPage() {
                       <td className="py-2 pr-2 font-medium text-slate-700">{session.callId}</td>
                       <td className="py-2 pr-2">{session.callerId}</td>
                       <td className="py-2 pr-2">{session.calleeId}</td>
-                      <td className="py-2 pr-2">{session.mediaType}</td>
-                      <td className="py-2 pr-2">{session.status}</td>
+                      <td className="py-2 pr-2">{MEDIA_TYPE_LABELS[session.mediaType] ?? session.mediaType}</td>
+                      <td className="py-2 pr-2">{CALL_STATUS_LABELS[session.status] ?? session.status}</td>
                       <td className="py-2 pr-2">{formatDate(session.startedAt)}</td>
                       <td className="py-2 pr-2">{formatDate(session.endedAt)}</td>
                       <td className="py-2 pr-2">
@@ -205,7 +226,7 @@ export default function AdminCallPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Timeline sự kiện</h2>
           <p className="mt-1 text-xs text-slate-500">
-            {activeCallId ? `callId: ${activeCallId}` : "Chọn một call để xem log event"}
+            {activeCallId ? `Mã cuộc gọi: ${activeCallId}` : "Chọn một cuộc gọi để xem nhật ký sự kiện"}
           </p>
           <div className="mt-3 max-h-[56vh] space-y-2 overflow-y-auto pr-1">
             {loadingEvents ? (
@@ -219,7 +240,7 @@ export default function AdminCallPage() {
                     <p className="text-xs font-semibold text-slate-700">{event.eventType}</p>
                     <span className="text-[11px] text-slate-400">{formatDate(event.occurredAt)}</span>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">Actor: {event.actorId ?? "--"}</p>
+                  <p className="mt-1 text-xs text-slate-500">Người thực hiện: {event.actorId ?? "--"}</p>
                   <pre className="mt-2 overflow-x-auto rounded-md bg-white p-2 text-[11px] text-slate-600">
                     {event.payload || "{}"}
                   </pre>

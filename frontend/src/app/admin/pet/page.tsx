@@ -40,9 +40,35 @@ type UserPetsSummary = {
   pets: PetDto[];
 };
 
-const SPECIES_ICONS: Record<string, string> = {
-  DOG: "🐶", CAT: "🐱", BIRD: "🐦", RABBIT: "🐰",
-  HAMSTER: "🐹", FISH: "🐟", REPTILE: "🦎", OTHER: "🐾",
+const PET_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Đang hoạt động",
+  INACTIVE: "Ngừng hoạt động",
+  DECEASED: "Đã mất",
+};
+
+const SEVERITY_LABELS: Record<string, string> = {
+  LOW: "Thấp",
+  MODERATE: "Trung bình",
+  HIGH: "Cao",
+  EMERGENCY: "Khẩn cấp",
+};
+
+const WALK_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Đang đi",
+  FINISHED: "Hoàn thành",
+  CANCELLED: "Đã hủy",
+};
+
+const VISIBILITY_LABELS: Record<string, string> = {
+  PUBLIC: "Công khai",
+  FRIENDS: "Bạn bè",
+  PRIVATE: "Riêng tư",
+};
+
+const REMINDER_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Đang chờ",
+  COMPLETED: "Hoàn thành",
+  DISMISSED: "Đã bỏ qua",
 };
 
 const SPECIES_LABELS: Record<string, string> = {
@@ -55,26 +81,6 @@ function fmtDate(d: string) {
 }
 function fmtDateTime(d: string) {
   try { return format(parseISO(d), "dd/MM/yyyy HH:mm", { locale: vi }); } catch { return d; }
-}
-
-function Toast({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) {
-  return (
-    <div className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 rounded-2xl px-5 py-4 shadow-xl border ${
-      type === "success" ? "bg-white border-emerald-100 text-slate-700" : "bg-rose-50 border-rose-200 text-rose-800"
-    }`}>
-      <div className={`h-8 w-8 rounded-full flex items-center justify-center ${type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-rose-200 text-rose-700"}`}>
-        {type === "success"
-          ? <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-          : <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-        }
-      </div>
-      <div>
-        <h4 className="text-sm font-bold">{type === "success" ? "Thành công" : "Lỗi"}</h4>
-        <p className="text-xs font-medium opacity-90">{message}</p>
-      </div>
-      <button onClick={onClose} className="ml-2 text-slate-400 hover:text-slate-600">✕</button>
-    </div>
-  );
 }
 
 function SkeletonRows({ cols }: { cols: number }) {
@@ -113,6 +119,7 @@ export default function AdminPetPage() {
   const [petQuery, setPetQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PetDto[]>([]);
   const [searchingPets, setSearchingPets] = useState(false);
+  const [petSearchError, setPetSearchError] = useState<string | null>(null);
 
   // ── All-scope state (only enabled when explicitly toggled) ─────────────────
   const [allPets, setAllPets] = useState<PetDto[]>([]);
@@ -123,12 +130,6 @@ export default function AdminPetPage() {
   const [allPage, setAllPage] = useState(0);
   const [allTotalPages, setAllTotalPages] = useState(1);
   const [confirmAll, setConfirmAll] = useState(false);
-
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
-  };
 
   const pageSize = 15;
 
@@ -156,7 +157,8 @@ export default function AdminPetPage() {
         const items = (resp.content || []) as UserSearchItem[];
         setUserResults(items);
       } catch (e) {
-        console.error("Lỗi tìm user:", e);
+        setUserResults([]);
+        setError(e instanceof Error ? e.message : "Lỗi tìm người dùng");
       } finally {
         setSearchingUsers(false);
       }
@@ -216,11 +218,13 @@ export default function AdminPetPage() {
     if (!petQuery.trim()) { setSearchResults([]); return; }
     const t = setTimeout(async () => {
       setSearchingPets(true);
+      setPetSearchError(null);
       try {
         const r = await petApi.adminSearchPets(petQuery.trim(), 0, 30);
         setSearchResults(r.items);
       } catch (e) {
-        console.error(e);
+        setSearchResults([]);
+        setPetSearchError(e instanceof Error ? e.message : "Không thể tìm thú cưng");
       } finally {
         setSearchingPets(false);
       }
@@ -260,12 +264,12 @@ export default function AdminPetPage() {
   useEffect(() => { if (scope === "all" && confirmAll) void loadAllData(); }, [scope, confirmAll, loadAllData]);
 
   const statCards = stats ? [
-    { label: "Tổng thú cưng", value: stats.totalPets, icon: "🐾", color: "text-rose-500" },
-    { label: "Thú cưng đang hoạt động", value: stats.totalActivePets, icon: "✅", color: "text-emerald-500" },
-    { label: "Lịch đi dạo", value: stats.totalWalkSessions, icon: "🚶", color: "text-blue-500" },
-    { label: "Chẩn đoán AI", value: stats.totalDiagnoses, icon: "🤖", color: "text-violet-500" },
-    { label: "Nhắc nhở đang chờ", value: stats.pendingReminders, icon: "⏰", color: "text-amber-500" },
-    { label: "Nhắc nhở quá hạn", value: stats.overdueReminders, icon: "⚠️", color: "text-rose-600" },
+    { label: "Tổng thú cưng", value: stats.totalPets, color: "text-rose-500" },
+    { label: "Thú cưng đang hoạt động", value: stats.totalActivePets, color: "text-emerald-500" },
+    { label: "Lịch đi dạo", value: stats.totalWalkSessions, color: "text-blue-500" },
+    { label: "Chẩn đoán AI", value: stats.totalDiagnoses, color: "text-violet-500" },
+    { label: "Nhắc nhở đang chờ", value: stats.pendingReminders, color: "text-amber-500" },
+    { label: "Nhắc nhở quá hạn", value: stats.overdueReminders, color: "text-rose-600" },
   ] : Array(6).fill(null);
 
   const TABS: { id: Tab; label: string }[] = [
@@ -301,7 +305,9 @@ export default function AdminPetPage() {
                       <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-100">
                         {pet.avatarUrl
                           ? <Image src={pet.avatarUrl} alt={pet.name} fill className="object-cover" unoptimized />
-                          : <span className="absolute inset-0 flex items-center justify-center text-lg">{SPECIES_ICONS[pet.species] ?? "🐾"}</span>
+                          : <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-500">
+                              {SPECIES_LABELS[pet.species]?.slice(0, 2) ?? "TC"}
+                            </span>
                         }
                       </div>
                       <div>
@@ -316,14 +322,15 @@ export default function AdminPetPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className="text-base">{SPECIES_ICONS[pet.species] ?? "🐾"}</span>
-                    <p className="text-xs text-slate-500">{SPECIES_LABELS[pet.species] ?? pet.species}</p>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                      {SPECIES_LABELS[pet.species] ?? pet.species}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                       pet.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" :
                       "bg-slate-100 text-slate-600"
-                    }`}>{pet.status}</span>
+                    }`}>{PET_STATUS_LABELS[pet.status] ?? pet.status}</span>
                   </td>
                   <td className="px-4 py-3 text-center text-slate-700">{pet.weightKg != null ? `${pet.weightKg} kg` : "—"}</td>
                   <td className="px-4 py-3 text-right text-slate-500 text-xs">{pet.createdAt ? fmtDate(pet.createdAt) : "—"}</td>
@@ -370,7 +377,7 @@ export default function AdminPetPage() {
                       d.severity === "HIGH" ? "bg-rose-100 text-rose-700" :
                       d.severity === "MODERATE" ? "bg-amber-100 text-amber-700" :
                       "bg-emerald-100 text-emerald-700"
-                    }`}>{d.severity}</span>
+                    }`}>{SEVERITY_LABELS[d.severity] ?? d.severity}</span>
                   </td>
                   <td className="px-4 py-3 text-center"><span className="font-bold text-slate-900">{d.confidenceScore}%</span></td>
                   <td className="px-4 py-3"><p className="max-w-xs truncate text-xs text-slate-600">{d.symptomsText}</p></td>
@@ -418,12 +425,12 @@ export default function AdminPetPage() {
                       w.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" :
                       w.status === "FINISHED" ? "bg-blue-100 text-blue-700" :
                       "bg-slate-100 text-slate-600"
-                    }`}>{w.status}</span>
+                    }`}>{WALK_STATUS_LABELS[w.status] ?? w.status}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                       w.visibility === "PUBLIC" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"
-                    }`}>{w.visibility}</span>
+                    }`}>{VISIBILITY_LABELS[w.visibility] ?? w.visibility}</span>
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-slate-500">{w.startedAt ? fmtDateTime(w.startedAt) : "—"}</td>
                   <td className="px-4 py-3 text-right text-xs text-slate-500">{w.endedAt ? fmtDateTime(w.endedAt) : "—"}</td>
@@ -476,7 +483,7 @@ export default function AdminPetPage() {
                         r.status === "DISMISSED" ? "bg-slate-100 text-slate-600" :
                         isOverdue ? "bg-rose-100 text-rose-700" :
                         "bg-amber-100 text-amber-700"
-                      }`}>{isOverdue ? "QUÁ HẠN" : r.status}</span>
+                      }`}>{isOverdue ? "QUÁ HẠN" : (REMINDER_STATUS_LABELS[r.status] ?? r.status)}</span>
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-slate-500">{fmtDate(r.dueDate)}</td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">{r.createdAt ? fmtDateTime(r.createdAt) : "—"}</td>
@@ -538,10 +545,7 @@ export default function AdminPetPage() {
             </div>
           ) : (
             <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-slate-500">{card.label}</p>
-                <span className="text-base">{card.icon}</span>
-              </div>
+              <p className="text-xs font-medium text-slate-500">{card.label}</p>
               <p className={`mt-1.5 text-2xl font-bold ${card.color}`}>
                 {loadingStats ? "—" : card.value.toLocaleString("vi")}
               </p>
@@ -605,7 +609,10 @@ export default function AdminPetPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-900">{u.fullName || "(chưa đặt tên)"}</p>
-                        <p className="truncate text-xs text-slate-500">{u.email}</p>
+                        <p className="truncate text-xs text-slate-500">
+                          {u.username ? `@${u.username}` : "—"}
+                          {u.email ? ` · ${u.email}` : ""}
+                        </p>
                       </div>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         u.role === "ADMIN" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"
@@ -646,9 +653,9 @@ export default function AdminPetPage() {
                   <p className="text-sm text-slate-500">@{selectedUser.username}</p>
                 </div>
                 <div className="flex flex-wrap gap-3 text-xs">
-                  <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">🐾 {selectedUser.totalPets} pet</span>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">✅ {selectedUser.activePets} active</span>
-                  <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">⏰ {selectedUser.pendingReminders} reminder</span>
+                  <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{selectedUser.totalPets} thú cưng</span>
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">{selectedUser.activePets} đang hoạt động</span>
+                  <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">{selectedUser.pendingReminders} nhắc nhở</span>
                 </div>
                 <Link
                   href={`/admin/user`}
@@ -700,7 +707,10 @@ export default function AdminPetPage() {
             </div>
             <p className="mt-2 text-[11px] text-slate-400">Tip: dùng cho case điều tra pet cụ thể. Để quản lý theo user, chuyển sang tab "Theo người dùng".</p>
           </div>
-          {searchingPets && <p className="text-sm text-slate-400">Đang tìm…</p>}
+            {petSearchError ? (
+              <p className="mt-2 text-sm text-rose-600">{petSearchError}</p>
+            ) : null}
+            {searchingPets && <p className="text-sm text-slate-400">Đang tìm…</p>}
           {renderPetsTable(searchResults, searchingPets)}
         </div>
       )}
@@ -711,7 +721,6 @@ export default function AdminPetPage() {
           {!confirmAll ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
               <div className="flex items-start gap-3">
-                <span className="text-2xl">⚠️</span>
                 <div className="flex-1">
                   <h3 className="text-sm font-bold text-amber-900">Chế độ toàn hệ thống — không khuyến khích</h3>
                   <p className="mt-1 text-sm text-amber-800">
@@ -752,7 +761,6 @@ export default function AdminPetPage() {
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </main>
   );
 }

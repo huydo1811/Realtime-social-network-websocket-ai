@@ -20,11 +20,16 @@ public class SearchUsersUseCase {
     }
 
     public Page<User> execute(String email, String fullName, Boolean isActive, Pageable pageable) {
+        return execute(email, fullName, null, isActive, pageable);
+    }
+
+    public Page<User> execute(String email, String fullName, String q, Boolean isActive, Pageable pageable) {
         String e = normalize(email);
         String f = normalize(fullName);
+        String query = normalize(q);
         Pageable pg = pageable != null ? pageable : PageRequest.of(DEFAULT_PAGE, DEFAULT_SIZE);
         try {
-            return userRepository.search(e, f, isActive, pg);
+            return userRepository.search(e, f, query, isActive, pg);
         } catch (DataAccessException ex) {
             throw new RuntimeException("Failed to search users", ex);
         }

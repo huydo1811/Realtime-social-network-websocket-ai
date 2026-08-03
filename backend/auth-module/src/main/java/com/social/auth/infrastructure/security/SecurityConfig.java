@@ -23,12 +23,16 @@ import org.springframework.web.servlet.handler.HandlerMappingIntrospector;
 public class SecurityConfig {
 
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
+  private final AdminOperationAuditFilter adminOperationAuditFilter;
 
   @Value("${app.cors.allowed-origins:http://localhost:3000}")
   private String allowedOrigins;
 
-  public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+  public SecurityConfig(
+      JwtAuthenticationFilter jwtAuthenticationFilter,
+      AdminOperationAuditFilter adminOperationAuditFilter) {
     this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    this.adminOperationAuditFilter = adminOperationAuditFilter;
   }
 
   @Bean
@@ -61,6 +65,7 @@ public class SecurityConfig {
         .requestMatchers(mvc.pattern(HttpMethod.GET, "/users")).hasAnyRole("USER", "ADMIN")
         .requestMatchers(mvc.pattern(HttpMethod.GET, "/users/{id}")).hasAnyRole("USER", "ADMIN")
         .requestMatchers(mvc.pattern("/admin/moderation/**")).hasRole("ADMIN")
+        .requestMatchers(mvc.pattern("/admin/audit-logs"), mvc.pattern("/admin/audit-logs/**")).hasRole("ADMIN")
         .requestMatchers(mvc.pattern("/groups/admin"), mvc.pattern("/groups/admin/**")).hasRole("ADMIN")
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         .anyRequest().authenticated()
@@ -69,6 +74,7 @@ public class SecurityConfig {
       .formLogin(form -> form.disable());
 
     http.addFilterBefore(jwtAuthenticationFilter, AnonymousAuthenticationFilter.class);
+    http.addFilterAfter(adminOperationAuditFilter, JwtAuthenticationFilter.class);
     return http.build();
   }
 

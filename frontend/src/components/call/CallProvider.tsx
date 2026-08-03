@@ -81,9 +81,20 @@ const IDLE: CallInfo = {
   conversationId: null,
 };
 
+// STUN for host discovery; Open Relay Project TURN for NAT-restricted networks (free public demo).
+// For production, use your own TURN credentials (e.g. Twilio, Metered.ca paid tier).
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayprojectsecret",
+  },
 ];
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -93,8 +104,11 @@ export default function CallProvider({ children }: { children: React.ReactNode }
   const [ringingSecs, setRingingSecs] = useState(0);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
 
@@ -107,8 +121,12 @@ export default function CallProvider({ children }: { children: React.ReactNode }
   const pcSetupDoneRef = useRef(false);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const ringtoneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ringDeadlineRef = useRef<number | null>(null);
+  const ringTimeoutIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const interactionBoundRef = useRef(false);
 
   useEffect(() => {
@@ -132,13 +150,34 @@ export default function CallProvider({ children }: { children: React.ReactNode }
     timerRef.current = setInterval(() => setConnectedSecs((s) => s + 1), 1000);
   }, [stopTimer]);
 
+  const applyLocalMuteState = useCallback((muted: boolean) => {
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !muted;
+    });
+    peerConnectionRef.current?.getSenders().forEach((sender) => {
+      if (sender.track?.kind === "audio") {
+        sender.track.enabled = !muted;
+      }
+    });
+  }, []);
+
+  const clearRingDeadline = useCallback(() => {
+    ringDeadlineRef.current = null;
+    if (ringTimeoutIntervalRef.current) {
+      clearInterval(ringTimeoutIntervalRef.current);
+      ringTimeoutIntervalRef.current = null;
+    }
+  }, []);
+
   // ─── WebRTC cleanup ──────────────────────────────────────────────────────────
   const cleanupWebRTC = useCallback(() => {
     setLocalStream((prev) => {
       prev?.getTracks().forEach((t) => t.stop());
       return null;
     });
+    localStreamRef.current = null;
     setRemoteStream(null);
+    remoteStreamRef.current = null;
     pendingIceCandidatesRef.current = [];
     pendingWebRtcEventsRef.current = [];
     pcSetupDoneRef.current = false;
@@ -152,6 +191,8 @@ export default function CallProvider({ children }: { children: React.ReactNode }
       peerConnectionRef.current = null;
     }
     setIsMuted(false);
+    isMutedRef.current = false;
+    setIsSpeakerMuted(false);
     setIsCameraOff(false);
   }, []);
 
@@ -212,11 +253,12 @@ export default function CallProvider({ children }: { children: React.ReactNode }
   const resetToIdle = useCallback(() => {
     stopTimer();
     stopRingtone();
+    clearRingDeadline();
     cleanupWebRTC();
     setIsMinimized(false);
     setMediaError(null);
     setCall(IDLE);
-  }, [stopTimer, stopRingtone, cleanupWebRTC, setCall]);
+  }, [stopTimer, stopRingtone, clearRingDeadline, cleanupWebRTC, setCall]);
 
   const resolveConversationId = useCallback(async (info: CallInfo): Promise<number | null> => {
     if (info.conversationId) return info.conversationId;
@@ -254,6 +296,33 @@ export default function CallProvider({ children }: { children: React.ReactNode }
     [resolveConversationId]
   );
 
+  const startRingDeadline = useCallback(() => {
+    clearRingDeadline();
+    ringDeadlineRef.current = Date.now() + 10000;
+    ringTimeoutIntervalRef.current = setInterval(() => {
+      const deadline = ringDeadlineRef.current;
+      if (!deadline || Date.now() < deadline) return;
+      const cur = callInfoRef.current;
+      if (cur.isCallee) {
+        clearRingDeadline();
+        return;
+      }
+      if (cur.status !== "CALLING" && cur.status !== "RINGING") {
+        clearRingDeadline();
+        return;
+      }
+      void appendCallLog(
+        cur,
+        `📞 Không có người nhận sau 10 giây — tự kết thúc cuộc gọi với ${cur.peerName}.`
+      );
+      if (cur.callId) {
+        sendCallSignal({ eventType: "CALL_TIMEOUT", callId: cur.callId, payload: {} });
+      }
+      resetToIdle();
+      clearRingDeadline();
+    }, 500);
+  }, [appendCallLog, clearRingDeadline, resetToIdle]);
+
   // ─── Process a queued/incoming WebRTC event against an active PC ─────────────
   const applyWebRtcEvent = useCallback(async (event: CallRealtimeEvent) => {
     const pc = peerConnectionRef.current;
@@ -263,7 +332,7 @@ export default function CallProvider({ children }: { children: React.ReactNode }
       const sdp = event.payload.sdp as RTCSessionDescriptionInit | undefined;
       if (!sdp) return;
       try {
-        if (pc.signalingState !== "stable" && pc.signalingState !== "have-local-offer") {
+        if (pc.signalingState !== "stable") {
           return;
         }
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -317,6 +386,17 @@ export default function CallProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  const addRemoteTrack = useCallback((track: MediaStreamTrack) => {
+    if (!remoteStreamRef.current) {
+      remoteStreamRef.current = new MediaStream();
+      setRemoteStream(remoteStreamRef.current);
+    }
+    const rs = remoteStreamRef.current;
+    if (!rs.getTracks().some((t) => t.id === track.id)) {
+      rs.addTrack(track);
+    }
+  }, []);
+
   // ─── Setup peer connection ───────────────────────────────────────────────────
   const setupPeerConnection = useCallback(
     (callId: string, mediaType: "voice" | "video", isCallee: boolean, stream: MediaStream) => {
@@ -328,9 +408,12 @@ export default function CallProvider({ children }: { children: React.ReactNode }
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       pc.ontrack = (event) => {
-        const [rs] = event.streams;
-        if (rs) {
-          setRemoteStream((prev) => (prev?.id === rs.id ? prev : rs));
+        if (event.streams.length > 0) {
+          event.streams.forEach((s) => {
+            s.getTracks().forEach((track) => addRemoteTrack(track));
+          });
+        } else if (event.track) {
+          addRemoteTrack(event.track);
         }
       };
 
@@ -345,16 +428,20 @@ export default function CallProvider({ children }: { children: React.ReactNode }
       };
 
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
-          console.warn("[CallProvider] ICE:", pc.iceConnectionState);
+        const state = pc.iceConnectionState;
+        if (state === "disconnected" || state === "failed") {
+          console.warn("[CallProvider] ICE:", state);
+        }
+        if (state === "failed") {
+          pc.restartIce();
         }
       };
 
-      // Caller creates offer
+      // Caller creates offer after tracks are added
       if (!isCallee) {
-        pc.onnegotiationneeded = async () => {
+        void (async () => {
           try {
-            const offer = await pc.createOffer();
+            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: mediaType === "video" });
             await pc.setLocalDescription(offer);
             sendCallSignal({
               eventType: "WEBRTC_OFFER",
@@ -364,7 +451,7 @@ export default function CallProvider({ children }: { children: React.ReactNode }
           } catch (err) {
             console.error("[CallProvider] createOffer error:", err);
           }
-        };
+        })();
       }
 
       pcSetupDoneRef.current = true;
@@ -375,12 +462,35 @@ export default function CallProvider({ children }: { children: React.ReactNode }
         void applyWebRtcEvent(e);
       }
     },
-    [applyWebRtcEvent]
+    [applyWebRtcEvent, addRemoteTrack]
   );
 
   // ─── Start WebRTC (get media + setup PC) ─────────────────────────────────────
   const startWebRTC = useCallback(
     async (callId: string, mediaType: "voice" | "video", isCallee: boolean) => {
+      async function acquireMediaStream(type: "voice" | "video"): Promise<MediaStream> {
+        localStreamRef.current?.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+
+        const primary: MediaStreamConstraints = {
+          audio: true,
+          video: type === "video",
+        };
+
+        try {
+          return await navigator.mediaDevices.getUserMedia(primary);
+        } catch (err) {
+          const name = err instanceof DOMException ? err.name : "";
+          if (name !== "NotReadableError") throw err;
+          if (type === "voice") {
+            return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          }
+          const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          audioOnly.getTracks().forEach((track) => track.stop());
+          return navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        }
+      }
+
       try {
         if (
           typeof window !== "undefined" &&
@@ -398,12 +508,16 @@ export default function CallProvider({ children }: { children: React.ReactNode }
           return;
         }
         setMediaError(null);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: mediaType === "video",
-        });
+        const stream = await acquireMediaStream(mediaType);
+        if (isMutedRef.current) {
+          stream.getAudioTracks().forEach((track) => {
+            track.enabled = false;
+          });
+        }
         setLocalStream(stream);
+        localStreamRef.current = stream;
         setupPeerConnection(callId, mediaType, isCallee, stream);
+        applyLocalMuteState(isMutedRef.current);
       } catch (err) {
         console.error("[CallProvider] getUserMedia failed:", err);
         const name = err instanceof DOMException ? err.name : "";
@@ -412,14 +526,22 @@ export default function CallProvider({ children }: { children: React.ReactNode }
         } else if (name === "NotFoundError") {
           setMediaError("Không tìm thấy mic hoặc camera phù hợp trên thiết bị.");
         } else if (name === "NotReadableError") {
-          setMediaError("Mic/cam đang bị ứng dụng khác chiếm dụng.");
+          setMediaError(
+            "Mic/cam đang bị ứng dụng khác dùng. Đóng Zoom/Teams/trình duyệt khác rồi thử lại."
+          );
         } else {
           setMediaError("Không thể mở mic/cam. Kiểm tra quyền truy cập và thử lại.");
         }
       }
     },
-    [setupPeerConnection]
+    [applyLocalMuteState, setupPeerConnection]
   );
+
+  const retryMediaConnection = useCallback(() => {
+    const cur = callInfoRef.current;
+    if (cur.status !== "CONNECTED" || !cur.callId) return;
+    void startWebRTC(cur.callId, cur.mediaType, cur.isCallee);
+  }, [startWebRTC]);
 
   // ─── Event handler ──────────────────────────────────────────────────────────
   const handleEvent = useCallback(
@@ -473,6 +595,7 @@ export default function CallProvider({ children }: { children: React.ReactNode }
             cur.status !== "IDLE" &&
             cur.status !== "CONNECTED"
           ) {
+            clearRingDeadline();
             const resolved = { ...cur, status: "CONNECTED" as const, callId: event.callId || cur.callId };
             setCall(resolved);
             startTimer();
@@ -539,7 +662,7 @@ export default function CallProvider({ children }: { children: React.ReactNode }
           break;
       }
     },
-    [appendCallLog, resetToIdle, setCall, startTimer, startWebRTC, applyWebRtcEvent]
+    [appendCallLog, clearRingDeadline, resetToIdle, setCall, startTimer, startWebRTC, applyWebRtcEvent]
   );
 
   // ─── Init socket ────────────────────────────────────────────────────────────
@@ -586,10 +709,40 @@ export default function CallProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      void remoteVideoRef.current.play().catch(() => undefined);
+      if (callInfo.mediaType === "video") {
+        remoteVideoRef.current.srcObject = remoteStream;
+        void remoteVideoRef.current.play().catch(() => undefined);
+      } else {
+        remoteVideoRef.current.srcObject = null;
+      }
     }
-  }, [remoteStream]);
+  }, [remoteStream, callInfo.mediaType]);
+
+  useEffect(() => {
+    if (remoteAudioRef.current) {
+      if (callInfo.mediaType === "voice") {
+        remoteAudioRef.current.srcObject = remoteStream;
+        void remoteAudioRef.current.play().catch(() => undefined);
+      } else {
+        remoteAudioRef.current.srcObject = null;
+      }
+    }
+  }, [remoteStream, callInfo.mediaType]);
+
+  useEffect(() => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = isSpeakerMuted;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = isSpeakerMuted;
+    }
+  }, [isSpeakerMuted, remoteStream, callInfo.mediaType]);
+
+  useEffect(() => {
+    if (localStream) {
+      applyLocalMuteState(isMutedRef.current);
+    }
+  }, [localStream, applyLocalMuteState]);
 
   useEffect(() => {
     if (localVideoRef.current) {
@@ -632,8 +785,9 @@ export default function CallProvider({ children }: { children: React.ReactNode }
         deviceId: `web-${Date.now()}`,
         payload: {},
       });
+      startRingDeadline();
     },
-    [setCall]
+    [setCall, startRingDeadline]
   );
 
   const acceptCall = useCallback(() => {
@@ -647,10 +801,11 @@ export default function CallProvider({ children }: { children: React.ReactNode }
       deviceId: `web-${Date.now()}`,
       payload: {},
     });
+    clearRingDeadline();
     setCall({ ...cur, status: "CONNECTED" });
     startTimer();
     void startWebRTC(cur.callId, cur.mediaType, true);
-  }, [setCall, startTimer, startWebRTC]);
+  }, [clearRingDeadline, setCall, startTimer, startWebRTC]);
 
   const rejectCall = useCallback(() => {
     const cur = callInfoRef.current;
@@ -686,13 +841,16 @@ export default function CallProvider({ children }: { children: React.ReactNode }
   }, [appendCallLog, connectedSecs, resetToIdle]);
 
   const toggleMute = useCallback(() => {
-    const stream = localStream;
-    if (!stream) return;
-    const audio = stream.getAudioTracks()[0];
-    if (!audio) return;
-    audio.enabled = !audio.enabled;
-    setIsMuted(!audio.enabled);
-  }, [localStream]);
+    const muted = !isMutedRef.current;
+    applyLocalMuteState(muted);
+    isMutedRef.current = muted;
+    setIsMuted(muted);
+    setMediaError(null);
+  }, [applyLocalMuteState]);
+
+  const toggleSpeaker = useCallback(() => {
+    setIsSpeakerMuted((prev) => !prev);
+  }, []);
 
   const toggleCamera = useCallback(() => {
     const stream = localStream;
@@ -719,6 +877,23 @@ export default function CallProvider({ children }: { children: React.ReactNode }
     const id = setInterval(() => setRingingSecs((prev) => prev + 1), 1000);
     return () => clearInterval(id);
   }, [callInfo.status]);
+
+  // Tự kết thúc nếu không nhấc máy sau 10 giây (chỉ phía người gọi) — deadline cố định từ lúc CALLING
+
+  const mediaErrorBanner = mediaError ? (
+    <div className="mb-5 max-w-md rounded-xl border border-amber-300/40 bg-amber-500/20 px-4 py-2 text-center text-xs text-amber-100">
+      <p>{mediaError}</p>
+      {callInfo.status === "CONNECTED" && callInfo.callId ? (
+        <button
+          type="button"
+          onClick={retryMediaConnection}
+          className="mt-2 rounded-lg border border-amber-200/60 bg-amber-500/30 px-3 py-1 text-[11px] font-semibold text-amber-50 hover:bg-amber-500/40"
+        >
+          Thử lại kết nối media
+        </button>
+      ) : null}
+    </div>
+  ) : null;
 
   const dialingScreen =
     (callInfo.status === "CALLING" ||
@@ -753,11 +928,7 @@ export default function CallProvider({ children }: { children: React.ReactNode }
               · {formatDuration(ringingSecs)}
             </p>
           </div>
-          {mediaError ? (
-            <p className="mb-5 max-w-md rounded-xl border border-amber-300/40 bg-amber-500/20 px-4 py-2 text-center text-xs text-amber-100">
-              {mediaError}
-            </p>
-          ) : null}
+          {mediaErrorBanner}
 
           <div className="relative mb-10">
             <span className="absolute -inset-12 rounded-full border border-white/20 animate-ping [animation-duration:2s]" />
@@ -799,18 +970,26 @@ export default function CallProvider({ children }: { children: React.ReactNode }
         <div className="relative flex-1 bg-black overflow-hidden">
           {mediaError ? (
             <div className="absolute left-4 right-4 top-16 z-20 rounded-xl border border-amber-300/40 bg-amber-500/20 px-4 py-2 text-center text-xs text-amber-100">
-              {mediaError}
+              <p>{mediaError}</p>
+              {callInfo.callId ? (
+                <button
+                  type="button"
+                  onClick={retryMediaConnection}
+                  className="mt-2 rounded-lg border border-amber-200/60 bg-amber-500/30 px-3 py-1 text-[11px] font-semibold text-amber-50 hover:bg-amber-500/40"
+                >
+                  Thử lại kết nối media
+                </button>
+              ) : null}
             </div>
           ) : null}
-          {/* Remote video */}
-          {remoteStream ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
+          {/* Remote video — always mounted so ref binds before stream arrives */}
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className={`absolute inset-0 w-full h-full object-cover ${remoteStream ? "" : "opacity-0 pointer-events-none"}`}
+          />
+          {!remoteStream && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-800 to-slate-900 gap-4">
               <div className="w-24 h-24 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white text-4xl font-bold shadow-2xl">
                 {avatarLetter}
@@ -858,23 +1037,26 @@ export default function CallProvider({ children }: { children: React.ReactNode }
             )}
           </div>
 
-          {/* Bottom controls */}
+          {/* Bottom controls: mic | hangup | speaker (+ camera nếu video) */}
           <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
-          <div className="absolute inset-x-0 bottom-0 px-6 pb-8 flex items-center justify-center gap-4 pointer-events-auto">
-            <CallControlBtn active={isMuted} onClick={toggleMute} title={isMuted ? "Bật mic" : "Tắt mic"}>
+          <div className="absolute inset-x-0 bottom-0 px-6 pb-8 flex items-end justify-center gap-6 pointer-events-auto">
+            <CallControlBtn active={isMuted} onClick={toggleMute} label={isMuted ? "Bật mic" : "Tắt mic"}>
               {isMuted ? <MicOffIcon /> : <MicOnIcon />}
-            </CallControlBtn>
-            <CallControlBtn active={isCameraOff} onClick={toggleCamera} title={isCameraOff ? "Bật camera" : "Tắt camera"}>
-              {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
             </CallControlBtn>
             <button
               type="button"
               onClick={endCall}
               title="Kết thúc"
-              className="cursor-pointer w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 active:scale-90 flex items-center justify-center text-white shadow-2xl transition"
+              className="cursor-pointer w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 active:scale-90 flex items-center justify-center text-white shadow-2xl transition mb-1"
             >
               <HangUpIcon />
             </button>
+            <CallControlBtn active={isSpeakerMuted} onClick={toggleSpeaker} label={isSpeakerMuted ? "Bật loa" : "Tắt loa"}>
+              {isSpeakerMuted ? <SpeakerOffIcon /> : <SpeakerOnIcon />}
+            </CallControlBtn>
+            <CallControlBtn active={isCameraOff} onClick={toggleCamera} label={isCameraOff ? "Bật camera" : "Tắt camera"}>
+              {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
+            </CallControlBtn>
           </div>
         </div>
       ) : (
@@ -882,7 +1064,16 @@ export default function CallProvider({ children }: { children: React.ReactNode }
         <div className="relative flex-1 flex flex-col items-center justify-between bg-gradient-to-b from-slate-800 via-slate-900 to-black px-6 py-10">
           {mediaError ? (
             <div className="absolute left-4 right-4 top-16 z-20 rounded-xl border border-amber-300/40 bg-amber-500/20 px-4 py-2 text-center text-xs text-amber-100">
-              {mediaError}
+              <p>{mediaError}</p>
+              {callInfo.callId ? (
+                <button
+                  type="button"
+                  onClick={retryMediaConnection}
+                  className="mt-2 rounded-lg border border-amber-200/60 bg-amber-500/30 px-3 py-1 text-[11px] font-semibold text-amber-50 hover:bg-amber-500/40"
+                >
+                  Thử lại kết nối media
+                </button>
+              ) : null}
             </div>
           ) : null}
           <div className="absolute top-5 left-5">
@@ -912,19 +1103,22 @@ export default function CallProvider({ children }: { children: React.ReactNode }
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-5">
-            <CallControlBtn active={isMuted} onClick={toggleMute} title={isMuted ? "Bật mic" : "Tắt mic"}>
+          {/* Controls: mic | hangup | speaker */}
+          <div className="flex items-end justify-center gap-6">
+            <CallControlBtn active={isMuted} onClick={toggleMute} label={isMuted ? "Bật mic" : "Tắt mic"}>
               {isMuted ? <MicOffIcon /> : <MicOnIcon />}
             </CallControlBtn>
             <button
               type="button"
               onClick={endCall}
               title="Kết thúc"
-              className="cursor-pointer w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 active:scale-90 flex items-center justify-center text-white shadow-2xl transition"
+              className="cursor-pointer w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 active:scale-90 flex items-center justify-center text-white shadow-2xl transition mb-1"
             >
               <HangUpIcon />
             </button>
+            <CallControlBtn active={isSpeakerMuted} onClick={toggleSpeaker} label={isSpeakerMuted ? "Bật loa" : "Tắt loa"}>
+              {isSpeakerMuted ? <SpeakerOffIcon /> : <SpeakerOnIcon />}
+            </CallControlBtn>
           </div>
         </div>
       )}
@@ -934,6 +1128,8 @@ export default function CallProvider({ children }: { children: React.ReactNode }
   return (
     <CallContext.Provider value={{ callInfo, startCall }}>
       {children}
+      {/* Hidden remote audio — required for voice calls; also backs video call audio */}
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
       {dialingScreen}
       {connectedScreen}
       {callInfo.status !== "IDLE" && isMinimized && (
@@ -956,12 +1152,15 @@ export default function CallProvider({ children }: { children: React.ReactNode }
               Quay lại
             </button>
           </div>
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <CallControlBtn active={isMuted} onClick={toggleMute} title={isMuted ? "Bật mic" : "Tắt mic"}>
+          <div className="mt-3 flex items-end justify-end gap-2">
+            <CallControlBtn active={isMuted} onClick={toggleMute} label={isMuted ? "Bật mic" : "Tắt mic"} compact>
               {isMuted ? <MicOffIcon /> : <MicOnIcon />}
             </CallControlBtn>
+            <CallControlBtn active={isSpeakerMuted} onClick={toggleSpeaker} label={isSpeakerMuted ? "Bật loa" : "Tắt loa"} compact>
+              {isSpeakerMuted ? <SpeakerOffIcon /> : <SpeakerOnIcon />}
+            </CallControlBtn>
             {callInfo.mediaType === "video" && callInfo.status === "CONNECTED" ? (
-              <CallControlBtn active={isCameraOff} onClick={toggleCamera} title={isCameraOff ? "Bật camera" : "Tắt camera"}>
+              <CallControlBtn active={isCameraOff} onClick={toggleCamera} label={isCameraOff ? "Bật cam" : "Tắt cam"} compact>
                 {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
               </CallControlBtn>
             ) : null}
@@ -984,25 +1183,30 @@ export default function CallProvider({ children }: { children: React.ReactNode }
 function CallControlBtn({
   active,
   onClick,
-  title,
+  label,
+  compact,
   children,
 }: {
   active: boolean;
   onClick: () => void;
-  title: string;
+  label: string;
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={`cursor-pointer w-14 h-14 rounded-full flex items-center justify-center transition active:scale-90 ${
-        active ? "bg-white text-slate-900 shadow-xl" : "bg-white/20 hover:bg-white/30 text-white"
-      }`}
-    >
-      {children}
-    </button>
+    <div className="flex flex-col items-center gap-1">
+      <button
+        type="button"
+        onClick={onClick}
+        title={label}
+        className={`cursor-pointer ${compact ? "w-10 h-10" : "w-14 h-14"} rounded-full flex items-center justify-center transition active:scale-90 ${
+          active ? "bg-white text-slate-900 shadow-xl" : "bg-white/20 hover:bg-white/30 text-white"
+        }`}
+      >
+        {children}
+      </button>
+      {!compact && <span className="text-[11px] text-white/80 font-medium">{label}</span>}
+    </div>
   );
 }
 
@@ -1015,6 +1219,23 @@ function MicOnIcon() {
 }
 
 function MicOffIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+    </svg>
+  );
+}
+
+function SpeakerOnIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M12 6.5v11M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+    </svg>
+  );
+}
+
+function SpeakerOffIcon() {
   return (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />

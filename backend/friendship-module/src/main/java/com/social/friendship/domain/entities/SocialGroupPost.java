@@ -78,6 +78,16 @@ public class SocialGroupPost {
         reviewedAt = LocalDateTime.now();
     }
 
+    public void updateContent(String content, String mediaUrl, boolean needReApproval) {
+        this.content = content == null ? "" : content.trim();
+        this.mediaUrl = mediaUrl == null || mediaUrl.isBlank() ? null : mediaUrl.trim();
+        if (needReApproval) {
+            this.status = GroupPostStatus.PENDING;
+            this.reviewedBy = null;
+            this.reviewedAt = null;
+        }
+    }
+
     @PrePersist
     public void prePersist() {
         LocalDateTime now = LocalDateTime.now();

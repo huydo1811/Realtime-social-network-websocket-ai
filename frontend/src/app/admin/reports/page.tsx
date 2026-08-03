@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { postApi } from "@/lib/api/postApi";
 import type { ContentReportDto, ContentReportStatus } from "@/types/post";
 import ReportRejectModal from "@/components/user/profile/ReportRejectModal";
@@ -12,6 +13,17 @@ function formatDate(value?: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--";
   return date.toLocaleString("vi-VN");
+}
+
+function csvEscape(input: string): string {
+  const value = input.replace(/"/g, "\"\"");
+  return `"${value}"`;
+}
+
+function reportStatusLabel(status: ContentReportStatus): string {
+  if (status === "PENDING") return "Chờ xử lý";
+  if (status === "RESOLVED") return "Đã duyệt";
+  return "Từ chối";
 }
 
 export default function AdminReportsPage() {
@@ -29,6 +41,7 @@ export default function AdminReportsPage() {
     accept?: boolean;
   }>({ open: false });
   const [resolveBusy, setResolveBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   async function load(nextPage = 0) {
     setLoading(true);
@@ -78,6 +91,50 @@ export default function AdminReportsPage() {
     }
   }
 
+  async function handleExportCsv() {
+    setExporting(true);
+    setError(null);
+    try {
+      const data = await postApi.adminListReports({
+        page: 0,
+        size: 500,
+        status: statusFilter,
+      });
+      const rows = data.content ?? [];
+      if (rows.length === 0) {
+        setNotice("Không có báo cáo để xuất CSV.");
+        return;
+      }
+      const csvRows = [
+        ["Ma", "Loai", "Target", "Reporter", "Ly do", "Trang thai", "Thoi gian"],
+        ...rows.map((r) => [
+          String(r.id),
+          r.targetType,
+          `${r.targetType} #${r.targetId}`,
+          String(r.reporterUserId),
+          r.reason,
+          r.status,
+          formatDate(r.createdAt),
+        ]),
+      ];
+      const csv = csvRows.map((row) => row.map((cell) => csvEscape(String(cell))).join(",")).join("\n");
+      const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `admin-reports-${statusFilter.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setNotice(`Đã xuất ${rows.length} báo cáo ra CSV.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể xuất CSV");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <section className="space-y-4">
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -93,10 +150,10 @@ export default function AdminReportsPage() {
             }
             className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-rose-300"
           >
-            <option value="PENDING">PENDING</option>
-            <option value="ALL">ALL</option>
-            <option value="RESOLVED">RESOLVED</option>
-            <option value="REJECTED">REJECTED</option>
+            <option value="PENDING">Chờ xử lý</option>
+            <option value="ALL">Tất cả</option>
+            <option value="RESOLVED">Đã duyệt</option>
+            <option value="REJECTED">Từ chối</option>
           </select>
           <button
             type="button"
@@ -104,6 +161,14 @@ export default function AdminReportsPage() {
             className="rounded-xl bg-rose-500 px-4 text-sm font-semibold text-white hover:bg-rose-600"
           >
             Tải lại
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportCsv()}
+            disabled={exporting || loading}
+            className="rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {exporting ? "Đang xuất..." : "Xuất CSV"}
           </button>
         </div>
       </header>
@@ -223,6 +288,18 @@ export default function AdminReportsPage() {
                           Báo cáo nhóm — duyệt sẽ xóa toàn bộ nhóm.
                         </p>
                       ) : null}
+                      {report.targetMediaUrl ? (
+                        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                          <Image
+                            src={report.targetMediaUrl}
+                            alt="Nội dung bị báo cáo"
+                            width={240}
+                            height={120}
+                            unoptimized
+                            className="max-h-[120px] w-auto object-contain"
+                          />
+                        </div>
+                      ) : null}
                     </td>
                     <td className="py-2 pr-2">
                       <span
@@ -234,7 +311,7 @@ export default function AdminReportsPage() {
                               : "bg-slate-100 text-slate-700"
                         }`}
                       >
-                        {report.status}
+                        {reportStatusLabel(report.status)}
                       </span>
                     </td>
                     <td className="py-2 pr-2">{formatDate(report.createdAt)}</td>

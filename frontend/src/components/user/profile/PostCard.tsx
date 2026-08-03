@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import PostMediaDisplay from "./PostMediaDisplay";
+import PostLikersModal from "./PostLikersModal";
 import { FeedPost } from "./types";
 
 type Props = {
@@ -41,7 +42,21 @@ export default function PostCard({
   actionBusy = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [likersOpen, setLikersOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const numericPostId =
+    post.postId ??
+    (post.source === "GROUP_POST" ? null : Number(post.id));
+  const groupPostId =
+    post.source === "GROUP_POST"
+      ? Number(String(post.id).replace(/^group-/, ""))
+      : null;
+  const canOpenLikers =
+    (numericPostId != null && Number.isFinite(numericPostId)) ||
+    (post.source === "GROUP_POST" &&
+      post.groupId != null &&
+      groupPostId != null &&
+      Number.isFinite(groupPostId));
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -367,7 +382,20 @@ export default function PostCard({
       ) : null}
 
       <div className="px-4 pb-2 text-xs text-slate-500">
-        <span>{post.likes} lượt thích</span>
+        {canOpenLikers && post.likes > 0 ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLikersOpen(true);
+            }}
+            className="font-medium text-slate-600 hover:text-rose-600 hover:underline"
+          >
+            {post.likes} lượt thích
+          </button>
+        ) : (
+          <span>{post.likes} lượt thích</span>
+        )}
         <span className="mx-1.5">•</span>
         <span>{post.comments} bình luận</span>
         <span className="mx-1.5">•</span>
@@ -405,8 +433,8 @@ export default function PostCard({
             e.stopPropagation();
             onShare?.(post.id);
           }}
-          disabled={post.source === "GROUP_POST"}
-          className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100"
+          className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!onShare}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.7 11.1l6.6-3.3m-6.6 5.1l6.6 3.3M6 12a2.25 2.25 0 110-4.5A2.25 2.25 0 016 12zm12-6a2.25 2.25 0 110-4.5A2.25 2.25 0 0118 6zm0 16a2.25 2.25 0 110-4.5A2.25 2.25 0 0118 22z" />
@@ -414,6 +442,14 @@ export default function PostCard({
           Chia sẻ
         </button>
       </div>
+
+      <PostLikersModal
+        postId={post.source === "GROUP_POST" ? null : numericPostId}
+        groupId={post.source === "GROUP_POST" ? post.groupId ?? null : null}
+        groupPostId={post.source === "GROUP_POST" ? groupPostId : null}
+        open={likersOpen}
+        onClose={() => setLikersOpen(false)}
+      />
     </article>
   );
 }

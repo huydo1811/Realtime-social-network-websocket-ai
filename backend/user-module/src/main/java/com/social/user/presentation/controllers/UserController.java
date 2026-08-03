@@ -85,11 +85,12 @@ public class UserController {
         @RequestParam(name = "size", required = false, defaultValue = "20") int size,
         @RequestParam(name = "email", required = false) String email,
         @RequestParam(name = "fullName", required = false) String fullName,
+        @RequestParam(name = "q", required = false) String q,
         @RequestParam(name = "isActive", required = false) Boolean isActive
     ) {
         try {
             Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
-            Page<User> usersPage = searchUsersUseCase.execute(email, fullName, isActive, pageable);
+            Page<User> usersPage = searchUsersUseCase.execute(email, fullName, q, isActive, pageable);
             Page<UserViewDto> dtoPage = usersPage.map(userMapper::toDto);
             return ResponseEntity.ok(dtoPage);
         } catch (Exception ex) {

@@ -11,6 +11,7 @@ public class ContentReportResponse {
     private Long targetAuthorUserId;
     private String reason;
     private String targetContent;
+    private String targetMediaUrl;
     private String relatedPostContent;
     private String status;
     private String adminNote;
@@ -81,6 +82,14 @@ public class ContentReportResponse {
 
     public void setTargetContent(String targetContent) {
         this.targetContent = targetContent;
+    }
+
+    public String getTargetMediaUrl() {
+        return targetMediaUrl;
+    }
+
+    public void setTargetMediaUrl(String targetMediaUrl) {
+        this.targetMediaUrl = targetMediaUrl;
     }
 
     public String getRelatedPostContent() {

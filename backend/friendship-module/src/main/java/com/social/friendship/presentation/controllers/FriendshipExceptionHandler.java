@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -69,9 +70,28 @@ public class FriendshipExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<?> handleDataAccess(DataAccessException ex, HttpServletRequest req) {
+        String msg = ex.getMostSpecificCause() != null
+                ? ex.getMostSpecificCause().getMessage()
+                : ex.getMessage();
+        if (msg != null && msg.toLowerCase().contains("group_member_reports")) {
+            return response(HttpStatus.INTERNAL_SERVER_ERROR, "Database Error",
+                    "Bảng báo cáo thành viên chưa sẵn sàng. Hãy restart backend để chạy migration.",
+                    req.getRequestURI());
+        }
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Database Error",
+                msg == null || msg.isBlank() ? "Lỗi cơ sở dữ liệu" : msg,
+                req.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleOther(Exception ex, HttpServletRequest req) {
-        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Đã xảy ra lỗi hệ thống", req.getRequestURI());
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",
+                ex.getMessage() == null || ex.getMessage().isBlank()
+                        ? "Đã xảy ra lỗi hệ thống"
+                        : ex.getMessage(),
+                req.getRequestURI());
     }
 
     private ResponseEntity<?> response(HttpStatus status, String error, String message, String path) {

@@ -7,10 +7,11 @@ export type Stat = {
 
 export type ReportItem = {
   id: string;
-  type: "Post" | "Comment" | "User";
+  type: "Post" | "Comment" | "User" | "Group";
   target: string;
   reason: string;
   status: "New" | "Reviewing" | "Resolved";
+  statusLabel: string;
   createdAt: string;
   createdAtIso?: string;
   reporterUserId?: number;

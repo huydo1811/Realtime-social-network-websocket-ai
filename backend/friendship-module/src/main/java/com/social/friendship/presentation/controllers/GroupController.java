@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.social.friendship.domain.entities.GroupMembershipRole;
 import com.social.friendship.domain.entities.GroupMembershipStatus;
+import com.social.friendship.domain.entities.GroupMemberReport;
 import com.social.friendship.domain.entities.GroupPostStatus;
 import com.social.friendship.domain.entities.GroupVisibility;
 import com.social.friendship.domain.entities.SocialGroup;
@@ -32,6 +33,7 @@ import com.social.friendship.domain.entities.SocialGroupPostComment;
 import com.social.friendship.domain.entities.SocialGroupPostLike;
 import com.social.friendship.domain.exceptions.GroupPostImageModerationRejectedException;
 import com.social.friendship.domain.exceptions.GroupPostTextModerationRejectedException;
+import com.social.friendship.infrastructure.repositories.JpaGroupMemberReportRepository;
 import com.social.friendship.infrastructure.repositories.JpaSocialGroupMembershipRepository;
 import com.social.friendship.infrastructure.repositories.JpaSocialGroupPostCommentRepository;
 import com.social.friendship.infrastructure.repositories.JpaSocialGroupPostLikeRepository;
@@ -41,10 +43,13 @@ import com.social.friendship.presentation.dto.CreateGroupPostCommentRequest;
 import com.social.friendship.presentation.dto.CreateGroupPostRequest;
 import com.social.friendship.presentation.dto.CreateGroupRequest;
 import com.social.friendship.presentation.dto.UpdateGroupRequest;
+import com.social.friendship.presentation.dto.GroupMemberActivityResponse;
+import com.social.friendship.presentation.dto.GroupMemberReportResponse;
 import com.social.friendship.presentation.dto.GroupMembershipResponse;
 import com.social.friendship.presentation.dto.GroupPostCommentResponse;
 import com.social.friendship.presentation.dto.GroupPostResponse;
 import com.social.friendship.presentation.dto.GroupResponse;
+import com.social.friendship.presentation.dto.ReportGroupMemberRequest;
 import com.social.moderation.application.usecases.ModerateImageUseCase;
 import com.social.moderation.application.usecases.ModerateTextUseCase;
 import com.social.moderation.domain.ModerationAction;
@@ -62,6 +67,7 @@ public class GroupController {
     private final JpaSocialGroupPostRepository postRepository;
     private final JpaSocialGroupPostLikeRepository likeRepository;
     private final JpaSocialGroupPostCommentRepository commentRepository;
+    private final JpaGroupMemberReportRepository memberReportRepository;
     private final UserRepository userRepository;
     private final ModerateTextUseCase moderateTextUseCase;
     private final ModerateImageUseCase moderateImageUseCase;
@@ -72,6 +78,7 @@ public class GroupController {
             JpaSocialGroupPostRepository postRepository,
             JpaSocialGroupPostLikeRepository likeRepository,
             JpaSocialGroupPostCommentRepository commentRepository,
+            JpaGroupMemberReportRepository memberReportRepository,
             UserRepository userRepository,
             ModerateTextUseCase moderateTextUseCase,
             ModerateImageUseCase moderateImageUseCase) {
@@ -80,6 +87,7 @@ public class GroupController {
         this.postRepository = postRepository;
         this.likeRepository = likeRepository;
         this.commentRepository = commentRepository;
+        this.memberReportRepository = memberReportRepository;
         this.userRepository = userRepository;
         this.moderateTextUseCase = moderateTextUseCase;
         this.moderateImageUseCase = moderateImageUseCase;
@@ -279,6 +287,115 @@ public class GroupController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{groupId}/members/{userId}/report")
+    @Transactional
+    public ResponseEntity<GroupMemberReportResponse> reportMemberByPath(
+            @PathVariable Long groupId,
+            @PathVariable Long userId,
+            @Valid @RequestBody ReportGroupMemberRequest request) {
+        if (request.getReportedUserId() == null) {
+            request.setReportedUserId(userId);
+        }
+        return reportMemberInternal(groupId, request);
+    }
+
+    @PostMapping("/{groupId}/member-reports")
+    @Transactional
+    public ResponseEntity<GroupMemberReportResponse> reportMember(
+            @PathVariable Long groupId,
+            @Valid @RequestBody ReportGroupMemberRequest request) {
+        return reportMemberInternal(groupId, request);
+    }
+
+    private ResponseEntity<GroupMemberReportResponse> reportMemberInternal(
+            Long groupId,
+            ReportGroupMemberRequest request) {
+        Long actorId = currentUserId();
+        Long userId = request.getReportedUserId();
+        if (userId == null) {
+            throw new IllegalArgumentException("Thiếu thành viên bị báo cáo");
+        }
+        SocialGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm"));
+        if (!canWrite(group, actorId)) {
+            throw new IllegalArgumentException("Bạn cần là thành viên nhóm để báo cáo");
+        }
+        if (actorId.equals(userId)) {
+            throw new IllegalArgumentException("Không thể tự báo cáo chính mình");
+        }
+        SocialGroupMembership target = membershipRepository.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Người dùng không thuộc nhóm này"));
+        if (target.getStatus() != GroupMembershipStatus.APPROVED) {
+            throw new IllegalArgumentException("Chỉ báo cáo được thành viên đã duyệt");
+        }
+        GroupMemberReport saved = memberReportRepository.save(
+                GroupMemberReport.create(groupId, userId, actorId, request.getReason()));
+        return ResponseEntity.ok(GroupMemberReportResponse.from(
+                saved,
+                userRepository.findById(userId).orElse(null),
+                userRepository.findById(actorId).orElse(null)));
+    }
+
+    @GetMapping("/{groupId}/member-reports")
+    public ResponseEntity<List<GroupMemberReportResponse>> listMemberReports(@PathVariable Long groupId) {
+        Long actorId = currentUserId();
+        ensureGroupOwner(groupId, actorId);
+        return ResponseEntity.ok(memberReportRepository.findByGroupIdOrderByCreatedAtDesc(groupId).stream()
+                .map(row -> GroupMemberReportResponse.from(
+                        row,
+                        userRepository.findById(row.getReportedUserId()).orElse(null),
+                        userRepository.findById(row.getReporterUserId()).orElse(null)))
+                .toList());
+    }
+
+    @GetMapping("/{groupId}/members/{userId}/activity")
+    public ResponseEntity<GroupMemberActivityResponse> memberActivity(
+            @PathVariable Long groupId,
+            @PathVariable Long userId) {
+        Long actorId = currentUserId();
+        ensureGroupOwner(groupId, actorId);
+        membershipRepository.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Thành viên không thuộc nhóm"));
+        User user = userRepository.findById(userId).orElse(null);
+        List<SocialGroupPost> posts = postRepository.findByGroupIdOrderByCreatedAtDesc(groupId).stream()
+                .filter(p -> userId.equals(p.getAuthorUserId()))
+                .toList();
+        Map<Long, Long> groupPostIds = postRepository.findByGroupIdOrderByCreatedAtDesc(groupId).stream()
+                .collect(Collectors.toMap(SocialGroupPost::getId, SocialGroupPost::getGroupId, (a, b) -> a, HashMap::new));
+        List<SocialGroupPostComment> comments = commentRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .filter(c -> groupPostIds.containsKey(c.getPostId()))
+                .toList();
+        List<GroupMemberActivityResponse.ActivityItem> recentPosts = posts.stream()
+                .limit(20)
+                .map(p -> new GroupMemberActivityResponse.ActivityItem(
+                        p.getId(),
+                        p.getId(),
+                        preview(p.getContent()),
+                        p.getCreatedAt()))
+                .toList();
+        List<GroupMemberActivityResponse.ActivityItem> recentComments = comments.stream()
+                .limit(20)
+                .map(c -> new GroupMemberActivityResponse.ActivityItem(
+                        c.getId(),
+                        c.getPostId(),
+                        preview(c.getContent()),
+                        c.getCreatedAt()))
+                .toList();
+        return ResponseEntity.ok(new GroupMemberActivityResponse(
+                userId,
+                user == null ? null : user.getFullName(),
+                posts.size(),
+                comments.size(),
+                recentPosts,
+                recentComments));
+    }
+
+    private static String preview(String content) {
+        if (content == null || content.isBlank()) return "(không có nội dung)";
+        String trimmed = content.trim();
+        return trimmed.length() > 120 ? trimmed.substring(0, 117) + "..." : trimmed;
+    }
+
     @PostMapping("/{groupId}/posts")
     @Transactional
     public ResponseEntity<GroupPostResponse> createPost(
@@ -385,6 +502,58 @@ public class GroupController {
                 actorId));
     }
 
+    @PutMapping("/{groupId}/posts/{postId}")
+    @Transactional
+    public ResponseEntity<GroupPostResponse> updatePost(
+            @PathVariable Long groupId,
+            @PathVariable Long postId,
+            @Valid @RequestBody CreateGroupPostRequest request) {
+        Long actorId = currentUserId();
+        SocialGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm"));
+        SocialGroupPost post = requirePost(groupId, postId);
+        if (!post.getAuthorUserId().equals(actorId) && !isGroupOwner(groupId, actorId)) {
+            throw new IllegalArgumentException("Bạn không có quyền sửa bài viết này");
+        }
+        String normalizedContent = request.getContent() == null ? "" : request.getContent().trim();
+        String normalizedMediaUrl = request.getMediaUrl() == null ? null : request.getMediaUrl().trim();
+        if (normalizedContent.isBlank() && (normalizedMediaUrl == null || normalizedMediaUrl.isBlank())) {
+            throw new IllegalArgumentException("Phải có nội dung hoặc ảnh/video");
+        }
+        if (normalizedMediaUrl != null && !normalizedMediaUrl.isBlank() && !isVideo(normalizedMediaUrl)) {
+            var imageResult = moderateImageUseCase.moderate(normalizedMediaUrl);
+            if (imageResult.violation()) {
+                throw new GroupPostImageModerationRejectedException(imageResult);
+            }
+        }
+        boolean softHide = false;
+        if (!normalizedContent.isBlank()) {
+            var decision = moderateTextUseCase.moderate(normalizedContent);
+            if (decision.action() == ModerationAction.HARD_REJECT) {
+                throw new GroupPostTextModerationRejectedException(decision.result());
+            }
+            softHide = decision.action() == ModerationAction.SOFT_HIDE;
+        }
+        boolean reApproval = softHide || (!isGroupOwner(groupId, actorId) && group.isRequirePostApproval());
+        post.updateContent(normalizedContent, normalizedMediaUrl, reApproval);
+        SocialGroupPost saved = postRepository.save(post);
+        return ResponseEntity.ok(toPostResponse(saved, group.getName(), group.getAvatarUrl(), actorId));
+    }
+
+    @DeleteMapping("/{groupId}/posts/{postId}")
+    @Transactional
+    public ResponseEntity<Void> deletePost(@PathVariable Long groupId, @PathVariable Long postId) {
+        Long actorId = currentUserId();
+        SocialGroupPost post = requirePost(groupId, postId);
+        if (!post.getAuthorUserId().equals(actorId) && !isGroupOwner(groupId, actorId)) {
+            throw new IllegalArgumentException("Bạn không có quyền xóa bài viết này");
+        }
+        commentRepository.deleteByPostId(postId);
+        likeRepository.deleteByPostId(postId);
+        postRepository.delete(post);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{groupId}/posts/{postId}/like")
     @Transactional
     public ResponseEntity<Map<String, Object>> toggleLike(@PathVariable Long groupId, @PathVariable Long postId) {
@@ -411,6 +580,37 @@ public class GroupController {
         body.put("liked", liked);
         body.put("likeCount", likeRepository.countByPostId(postId));
         return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/{groupId}/posts/{postId}/likes")
+    public ResponseEntity<List<Map<String, Object>>> listLikers(
+            @PathVariable Long groupId,
+            @PathVariable Long postId) {
+        Long actorId = currentUserId();
+        SocialGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm"));
+        if (!canView(group, actorId)) {
+            throw new IllegalArgumentException("Bạn không có quyền xem bài viết này");
+        }
+        requirePost(groupId, postId);
+        List<Map<String, Object>> rows = likeRepository.findByPostIdOrderByCreatedAtDesc(postId).stream()
+                .map(like -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("userId", like.getUserId());
+                    row.put("likedAt", like.getCreatedAt());
+                    userRepository.findById(like.getUserId()).ifPresentOrElse(user -> {
+                        row.put("fullName", user.getFullName());
+                        row.put("username", user.getUsername());
+                        row.put("avatarUrl", user.getAvatarUrl());
+                    }, () -> {
+                        row.put("fullName", "Người dùng #" + like.getUserId());
+                        row.put("username", null);
+                        row.put("avatarUrl", null);
+                    });
+                    return row;
+                })
+                .toList();
+        return ResponseEntity.ok(rows);
     }
 
     @GetMapping("/{groupId}/posts/{postId}/comments")

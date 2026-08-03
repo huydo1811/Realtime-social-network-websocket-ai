@@ -1,5 +1,6 @@
 package com.social.pet.presentation.controllers;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -28,8 +29,10 @@ import com.social.pet.application.usecases.UpdatePetUseCase;
 import com.social.pet.domain.entities.AppetiteLevel;
 import com.social.pet.domain.entities.PetActivityEntry;
 import com.social.pet.domain.entities.PetAppetiteEntry;
+import com.social.pet.domain.entities.PetHealthReminder;
 import com.social.pet.domain.entities.PetReminderStatus;
 import com.social.pet.domain.entities.PetSpecies;
+import com.social.pet.domain.entities.PetWalkSession;
 import com.social.pet.domain.entities.PetWalkSessionStatus;
 import com.social.pet.domain.entities.PetWeightEntry;
 import com.social.pet.domain.repositories.PetActivityEntryRepository;
@@ -236,6 +239,55 @@ public class PetController {
         long completedReminderCount = reminders.stream().filter(r -> r.getStatus() == PetReminderStatus.COMPLETED).count();
         long recordCount = records.size();
 
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime weekAgo = now.minusDays(7);
+        LocalDateTime monthAgo = now.minusDays(30);
+
+        List<PetWalkSession> finishedWalks = walks.stream()
+                .filter(w -> w.getStatus() == PetWalkSessionStatus.FINISHED)
+                .toList();
+        long walksLast7d = finishedWalks.stream()
+                .filter(w -> {
+                    LocalDateTime ts = w.getEndedAt() != null ? w.getEndedAt() : w.getStartedAt();
+                    return ts != null && !ts.isBefore(weekAgo);
+                })
+                .count();
+        long walksLast30d = finishedWalks.stream()
+                .filter(w -> {
+                    LocalDateTime ts = w.getEndedAt() != null ? w.getEndedAt() : w.getStartedAt();
+                    return ts != null && !ts.isBefore(monthAgo);
+                })
+                .count();
+        boolean nightOwlWalk = finishedWalks.stream().anyMatch(w -> {
+            if (w.getStartedAt() == null) {
+                return false;
+            }
+            int hour = w.getStartedAt().getHour();
+            return hour >= 20 || hour < 5;
+        });
+
+        List<PetHealthReminder> completedReminders = reminders.stream()
+                .filter(r -> r.getStatus() == PetReminderStatus.COMPLETED)
+                .toList();
+        long completedRemindersLast7d = completedReminders.stream()
+                .filter(r -> r.getUpdatedAt() != null && !r.getUpdatedAt().isBefore(weekAgo))
+                .count();
+        long completedRemindersLast30d = completedReminders.stream()
+                .filter(r -> r.getUpdatedAt() != null && !r.getUpdatedAt().isBefore(monthAgo))
+                .count();
+        long recordsLast7d = records.stream()
+                .filter(r -> r.getPerformedAt() != null && !r.getPerformedAt().isBefore(weekAgo.toLocalDate()))
+                .count();
+        boolean earlyBirdCare = completedReminders.stream().anyMatch(r -> {
+            if (r.getUpdatedAt() != null && r.getUpdatedAt().getHour() < 9) {
+                return true;
+            }
+            return r.getDueDate() != null
+                    && r.getUpdatedAt() != null
+                    && r.getUpdatedAt().toLocalDate().equals(r.getDueDate())
+                    && r.getUpdatedAt().getHour() < 9;
+        });
+
         List<PetSocialBadgeResponse> badges = new ArrayList<>();
         badges.add(new PetSocialBadgeResponse(
                 "walk_explorer",
@@ -261,6 +313,60 @@ public class PetController {
                 recordCount + "/5 hồ sơ",
                 "🏅 " + pet.getName() + " vừa mở khóa huy hiệu Nhà lưu trữ sức khỏe với " + recordCount
                         + " hồ sơ đã ghi nhận!"));
+        badges.add(new PetSocialBadgeResponse(
+                "walk_week_hero",
+                "Anh hùng đi dạo tuần",
+                "Hoàn thành ít nhất 2 phiên đi dạo trong 7 ngày qua.",
+                walksLast7d >= 2,
+                walksLast7d + "/2 phiên tuần này",
+                "🏅 " + pet.getName() + " vừa trở thành Anh hùng đi dạo tuần với " + walksLast7d
+                        + " phiên trong 7 ngày qua!"));
+        badges.add(new PetSocialBadgeResponse(
+                "walk_month_legend",
+                "Huyền thoại đi dạo tháng",
+                "Hoàn thành ít nhất 8 phiên đi dạo trong 30 ngày qua.",
+                walksLast30d >= 8,
+                walksLast30d + "/8 phiên tháng này",
+                "🏅 " + pet.getName() + " vừa mở khóa huy hiệu Huyền thoại đi dạo tháng với " + walksLast30d
+                        + " phiên trong 30 ngày qua!"));
+        badges.add(new PetSocialBadgeResponse(
+                "care_week_star",
+                "Ngôi sao chăm sóc tuần",
+                "Hoàn thành ít nhất 2 lịch nhắc nhở trong 7 ngày qua.",
+                completedRemindersLast7d >= 2,
+                completedRemindersLast7d + "/2 lịch tuần này",
+                "🏅 " + pet.getName() + " vừa trở thành Ngôi sao chăm sóc tuần với " + completedRemindersLast7d
+                        + " lịch hoàn thành trong 7 ngày qua!"));
+        badges.add(new PetSocialBadgeResponse(
+                "night_owl_walk",
+                "Cú đêm đi dạo",
+                "Có ít nhất một phiên đi dạo bắt đầu sau 20:00 hoặc trước 05:00.",
+                nightOwlWalk,
+                nightOwlWalk ? "Đã có phiên đi dạo đêm/sáng sớm" : "Chưa có phiên đi dạo đêm",
+                "🌙 " + pet.getName() + " vừa mở khóa huy hiệu Cú đêm đi dạo — bé thích dạo phố lúc trời tối!"));
+        badges.add(new PetSocialBadgeResponse(
+                "early_bird_care",
+                "Chim sớm chăm sóc",
+                "Hoàn thành lịch nhắc nhở trước 9 giờ sáng.",
+                earlyBirdCare,
+                earlyBirdCare ? "Đã chăm sóc sáng sớm" : "Chưa có lịch hoàn thành trước 9h",
+                "🌅 " + pet.getName() + " vừa mở khóa huy hiệu Chim sớm chăm sóc — dậy sớm chăm bé cực kỳ đều!"));
+        badges.add(new PetSocialBadgeResponse(
+                "care_month_guardian",
+                "Người gác cổng chăm sóc tháng",
+                "Hoàn thành ít nhất 5 lịch nhắc nhở trong 30 ngày qua.",
+                completedRemindersLast30d >= 5,
+                completedRemindersLast30d + "/5 lịch tháng này",
+                "🏅 " + pet.getName() + " vừa trở thành Người gác cổng chăm sóc tháng với "
+                        + completedRemindersLast30d + " lịch hoàn thành trong 30 ngày qua!"));
+        badges.add(new PetSocialBadgeResponse(
+                "health_week_tracker",
+                "Theo dõi sức khỏe tuần",
+                "Ghi ít nhất 2 hồ sơ sức khỏe trong 7 ngày qua.",
+                recordsLast7d >= 2,
+                recordsLast7d + "/2 hồ sơ tuần này",
+                "🏅 " + pet.getName() + " vừa mở khóa huy hiệu Theo dõi sức khỏe tuần với "
+                        + recordsLast7d + " hồ sơ mới trong 7 ngày qua!"));
         return ResponseEntity.ok(badges);
     }
 

@@ -108,3 +108,33 @@ export type GroupPostCommentResponse = {
   content: string;
   createdAt?: string;
 };
+
+export type GroupMemberReportResponse = {
+  id: number;
+  groupId: number;
+  reportedUserId: number;
+  reportedUserName?: string | null;
+  reporterUserId: number;
+  reporterUserName?: string | null;
+  reason: string;
+  status: string;
+  ownerNote?: string | null;
+  resolvedAt?: string | null;
+  createdAt?: string;
+};
+
+export type GroupMemberActivityResponse = {
+  userId: number;
+  fullName?: string | null;
+  postCount: number;
+  commentCount: number;
+  recentPosts: GroupMemberActivityItem[];
+  recentComments: GroupMemberActivityItem[];
+};
+
+export type GroupMemberActivityItem = {
+  id: number;
+  postId: number;
+  contentPreview: string;
+  createdAt?: string;
+};

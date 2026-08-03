@@ -1,5 +1,6 @@
 package com.social.post.domain.repositories;
 
+import java.util.List;
 import java.util.Optional;
 
 import com.social.post.domain.entities.PostLike;
@@ -14,4 +15,6 @@ public interface PostLikeRepository {
     void delete(PostLike postLike);
 
     long countByPostId(Long postId);
+
+    List<PostLike> findByPostIdOrderByCreatedAtDesc(Long postId);
 }

@@ -205,8 +205,8 @@ export default function AdminPostPage() {
                 <th className="py-2 pr-2">Tác giả</th>
                 <th className="py-2 pr-2">Nội dung</th>
                 <th className="py-2 pr-2">Media</th>
-                <th className="py-2 pr-2">Visibility</th>
-                <th className="py-2 pr-2">Status</th>
+                <th className="py-2 pr-2">Quyền xem</th>
+                <th className="py-2 pr-2">Trạng thái</th>
                 <th className="py-2 pr-2">Tương tác</th>
                 <th className="py-2 pr-2">Tạo lúc</th>
                 <th className="py-2 pr-2">Hành động</th>

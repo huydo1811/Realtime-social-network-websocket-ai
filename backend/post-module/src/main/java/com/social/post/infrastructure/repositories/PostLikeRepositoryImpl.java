@@ -1,5 +1,6 @@
 package com.social.post.infrastructure.repositories;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
@@ -38,5 +39,10 @@ public class PostLikeRepositoryImpl implements PostLikeRepository {
     @Override
     public long countByPostId(Long postId) {
         return jpaPostLikeRepository.countByPostId(postId);
+    }
+
+    @Override
+    public List<PostLike> findByPostIdOrderByCreatedAtDesc(Long postId) {
+        return jpaPostLikeRepository.findByPostIdOrderByCreatedAtDesc(postId);
     }
 }

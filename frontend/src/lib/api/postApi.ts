@@ -219,6 +219,20 @@ export const postApi = {
     return (await res.json()) as { liked: boolean };
   },
 
+  async listLikers(postId: number): Promise<
+    Array<{ userId: number; fullName?: string; username?: string; avatarUrl?: string | null; likedAt?: string }>
+  > {
+    const res = await apiAuthFetch(`${API_URL}/posts/${postId}/likes`);
+    if (!res.ok) throw await parseError(res, "Không thể tải danh sách người thích");
+    return (await res.json()) as Array<{
+      userId: number;
+      fullName?: string;
+      username?: string;
+      avatarUrl?: string | null;
+      likedAt?: string;
+    }>;
+  },
+
   async createComment(postId: number, content: string): Promise<PostCommentDto> {
     const res = await apiAuthFetch(`${API_URL}/posts/${postId}/comments`, {
       method: "POST",

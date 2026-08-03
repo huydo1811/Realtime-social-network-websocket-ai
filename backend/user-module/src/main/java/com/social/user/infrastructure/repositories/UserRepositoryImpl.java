@@ -48,9 +48,21 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public Page<User> search(String email, String fullName, Boolean isActive, Pageable pageable) {
+        return search(email, fullName, null, isActive, pageable);
+    }
+
+    @Override
+    public Page<User> search(String email, String fullName, String q, Boolean isActive, Pageable pageable) {
         Specification<User> spec = (root, query, cb) -> cb.conjunction();
-        if (email != null && !email.isBlank()) spec = spec.and(UserSpecifications.hasEmailLike(email));
-        if (fullName != null && !fullName.isBlank()) spec = spec.and(UserSpecifications.hasFullNameLike(fullName));
+        if (q != null && !q.isBlank()) {
+            spec = spec.and(UserSpecifications.matchesQuery(q));
+        } else {
+            if (email != null && !email.isBlank()) spec = spec.and(UserSpecifications.hasEmailLike(email));
+            if (fullName != null && !fullName.isBlank()) {
+                spec = spec.and(UserSpecifications.hasFullNameLike(fullName)
+                        .or(UserSpecifications.hasUsernameLike(fullName)));
+            }
+        }
         if (isActive != null) spec = spec.and(UserSpecifications.hasIsActive(isActive));
         return jpaRepo.findAll(spec, pageable);
     }

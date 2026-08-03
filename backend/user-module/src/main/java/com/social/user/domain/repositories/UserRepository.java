@@ -17,4 +17,6 @@ public interface UserRepository {
     List<User> findAll();
     void deleteById(Long id);
     Page<User> search(String email, String fullName, Boolean isActive, Pageable pageable);
+
+    Page<User> search(String email, String fullName, String q, Boolean isActive, Pageable pageable);
 }

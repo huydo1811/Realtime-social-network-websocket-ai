@@ -192,6 +192,19 @@ export default function FriendActionButton({
           >
             Từ chối
           </button>
+          {status.canBlock !== false && (
+            <button
+              type="button"
+              disabled={busy}
+              className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+              onClick={() => {
+                if (!window.confirm("Chặn người dùng này?")) return;
+                void run(async () => blockUser(targetUserId));
+              }}
+            >
+              Chặn
+            </button>
+          )}
           {err && <span className="w-full text-xs text-rose-600">{err}</span>}
         </div>
       );
@@ -199,14 +212,29 @@ export default function FriendActionButton({
     if (status.canCancel && status.friendshipId != null) {
       return wrap(
         <>
-          <button
-            type="button"
-            disabled={busy}
-            className={`${btn} w-full border border-slate-200 bg-slate-100 text-slate-700`}
-            onClick={() => run(async () => cancelFriendRequest(status.friendshipId!))}
-          >
-            Hủy lời mời
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              className={`${btn} border border-slate-200 bg-slate-100 text-slate-700`}
+              onClick={() => run(async () => cancelFriendRequest(status.friendshipId!))}
+            >
+              Hủy lời mời
+            </button>
+            {status.canBlock !== false && (
+              <button
+                type="button"
+                disabled={busy}
+                className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                onClick={() => {
+                  if (!window.confirm("Chặn người dùng này?")) return;
+                  void run(async () => blockUser(targetUserId));
+                }}
+              >
+                Chặn
+              </button>
+            )}
+          </div>
           {err && <span className="text-xs text-rose-600">{err}</span>}
         </>
       );
@@ -226,6 +254,17 @@ export default function FriendActionButton({
             onClick={() => run(async () => removeFriend(status.friendshipId!))}
           >
             Hủy kết bạn
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+            onClick={() => {
+              if (!window.confirm("Chặn người dùng này?")) return;
+              void run(async () => blockUser(targetUserId));
+            }}
+          >
+            Chặn
           </button>
         </div>
         {err && <span className="text-xs text-rose-600">{err}</span>}

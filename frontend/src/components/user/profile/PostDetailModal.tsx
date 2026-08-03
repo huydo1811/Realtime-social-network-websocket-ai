@@ -21,6 +21,8 @@ type CommentItem = {
 type Props = {
   post: FeedPost | null;
   actorId?: number | null;
+  composerAvatarUrl?: string | null;
+  composerName?: string;
   liked: boolean;
   comments: CommentItem[];
   onOpenAuthorProfile?: (authorId?: number) => void;
@@ -36,6 +38,8 @@ type Props = {
 export default function PostDetailModal({
   post,
   actorId,
+  composerAvatarUrl,
+  composerName,
   liked,
   comments,
   onOpenAuthorProfile,
@@ -66,6 +70,8 @@ export default function PostDetailModal({
 
   if (!post) return null;
   const activePost = post;
+  const commentAvatar = composerAvatarUrl ?? undefined;
+  const commentAvatarLabel = composerName?.trim() || "Bạn";
   const hasMedia = Boolean(activePost.mediaUrl);
   const rootComments = comments.filter((c) => !c.parentCommentId);
   const canReportPost = Boolean(
@@ -445,16 +451,18 @@ export default function PostDetailModal({
                   </div>
                 ) : null}
                 <div className="flex items-center gap-3">
-                  {activePost.authorAvatar ? (
+                  {commentAvatar ? (
                     <Image
-                      src={activePost.authorAvatar}
-                      alt="me"
+                      src={commentAvatar}
+                      alt={commentAvatarLabel}
                       width={36}
                       height={36}
                       className="h-9 w-9 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="h-9 w-9 rounded-full bg-slate-200" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-600">
+                      {commentAvatarLabel[0]?.toUpperCase() || "U"}
+                    </div>
                   )}
 
                   <input

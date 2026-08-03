@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import MediaPreview from "@/components/common/MediaPreview";
 import UserLayout from "@/components/layout/UserLayout";
+import PostLikersModal from "@/components/user/profile/PostLikersModal";
 import PostMediaDisplay from "@/components/user/profile/PostMediaDisplay";
 import { uploadToCloudinary } from "@/lib/cloudinary/upload";
 import {
@@ -13,20 +14,31 @@ import {
   createGroupPost,
   createGroupPostComment,
   deleteGroup,
+  deleteGroupPost,
   getGroup,
+  getGroupMemberActivity,
   joinGroup,
+  listGroupMemberReports,
   listGroupMembers,
   listGroupPostComments,
   listGroupPosts,
   listMyGroupMemberships,
   rejectGroupPost,
   removeGroupMember,
+  reportGroupMember,
   toggleGroupPostLike,
   updateGroup,
+  updateGroupPost,
 } from "@/lib/api/friendshipApi";
+import { getAuthTokens } from "@/lib/api/authToken";
+import { getUserIdFromAccessToken } from "@/lib/auth/jwtSubject";
 import { postApi } from "@/lib/api/postApi";
+import { showAppToast } from "@/components/common/AppToastHost";
+import { handleModerationAwareError } from "@/components/common/ModerationViolationModal";
 import type {
   GroupMembershipResponse,
+  GroupMemberActivityResponse,
+  GroupMemberReportResponse,
   GroupPostCommentResponse,
   GroupPostResponse,
   GroupResponse,
@@ -38,6 +50,13 @@ function formatDate(iso?: string | null) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString("vi-VN");
+}
+
+function memberReportStatusLabel(status?: string | null) {
+  const key = (status || "").toUpperCase();
+  if (key === "PENDING") return "Chờ xử lý";
+  if (key === "RESOLVED") return "Đã xử lý";
+  return status || "Không rõ";
 }
 
 function AuthorAvatar({ name, url }: { name: string; url?: string | null }) {
@@ -84,12 +103,54 @@ export default function GroupDetailPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [postAuthorFilter, setPostAuthorFilter] = useState("");
+  const [postKeywordFilter, setPostKeywordFilter] = useState("");
+  const [actorId, setActorId] = useState<number | null>(null);
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
+  const [editPostText, setEditPostText] = useState("");
+  const [editPostMediaUrl, setEditPostMediaUrl] = useState<string | undefined>(undefined);
+  const [activityModalUserId, setActivityModalUserId] = useState<number | null>(null);
+  const [memberActivity, setMemberActivity] = useState<GroupMemberActivityResponse | null>(null);
+  const [memberReports, setMemberReports] = useState<GroupMemberReportResponse[]>([]);
+  const [ownerMemberReports, setOwnerMemberReports] = useState<GroupMemberReportResponse[]>([]);
+  const [loadingMemberActivity, setLoadingMemberActivity] = useState(false);
+  const [reportMemberTarget, setReportMemberTarget] = useState<GroupMembershipResponse | null>(null);
+  const [reportMemberReason, setReportMemberReason] = useState("");
+  const [likersOpen, setLikersOpen] = useState(false);
+  const [memberNameFilter, setMemberNameFilter] = useState("");
+  const [likersPostId, setLikersPostId] = useState<number | null>(null);
 
   const myMembership = useMemo(() => myMemberships.find((row) => row.groupId === groupId), [myMemberships, groupId]);
   const isOwner = myMembership?.role === "OWNER" && myMembership?.status === "APPROVED";
   const canPost = myMembership?.status === "APPROVED";
   const isPrivateLocked =
     group?.visibility === "PRIVATE" && !canPost;
+
+  useEffect(() => {
+    const token = getAuthTokens()?.accessToken;
+    setActorId(token ? getUserIdFromAccessToken(token) : null);
+  }, []);
+
+  const filteredPosts = useMemo(() => {
+    const authorQ = postAuthorFilter.trim().toLowerCase();
+    const keywordQ = postKeywordFilter.trim().toLowerCase();
+    return posts.filter((row) => {
+      const authorLabel = displayName(row.authorName, row.authorUserId).toLowerCase();
+      const content = (row.content || "").toLowerCase();
+      if (authorQ && !authorLabel.includes(authorQ)) return false;
+      if (keywordQ && !content.includes(keywordQ)) return false;
+      return true;
+    });
+  }, [posts, postAuthorFilter, postKeywordFilter]);
+
+  const filteredMembers = useMemo(() => {
+    const q = memberNameFilter.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((row) => {
+      const name = displayName(row.fullName, row.userId).toLowerCase();
+      return name.includes(q);
+    });
+  }, [members, memberNameFilter]);
 
   function profileHref(userId: number) {
     return `/profile/${userId}`;
@@ -112,6 +173,16 @@ export default function GroupDetailPage() {
       })
     );
     setCommentsByPostId(Object.fromEntries(entries));
+  }, [groupId]);
+
+  const loadOwnerMemberReports = useCallback(async () => {
+    if (!Number.isFinite(groupId) || groupId <= 0) return;
+    try {
+      const rows = await listGroupMemberReports(groupId);
+      setOwnerMemberReports(rows);
+    } catch {
+      setOwnerMemberReports([]);
+    }
   }, [groupId]);
 
   const load = useCallback(async () => {
@@ -147,13 +218,15 @@ export default function GroupDetailPage() {
       if (canModerate) {
         const pendingRows = await listGroupPosts(groupId, "PENDING").catch(() => [] as GroupPostResponse[]);
         setPendingPosts(pendingRows);
+        await loadOwnerMemberReports();
       } else {
         setPendingPosts([]);
+        setOwnerMemberReports([]);
       }
     } finally {
       setLoading(false);
     }
-  }, [groupId, loadCommentsForPosts]);
+  }, [groupId, loadCommentsForPosts, loadOwnerMemberReports]);
 
   useEffect(() => {
     void load();
@@ -243,7 +316,10 @@ export default function GroupDetailPage() {
       }
       await load();
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Không thể đăng bài");
+      const message = e instanceof Error ? e.message : "Không thể đăng bài";
+      if (!handleModerationAwareError(e, message)) {
+        setNotice(message);
+      }
     } finally {
       setBusyKey(null);
     }
@@ -302,8 +378,98 @@ export default function GroupDetailPage() {
           : prev
       );
       setNotice(`Đã kick ${label} khỏi nhóm.`);
+      showAppToast(`Đã kick ${label}`, "success");
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Không thể kick thành viên");
+      showAppToast(e instanceof Error ? e.message : "Không thể kick thành viên", "error");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function openMemberActivity(userId: number) {
+    setActivityModalUserId(userId);
+    setLoadingMemberActivity(true);
+    setMemberActivity(null);
+    setMemberReports([]);
+    try {
+      const [activity, reports] = await Promise.all([
+        getGroupMemberActivity(groupId, userId),
+        isOwner ? listGroupMemberReports(groupId).catch(() => []) : Promise.resolve([]),
+      ]);
+      setMemberActivity(activity);
+      setMemberReports(reports.filter((r) => r.reportedUserId === userId));
+    } catch (e) {
+      showAppToast(e instanceof Error ? e.message : "Không thể tải hoạt động thành viên", "error");
+      setActivityModalUserId(null);
+    } finally {
+      setLoadingMemberActivity(false);
+    }
+  }
+
+  async function submitMemberReport() {
+    if (!reportMemberTarget) return;
+    const reason = reportMemberReason.trim();
+    if (!reason) {
+      showAppToast("Nhập lý do báo cáo", "warning");
+      return;
+    }
+    setBusyKey(`report-${reportMemberTarget.userId}`);
+    try {
+      await reportGroupMember(groupId, reportMemberTarget.userId, reason);
+      showAppToast("Đã gửi báo cáo thành viên", "success");
+      setReportMemberTarget(null);
+      setReportMemberReason("");
+      if (isOwner) {
+        await loadOwnerMemberReports();
+      }
+    } catch (e) {
+      showAppToast(e instanceof Error ? e.message : "Không thể gửi báo cáo", "error");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDeletePost(postId: number) {
+    if (!window.confirm("Xóa bài viết này?")) return;
+    setBusyKey(`del-post-${postId}`);
+    try {
+      await deleteGroupPost(groupId, postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      showAppToast("Đã xóa bài viết", "success");
+    } catch (e) {
+      showAppToast(e instanceof Error ? e.message : "Không thể xóa bài", "error");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleSaveEditPost(postId: number) {
+    const content = editPostText.trim();
+    if (!content && !editPostMediaUrl?.trim()) {
+      showAppToast("Nhập nội dung hoặc ảnh", "warning");
+      return;
+    }
+    setBusyKey(`edit-post-${postId}`);
+    try {
+      const updated = await updateGroupPost(groupId, postId, {
+        content,
+        mediaUrl: editPostMediaUrl,
+      });
+      if (updated.status === "PENDING") {
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        showAppToast("Đã sửa — bài chờ duyệt lại", "warning");
+      } else {
+        setPosts((prev) => prev.map((p) => (p.id === postId ? updated : p)));
+        showAppToast("Đã cập nhật bài viết", "success");
+      }
+      setEditingPostId(null);
+      await load();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Không thể sửa bài";
+      if (!handleModerationAwareError(e, message)) {
+        showAppToast(message, "error");
+      }
     } finally {
       setBusyKey(null);
     }
@@ -614,14 +780,31 @@ export default function GroupDetailPage() {
 
           <div className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-sm font-semibold text-slate-900">Bài viết trong nhóm</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  value={postAuthorFilter}
+                  onChange={(e) => setPostAuthorFilter(e.target.value)}
+                  placeholder="Lọc theo tên người đăng..."
+                  className="h-9 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-sky-400"
+                />
+                <input
+                  value={postKeywordFilter}
+                  onChange={(e) => setPostKeywordFilter(e.target.value)}
+                  placeholder="Lọc theo từ khóa nội dung..."
+                  className="h-9 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-sky-400"
+                />
+              </div>
               {loading ? (
                 <p className="mt-3 text-sm text-slate-500">Đang tải bài viết...</p>
-              ) : posts.length ? (
+              ) : filteredPosts.length ? (
                 <div className="mt-3 space-y-4">
-                  {posts.map((row) => {
+                  {filteredPosts.map((row) => {
                     const authorLabel = displayName(row.authorName, row.authorUserId);
                     const comments = commentsByPostId[row.id] ?? [];
                     const liked = Boolean(row.likedByMe);
+                    const canManagePost =
+                      (actorId != null && actorId === row.authorUserId) || isOwner;
+                    const isEditing = editingPostId === row.id;
                     return (
                       <article key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <div className="flex items-start gap-3">
@@ -637,15 +820,111 @@ export default function GroupDetailPage() {
                             </Link>
                             <p className="text-xs text-slate-500">{formatDate(row.createdAt)}</p>
                           </div>
+                          {canManagePost ? (
+                            <div className="flex shrink-0 gap-1.5">
+                              {actorId === row.authorUserId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPostId(row.id);
+                                    setEditPostText(row.content || "");
+                                    setEditPostMediaUrl(row.mediaUrl || undefined);
+                                  }}
+                                  className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                  Sửa
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => void handleDeletePost(row.id)}
+                                disabled={busyKey === `del-post-${row.id}`}
+                                className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                              >
+                                {busyKey === `del-post-${row.id}` ? "..." : "Xóa"}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
-                        {row.content ? (
-                          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{row.content}</p>
-                        ) : null}
-                        {row.mediaUrl ? (
-                          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-                            <PostMediaDisplay mediaUrl={row.mediaUrl} variant="embed" />
+                        {isEditing ? (
+                          <div className="mt-3 space-y-2">
+                            <textarea
+                              value={editPostText}
+                              onChange={(e) => setEditPostText(e.target.value)}
+                              rows={3}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-400"
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              <label className="cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                {uploadingMedia ? "Đang tải ảnh..." : "Đổi ảnh"}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={uploadingMedia}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    e.target.value = "";
+                                    if (!file) return;
+                                    setUploadingMedia(true);
+                                    try {
+                                      const uploaded = await uploadToCloudinary(file);
+                                      setEditPostMediaUrl(uploaded.secureUrl);
+                                      showAppToast("Đã tải ảnh lên", "success");
+                                    } catch (err) {
+                                      showAppToast(
+                                        err instanceof Error ? err.message : "Tải ảnh thất bại",
+                                        "error"
+                                      );
+                                    } finally {
+                                      setUploadingMedia(false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                              {editPostMediaUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditPostMediaUrl(undefined)}
+                                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
+                                >
+                                  Bỏ ảnh
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveEditPost(row.id)}
+                                disabled={busyKey === `edit-post-${row.id}`}
+                                className="rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-600 disabled:opacity-60"
+                              >
+                                Lưu
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingPostId(null)}
+                                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                            {editPostMediaUrl ? (
+                              <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <PostMediaDisplay mediaUrl={editPostMediaUrl} variant="embed" />
+                              </div>
+                            ) : null}
                           </div>
-                        ) : null}
+                        ) : (
+                          <>
+                            {row.content ? (
+                              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{row.content}</p>
+                            ) : null}
+                            {row.mediaUrl ? (
+                              <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+                                <PostMediaDisplay mediaUrl={row.mediaUrl} variant="embed" />
+                              </div>
+                            ) : null}
+                          </>
+                        )}
                         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
                           <button
                             type="button"
@@ -660,8 +939,22 @@ export default function GroupDetailPage() {
                             <svg className="h-3.5 w-3.5" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                             </svg>
-                            {liked ? "Đã thích" : "Thích"} ({row.likeCount ?? 0})
+                            {liked ? "Đã thích" : "Thích"}
                           </button>
+                          {(row.likeCount ?? 0) > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLikersPostId(row.id);
+                                setLikersOpen(true);
+                              }}
+                              className="font-medium text-slate-600 hover:text-rose-600 hover:underline"
+                            >
+                              {row.likeCount} lượt thích
+                            </button>
+                          ) : (
+                            <span>{row.likeCount ?? 0} lượt thích</span>
+                          )}
                           <span>{row.commentCount ?? comments.length} bình luận</span>
                         </div>
                         <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
@@ -724,18 +1017,74 @@ export default function GroupDetailPage() {
                   })}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-slate-500">Chưa có bài viết nào trong nhóm.</p>
+                <p className="mt-3 text-sm text-slate-500">
+                  {posts.length
+                    ? "Không có bài viết khớp bộ lọc."
+                    : "Chưa có bài viết nào trong nhóm."}
+                </p>
               )}
           </div>
             </>
           ) : (
+            <>
+            {isOwner ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-amber-900">
+                  Báo cáo thành viên chờ xử lý ({ownerMemberReports.filter((r) => (r.status || "").toUpperCase() === "PENDING").length})
+                </p>
+                {ownerMemberReports.length ? (
+                  <div className="mt-3 space-y-2">
+                    {ownerMemberReports.map((report) => (
+                      <div
+                        key={report.id}
+                        className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-amber-200 bg-white p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {displayName(report.reportedUserName, report.reportedUserId)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Người báo cáo: {displayName(report.reporterUserName, report.reporterUserId)}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{report.reason}</p>
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            {formatDate(report.createdAt)} · {memberReportStatusLabel(report.status)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void openMemberActivity(report.reportedUserId)}
+                          className="shrink-0 rounded-lg border border-sky-200 px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                        >
+                          Xem hoạt động
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-amber-800/80">Chưa có báo cáo thành viên nào.</p>
+                )}
+              </div>
+            ) : null}
             <div className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm font-semibold text-slate-900">Thành viên nhóm ({members.length})</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  Thành viên nhóm ({filteredMembers.length}
+                  {memberNameFilter.trim() ? ` / ${members.length}` : ""})
+                </p>
+                <input
+                  type="search"
+                  value={memberNameFilter}
+                  onChange={(e) => setMemberNameFilter(e.target.value)}
+                  placeholder="Tìm thành viên theo tên..."
+                  className="h-9 w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-rose-300 sm:w-64"
+                />
+              </div>
               {loading ? (
                 <p className="mt-3 text-sm text-slate-500">Đang tải thành viên...</p>
-              ) : members.length ? (
+              ) : filteredMembers.length ? (
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {members.map((row) => (
+                  {filteredMembers.map((row) => (
                     <div
                       key={row.id}
                       className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"
@@ -752,13 +1101,34 @@ export default function GroupDetailPage() {
                         </p>
                       </Link>
                       {isOwner && row.role !== "OWNER" ? (
+                        <div className="flex shrink-0 flex-wrap gap-1">
+                          <button
+                            type="button"
+                            onClick={() => void openMemberActivity(row.userId)}
+                            className="rounded-lg border border-sky-200 px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                          >
+                            Hoạt động
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleKickMember(row)}
+                            disabled={busyKey === `kick-${row.id}`}
+                            className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                          >
+                            {busyKey === `kick-${row.id}` ? "..." : "Kick"}
+                          </button>
+                        </div>
+                      ) : actorId != null && actorId !== row.userId ? (
                         <button
                           type="button"
-                          onClick={() => void handleKickMember(row)}
-                          disabled={busyKey === `kick-${row.id}`}
-                          className="shrink-0 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                          onClick={() => {
+                            setReportMemberTarget(row);
+                            setReportMemberReason("");
+                          }}
+                          disabled={busyKey === `report-${row.userId}`}
+                          className="shrink-0 rounded-lg border border-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
                         >
-                          {busyKey === `kick-${row.id}` ? "..." : "Kick"}
+                          Báo cáo
                         </button>
                       ) : (
                         <Link
@@ -772,9 +1142,14 @@ export default function GroupDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-slate-500">Chưa có thành viên.</p>
+                <p className="mt-3 text-sm text-slate-500">
+                  {memberNameFilter.trim()
+                    ? "Không tìm thấy thành viên khớp tên."
+                    : "Chưa có thành viên."}
+                </p>
               )}
             </div>
+            </>
           )}
             </>
           )}
@@ -849,6 +1224,144 @@ export default function GroupDetailPage() {
           </div>
         ) : null}
 
+        {activityModalUserId != null ? (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-4"
+            onClick={() => setActivityModalUserId(null)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-lg font-bold text-slate-900">
+                  Hoạt động — {memberActivity?.fullName ?? displayName(null, activityModalUserId)}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setActivityModalUserId(null)}
+                  className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100"
+                >
+                  Đóng
+                </button>
+              </div>
+              {loadingMemberActivity ? (
+                <p className="mt-4 text-sm text-slate-500">Đang tải...</p>
+              ) : memberActivity ? (
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">Bài viết</p>
+                      <p className="text-lg font-bold text-slate-900">{memberActivity.postCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">Bình luận</p>
+                      <p className="text-lg font-bold text-slate-900">{memberActivity.commentCount}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-500">Bài viết gần đây</p>
+                    {memberActivity.recentPosts.length ? (
+                      <ul className="mt-2 space-y-2">
+                        {memberActivity.recentPosts.map((item) => (
+                          <li key={`post-${item.id}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                            {item.contentPreview || "(Không có nội dung)"}
+                            {item.createdAt ? (
+                              <p className="mt-1 text-[11px] text-slate-500">{formatDate(item.createdAt)}</p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">Chưa có bài viết.</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-500">Bình luận gần đây</p>
+                    {memberActivity.recentComments.length ? (
+                      <ul className="mt-2 space-y-2">
+                        {memberActivity.recentComments.map((item) => (
+                          <li key={`comment-${item.id}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                            {item.contentPreview || "(Không có nội dung)"}
+                            {item.createdAt ? (
+                              <p className="mt-1 text-[11px] text-slate-500">{formatDate(item.createdAt)}</p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">Chưa có bình luận.</p>
+                    )}
+                  </div>
+                  {isOwner ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-slate-500">Báo cáo về thành viên này</p>
+                      {memberReports.length ? (
+                        <ul className="mt-2 space-y-2">
+                          {memberReports.map((report) => (
+                            <li key={report.id} className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm">
+                              <p className="font-medium text-slate-800">{report.reason}</p>
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Từ {report.reporterUserName ?? `#${report.reporterUserId}`} · {formatDate(report.createdAt)}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-sm text-slate-500">Chưa có báo cáo nào.</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {reportMemberTarget ? (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-4"
+            onClick={() => setReportMemberTarget(null)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-slate-900">
+                Báo cáo {displayName(reportMemberTarget.fullName, reportMemberTarget.userId)}
+              </h3>
+              <textarea
+                value={reportMemberReason}
+                onChange={(e) => setReportMemberReason(e.target.value)}
+                rows={4}
+                className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-400"
+                placeholder="Mô tả lý do báo cáo..."
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReportMemberTarget(null)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitMemberReport()}
+                  disabled={busyKey === `report-${reportMemberTarget.userId}`}
+                  className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+                >
+                  {busyKey === `report-${reportMemberTarget.userId}` ? "Đang gửi..." : "Gửi báo cáo"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <ReportContentModal
           open={reportOpen}
           targetType="GROUP"
@@ -866,6 +1379,17 @@ export default function GroupDetailPage() {
             } finally {
               setReportBusy(false);
             }
+          }}
+        />
+
+        <PostLikersModal
+          postId={null}
+          groupId={groupId}
+          groupPostId={likersPostId}
+          open={likersOpen}
+          onClose={() => {
+            setLikersOpen(false);
+            setLikersPostId(null);
           }}
         />
       </section>

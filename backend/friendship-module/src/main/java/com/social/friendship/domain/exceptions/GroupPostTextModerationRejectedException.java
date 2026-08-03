@@ -7,7 +7,7 @@ public class GroupPostTextModerationRejectedException extends RuntimeException {
     private final String modelName;
 
     public GroupPostTextModerationRejectedException(ModerationResult result) {
-        super("Noi dung bai viet nhom chua tu ngu khong phu hop");
+        super("Nội dung bài viết nhóm chứa từ ngữ không phù hợp");
         this.score = result.score();
         this.modelName = result.modelName();
     }

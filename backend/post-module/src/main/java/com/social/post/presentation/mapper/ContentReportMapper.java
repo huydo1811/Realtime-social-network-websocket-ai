@@ -42,13 +42,17 @@ public class ContentReportMapper {
             postRepository.findById(report.getTargetId()).ifPresent(post -> {
                 response.setTargetAuthorUserId(post.getAuthorId());
                 response.setTargetContent(post.getContent());
+                response.setTargetMediaUrl(post.getMediaUrl());
             });
         } else if (report.getTargetType() == ReportTargetType.COMMENT) {
             postCommentRepository.findById(report.getTargetId()).ifPresent(comment -> {
                 response.setTargetAuthorUserId(comment.getUserId());
                 response.setTargetContent(comment.getContent());
                 postRepository.findById(comment.getPostId())
-                        .ifPresent(post -> response.setRelatedPostContent(post.getContent()));
+                        .ifPresent(post -> {
+                            response.setRelatedPostContent(post.getContent());
+                            response.setTargetMediaUrl(post.getMediaUrl());
+                        });
             });
         } else if (report.getTargetType() == ReportTargetType.GROUP) {
             groupRepository.findById(report.getTargetId()).ifPresentOrElse(group -> {
@@ -57,6 +61,7 @@ public class ContentReportMapper {
                         ? ""
                         : " — " + group.getDescription();
                 response.setTargetContent("Nhóm: " + group.getName() + desc);
+                response.setTargetMediaUrl(group.getAvatarUrl());
             }, () -> response.setTargetContent("[Nhóm đã bị xóa]"));
         }
         return response;

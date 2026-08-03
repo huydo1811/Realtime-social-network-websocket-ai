@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { uploadToCloudinary } from "@/lib/cloudinary/upload";
 import MediaPreview from "@/components/common/MediaPreview";
+import { handleModerationAwareError } from "@/components/common/ModerationViolationModal";
 import type { PetDto } from "@/types/pet";
 
 type Props = {
@@ -84,7 +85,9 @@ export default function PostComposer({ avatarUrl, pets = [], onSubmit, initialPe
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Không thể đăng bài viết. Vui lòng thử lại.";
-      setNotice(message);
+      if (!handleModerationAwareError(err, message)) {
+        setNotice(message);
+      }
     } finally {
       setPosting(false);
     }

@@ -84,6 +84,7 @@ export interface ContentReportDto {
   targetAuthorUserId?: number | null;
   reason: string;
   targetContent?: string | null;
+  targetMediaUrl?: string | null;
   relatedPostContent?: string | null;
   status: ContentReportStatus;
   adminNote?: string | null;

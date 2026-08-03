@@ -112,19 +112,31 @@ export const getMyProfile = async (): Promise<ProfileInfo> => {
 };
 
 export interface AdminUserDto {
+  id?: number;
   email: string;
   fullName: string;
+  username?: string;
   phone?: string;
   password?: string;
   role: string;
   isActive?: boolean;
+  avatarUrl?: string;
 }
 
-export const adminGetUsers = async (page: number = 0, size: number = 10, fullName: string = "", isActive?: boolean) => {
+export const adminGetUsers = async (
+  page: number = 0,
+  size: number = 10,
+  query: string = "",
+  isActive?: boolean
+) => {
   let url = `${API_URL}/users?page=${page}&size=${size}`;
-  if (fullName) url += `&fullName=${encodeURIComponent(fullName)}`;
-  if (isActive !== undefined) url += `&isActive=${isActive}`; 
-  
+  const trimmed = query.trim();
+  if (trimmed) {
+    // q: email OR fullName OR username
+    url += `&q=${encodeURIComponent(trimmed)}`;
+  }
+  if (isActive !== undefined) url += `&isActive=${isActive}`;
+
   const res = await apiAuthFetch(url);
   if (!res.ok) throw new Error("Gặp lỗi khi lấy danh sách user");
   return await res.json();

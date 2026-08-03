@@ -237,7 +237,7 @@ export default function LoginPage() {
       </div>
 
       {/* Main Card */}
-      <div className="relative z-10 w-full max-w-[1100px] min-h-[600px] flex flex-col lg:flex-row bg-white/80 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] ring-1 ring-white overflow-hidden animate-fade-in-up">
+      <div className="relative z-10 mx-3 w-full max-w-[1100px] min-h-[min(100vh-1.5rem,600px)] flex flex-col lg:flex-row bg-white/80 backdrop-blur-2xl rounded-[1.75rem] sm:rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] ring-1 ring-white overflow-hidden animate-fade-in-up">
         
         {/* Left Side: Brand/Marketing */}
         <div className="hidden lg:flex w-[45%] relative overflow-hidden flex-col justify-between px-12 py-14 text-white bg-gradient-to-br from-rose-500 to-rose-300">
@@ -279,7 +279,7 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Forms */}
-        <div className="flex-1 flex items-center justify-center p-8 md:p-12 lg:p-16">
+        <div className="flex-1 flex items-center justify-center p-5 sm:p-8 md:p-12 lg:p-16">
           <div className="w-full max-w-md">
             
             {showForgot ? (

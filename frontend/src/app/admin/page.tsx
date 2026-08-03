@@ -23,7 +23,7 @@ export default function AdminDashboardPage() {
   const [trendFromDate, setTrendFromDate] = useState("");
   const [trendToDate, setTrendToDate] = useState("");
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
-  const [reportTypeFilter, setReportTypeFilter] = useState<"ALL" | "Post" | "Comment" | "User">("ALL");
+  const [reportTypeFilter, setReportTypeFilter] = useState<"ALL" | "Post" | "Comment" | "User" | "Group">("ALL");
   const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | "New" | "Reviewing" | "Resolved">("ALL");
   const [reportDateFrom, setReportDateFrom] = useState("");
   const [reportDateTo, setReportDateTo] = useState("");
@@ -50,6 +50,32 @@ export default function AdminDashboardPage() {
     if (status === "RESOLVED") return "Resolved";
     return "Reviewing";
   }
+
+  function mapReportStatusLabel(status: "PENDING" | "RESOLVED" | "REJECTED"): string {
+    if (status === "PENDING") return "Chờ xử lý";
+    if (status === "RESOLVED") return "Đã duyệt";
+    return "Từ chối";
+  }
+
+  function mapReportType(targetType: string): ReportItem["type"] {
+    if (targetType === "POST") return "Post";
+    if (targetType === "COMMENT") return "Comment";
+    if (targetType === "GROUP") return "Group";
+    return "User";
+  }
+
+  useEffect(() => {
+    const refresh = () => setReloadTick((v) => v + 1);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,22 +144,31 @@ export default function AdminDashboardPage() {
         );
 
         setReports(
-          reportItems.map((item) => ({
-            id: `R-${item.id}`,
-            type: item.targetType === "POST" ? "Post" : item.targetType === "COMMENT" ? "Comment" : "User",
-            target:
-              item.targetType === "POST"
-                ? `post_${item.targetId}`
-                : item.targetType === "COMMENT"
-                  ? `comment_${item.targetId}`
-                  : `user_${item.targetAuthorUserId ?? item.targetId}`,
-            reason: item.reason,
-            status: mapReportStatus(item.status),
-            createdAt: formatRelativeTime(item.createdAt),
-            createdAtIso: item.createdAt,
-            reporterUserId: item.reporterUserId,
-            targetAuthorUserId: item.targetAuthorUserId ?? undefined,
-          }))
+          reportItems
+            .map((item) => ({
+              id: `R-${item.id}`,
+              type: mapReportType(item.targetType),
+              target:
+                item.targetType === "POST"
+                  ? `post_${item.targetId}`
+                  : item.targetType === "COMMENT"
+                    ? `comment_${item.targetId}`
+                    : item.targetType === "GROUP"
+                      ? `group_${item.targetId}`
+                      : `user_${item.targetAuthorUserId ?? item.targetId}`,
+              reason: item.reason,
+              status: mapReportStatus(item.status),
+              statusLabel: mapReportStatusLabel(item.status),
+              createdAt: formatRelativeTime(item.createdAt),
+              createdAtIso: item.createdAt,
+              reporterUserId: item.reporterUserId,
+              targetAuthorUserId: item.targetAuthorUserId ?? undefined,
+            }))
+            .sort((a, b) => {
+              const ta = a.createdAtIso ? new Date(a.createdAtIso).getTime() : 0;
+              const tb = b.createdAtIso ? new Date(b.createdAtIso).getTime() : 0;
+              return tb - ta;
+            })
         );
       } catch (e) {
         if (cancelled) return;
@@ -292,7 +327,11 @@ export default function AdminDashboardPage() {
     const postCount = chartFilteredReports.filter((r) => r.type === "Post").length;
     const commentCount = chartFilteredReports.filter((r) => r.type === "Comment").length;
     const userCount = chartFilteredReports.filter((r) => r.type === "User").length;
-    return { labels: ["Bài viết", "Bình luận", "Người dùng"], points: [postCount, commentCount, userCount] };
+    const groupCount = chartFilteredReports.filter((r) => r.type === "Group").length;
+    return {
+      labels: ["Bài viết", "Bình luận", "Người dùng", "Nhóm"],
+      points: [postCount, commentCount, userCount, groupCount],
+    };
   }, [chartFilteredReports]);
 
   const reportStatusChart = useMemo(() => {
@@ -337,6 +376,52 @@ export default function AdminDashboardPage() {
     const link = document.createElement("a");
     link.href = url;
     link.download = `admin-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportChartsCsv() {
+    const rows: string[][] = [
+      ["Bieu do", "Nhan", "Gia tri", "Bo loc thoi gian"],
+      ...trendChart.labels.map((label, i) => [
+        "Xu huong bao cao",
+        label,
+        String(trendChart.points[i] ?? 0),
+        trendChart.subtitle,
+      ]),
+      ...userChart.labels.map((label, i) => [
+        "Thong ke nguoi dung",
+        label,
+        String(userChart.points[i] ?? 0),
+        trendRange,
+      ]),
+      ...reportTypeChart.labels.map((label, i) => [
+        "Bao cao theo loai",
+        label,
+        String(reportTypeChart.points[i] ?? 0),
+        trendRange,
+      ]),
+      ...["High", "Medium", "Low"].map((label, i) => [
+        "Muc do rui ro moderation",
+        label,
+        String(auditRiskPoints[i] ?? 0),
+        trendRange,
+      ]),
+      ...reportStatusChart.labels.map((label, i) => [
+        "Tien do xu ly bao cao",
+        label,
+        String(reportStatusChart.points[i] ?? 0),
+        trendRange,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => csvEscape(String(cell))).join(",")).join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `admin-charts-${trendRange}-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -393,6 +478,13 @@ export default function AdminDashboardPage() {
             >
               Từ ngày - đến ngày
             </button>
+            <button
+              type="button"
+              onClick={handleExportChartsCsv}
+              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              Xuất CSV biểu đồ
+            </button>
             {trendRange === "date" ? (
               <input
                 type="date"
@@ -431,7 +523,7 @@ export default function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <GrowthCard title="Thống kê người dùng" subtitle="Người tham gia report trong khoảng lọc" points={userChart.points} labels={userChart.labels} />
-        <GrowthCard title="Báo cáo theo loại đối tượng" subtitle="Bài viết, bình luận, người dùng" points={reportTypeChart.points} labels={reportTypeChart.labels} />
+        <GrowthCard title="Báo cáo theo loại đối tượng" subtitle="Bài viết, bình luận, người dùng, nhóm" points={reportTypeChart.points} labels={reportTypeChart.labels} />
         <GrowthCard title="Mức độ rủi ro moderation" subtitle="High / Medium / Low" points={auditRiskPoints} labels={["High", "Medium", "Low"]} />
         <GrowthCard title="Tiến độ xử lý báo cáo" subtitle="Mới / Đang xử lý / Đã xử lý" points={reportStatusChart.points} labels={reportStatusChart.labels} />
       </div>
@@ -447,13 +539,14 @@ export default function AdminDashboardPage() {
             Loại
             <select
               value={reportTypeFilter}
-              onChange={(e) => setReportTypeFilter(e.target.value as "ALL" | "Post" | "Comment" | "User")}
+              onChange={(e) => setReportTypeFilter(e.target.value as "ALL" | "Post" | "Comment" | "User" | "Group")}
               className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2"
             >
               <option value="ALL">Tất cả</option>
               <option value="Post">Bài viết</option>
               <option value="Comment">Bình luận</option>
               <option value="User">Người dùng</option>
+              <option value="Group">Nhóm</option>
             </select>
           </label>
           <label className="text-xs text-slate-600">

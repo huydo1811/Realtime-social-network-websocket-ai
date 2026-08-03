@@ -4,17 +4,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import UserLayout from "@/components/layout/UserLayout";
 import DiscoverFriendshipPanels, { type DiscoverFriendshipTab } from "@/components/friendship/DiscoverFriendshipPanels";
+import FollowingListPanel from "@/components/friendship/FollowingListPanel";
 import { listIncomingRequests } from "@/lib/api/friendshipApi";
 
-const tabs: { id: DiscoverFriendshipTab; label: string }[] = [
+type TabId = DiscoverFriendshipTab | "following";
+
+const tabs: { id: TabId; label: string }[] = [
   { id: "friends", label: "Bạn bè" },
+  { id: "following", label: "Đang theo dõi" },
   { id: "incoming", label: "Lời mời đến" },
   { id: "outgoing", label: "Đã gửi" },
   { id: "blocked", label: "Đã chặn" },
 ];
 
 export default function FriendsPage() {
-  const [tab, setTab] = useState<DiscoverFriendshipTab>("friends");
+  const [tab, setTab] = useState<TabId>("friends");
   const [incomingCount, setIncomingCount] = useState(0);
 
   useEffect(() => {
@@ -45,7 +49,7 @@ export default function FriendsPage() {
           <div>
             <h1 className="text-3xl font-black tracking-tight text-slate-900">Bạn bè</h1>
             <p className="mt-1 font-medium text-slate-500">
-              Lời mời, danh sách bạn bè và chặn — tìm thêm người ở{" "}
+              Lời mời, đang theo dõi, bạn bè và chặn — tìm thêm người ở{" "}
               <Link href="/discover" className="font-semibold text-rose-600 underline-offset-2 hover:underline">
                 Khám phá
               </Link>
@@ -81,7 +85,11 @@ export default function FriendsPage() {
           ))}
         </div>
 
-        <DiscoverFriendshipPanels tab={tab} />
+        {tab === "following" ? (
+          <FollowingListPanel />
+        ) : (
+          <DiscoverFriendshipPanels tab={tab} />
+        )}
       </div>
     </UserLayout>
   );

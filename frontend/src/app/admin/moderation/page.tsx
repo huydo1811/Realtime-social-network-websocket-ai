@@ -157,8 +157,20 @@ export default function AdminModerationPage() {
     const key = `${item.targetType}-${item.targetId}`;
     setActionBusyKey(key);
     setNotice(null);
+    setPageError(null);
     try {
       if (item.targetType === "POST") {
+        try {
+          const post = await postApi.getById(item.targetId);
+          if (post.status === "REJECTED" || post.status === "DELETED") {
+            await moderationApi.markHandled(item.id);
+            setNotice(`Bài #${item.targetId} đã bị ẩn trước đó — đã đánh dấu xử lý (không ẩn lại).`);
+            await loadAudit();
+            return;
+          }
+        } catch {
+          // continue to hide attempt
+        }
         await postApi.adminHide(item.targetId);
         setNotice(`Đã ẩn bài viết #${item.targetId}`);
       } else {
@@ -169,7 +181,19 @@ export default function AdminModerationPage() {
       setNotice((prev) => (prev ? `${prev} và đánh dấu đã xử lý.` : "Đã đánh dấu đã xử lý."));
       await loadAudit();
     } catch (e) {
-      setPageError(e instanceof Error ? e.message : "Không thể xử lý nội dung");
+      const msg = e instanceof Error ? e.message : "Không thể xử lý nội dung";
+      // Nếu báo cáo đã ẩn rồi, vẫn cho đánh dấu xử lý audit
+      if (/đã|hidden|reject|không tìm thấy/i.test(msg)) {
+        try {
+          await moderationApi.markHandled(item.id);
+          setNotice("Nội dung đã được xử lý trước đó — đã đồng bộ nhật ký AI.");
+          await loadAudit();
+          return;
+        } catch {
+          /* fallthrough */
+        }
+      }
+      setPageError(msg);
     } finally {
       setActionBusyKey(null);
     }
@@ -229,18 +253,18 @@ export default function AdminModerationPage() {
       {tab === "overview" ? (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">AI service</p>
+            <p className="text-xs font-medium text-slate-500">Dịch vụ AI</p>
             <p className={`mt-2 text-xl font-bold ${status?.aiService.reachable ? "text-emerald-600" : "text-rose-600"}`}>
-              {status?.aiService.reachable ? status.aiService.status : "Offline"}
+              {status?.aiService.reachable ? status.aiService.status : "Ngoại tuyến"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Text loaded: {status?.aiService.textModelLoaded ? "yes" : "no"} · Image loaded:{" "}
-              {status?.aiService.imageModelLoaded ? "yes" : "no"}
+              Model chữ: {status?.aiService.textModelLoaded ? "đã tải" : "chưa tải"} · Model ảnh:{" "}
+              {status?.aiService.imageModelLoaded ? "đã tải" : "chưa tải"}
             </p>
             {status?.aiService.detail ? <p className="mt-2 text-[11px] text-rose-500">{status.aiService.detail}</p> : null}
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">Filter chữ</p>
+            <p className="text-xs font-medium text-slate-500">Bộ lọc chữ</p>
             <p className={`mt-2 text-xl font-bold ${status?.settings.textEnabled ? "text-emerald-600" : "text-slate-500"}`}>
               {status?.settings.textEnabled ? "Đang bật" : "Đang tắt"}
             </p>
@@ -249,11 +273,11 @@ export default function AdminModerationPage() {
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">Filter ảnh thú cưng</p>
+            <p className="text-xs font-medium text-slate-500">Bộ lọc ảnh thú cưng</p>
             <p className={`mt-2 text-xl font-bold ${status?.settings.imageEnabled ? "text-emerald-600" : "text-slate-500"}`}>
               {status?.settings.imageEnabled ? "Đang bật" : "Đang tắt"}
             </p>
-            <p className="mt-1 text-xs text-slate-500">Reject non-pet ≥ {status?.settings.imageThreshold.toFixed(2)}</p>
+            <p className="mt-1 text-xs text-slate-500">Từ chối ảnh không phải pet ≥ {status?.settings.imageThreshold.toFixed(2)}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Model đang active</p>
@@ -380,7 +404,7 @@ export default function AdminModerationPage() {
                       </span>
                       {model.active ? (
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                          ACTIVE
+                          Đang dùng
                         </span>
                       ) : null}
                     </div>
